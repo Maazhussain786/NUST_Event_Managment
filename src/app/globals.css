@@ -1,0 +1,157 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+@layer base {
+  :root {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f5f5f5;
+    --bg-card: #ffffff;
+    --bg-nav: rgba(255, 255, 255, 0.75);
+    --bg-input: #f5f5f5;
+    --border-primary: #e5e5e5;
+    --border-card: #e5e5e5;
+    --text-primary: #171717;
+    --text-secondary: #525252;
+    --text-muted: #a3a3a3;
+    --brand: #f97316;
+    --brand-light: #fb923c;
+    --brand-dark: #ea580c;
+    --shadow-card: 0 2px 20px rgba(0, 0, 0, 0.06);
+    --shadow-nav: 0 -4px 30px rgba(0, 0, 0, 0.08);
+  }
+
+  .dark {
+    --bg-primary: #0a0a0a;
+    --bg-secondary: #171717;
+    --bg-card: #1a1a1a;
+    --bg-nav: rgba(23, 23, 23, 0.75);
+    --bg-input: #1f1f1f;
+    --border-primary: #262626;
+    --border-card: rgba(255, 255, 255, 0.08);
+    --text-primary: #fafafa;
+    --text-secondary: #a3a3a3;
+    --text-muted: #525252;
+    --shadow-card: 0 2px 20px rgba(0, 0, 0, 0.4);
+    --shadow-nav: 0 -4px 30px rgba(0, 0, 0, 0.5);
+  }
+
+  body {
+    @apply font-sans antialiased;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+}
+
+@layer components {
+  /* --- CARD SYSTEM --- */
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-card);
+    border-radius: 1.25rem;
+    box-shadow: var(--shadow-card);
+    transition: all 0.3s ease;
+  }
+
+  .card-glass {
+    background: var(--bg-nav);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--border-card);
+    border-radius: 1.25rem;
+  }
+
+  /* --- BUTTONS --- */
+  .btn-primary {
+    @apply bg-brand-500 hover:bg-brand-600 text-white font-semibold py-3.5 px-6 rounded-2xl
+           transition-all duration-200 active:scale-[0.97] shadow-lg shadow-brand-500/25;
+  }
+
+  .btn-secondary {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-primary);
+    @apply font-medium py-3.5 px-6 rounded-2xl transition-all duration-200 active:scale-[0.97];
+    color: var(--text-primary);
+  }
+
+  .btn-ghost {
+    @apply font-medium py-3 px-5 rounded-xl transition-all duration-200;
+    color: var(--text-secondary);
+  }
+  .btn-ghost:hover {
+    background: var(--bg-secondary);
+  }
+
+  /* --- INPUTS --- */
+  .input-field {
+    width: 100%;
+    background: var(--bg-input);
+    border: 1.5px solid var(--border-primary);
+    border-radius: 1rem;
+    padding: 0.875rem 1rem;
+    color: var(--text-primary);
+    font-size: 0.9375rem;
+    outline: none;
+    transition: all 0.2s ease;
+  }
+  .input-field::placeholder {
+    color: var(--text-muted);
+  }
+  .input-field:focus {
+    border-color: var(--brand);
+    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+  }
+
+  /* --- CHIPS --- */
+  .chip {
+    @apply px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap cursor-pointer transition-all duration-200;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-primary);
+    color: var(--text-secondary);
+  }
+  .chip:hover, .chip.active {
+    @apply bg-brand-500 text-white border-brand-500;
+  }
+
+  /* --- SECTION HEADER --- */
+  .section-title {
+    @apply text-lg font-bold;
+    color: var(--text-primary);
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-gradient-to-r from-brand-400 to-brand-600 bg-clip-text text-transparent;
+  }
+
+  .text-primary { color: var(--text-primary); }
+  .text-secondary { color: var(--text-secondary); }
+  .text-muted { color: var(--text-muted); }
+  .bg-primary { background: var(--bg-primary); }
+  .bg-secondary { background: var(--bg-secondary); }
+  .bg-card { background: var(--bg-card); }
+  .border-themed { border-color: var(--border-primary); }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Swiper custom styles */
+  .swiper-pagination-bullet {
+    background: var(--text-muted) !important;
+    opacity: 1 !important;
+  }
+  .swiper-pagination-bullet-active {
+    background: var(--brand) !important;
+    width: 24px !important;
+    border-radius: 4px !important;
+  }
+}
