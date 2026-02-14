@@ -12,7 +12,7 @@ export async function GET(req: Request) {
     let sql = `
       SELECT s.id, s.name, s.description, s.logo_url, s.status,
              s.is_nust_wide, s.school_id,
-             ns.name AS school_name, ns.abbreviation AS school_abbr,
+             ns.full_name AS school_name, ns.abbreviation AS school_abbr,
              COUNT(DISTINCT sm.user_id) FILTER (WHERE sm.is_active = TRUE) AS member_count,
              COALESCE(AVG(r.score), 0)::numeric(3,2) AS avg_rating
       FROM societies s
@@ -36,7 +36,7 @@ export async function GET(req: Request) {
       paramIndex++;
     }
 
-    sql += ` GROUP BY s.id, ns.name, ns.abbreviation ORDER BY member_count DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    sql += ` GROUP BY s.id, ns.full_name, ns.abbreviation ORDER BY member_count DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
     params.push(limit, offset);
 
     const result = await query(sql, params);

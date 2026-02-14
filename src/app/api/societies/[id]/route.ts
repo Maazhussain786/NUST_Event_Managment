@@ -11,7 +11,7 @@ export async function GET(
     const result = await query(
       `SELECT s.id, s.name, s.description, s.logo_url, s.status,
               s.is_nust_wide, s.school_id, s.created_at,
-              ns.name AS school_name, ns.abbreviation AS school_abbr,
+              ns.full_name AS school_name, ns.abbreviation AS school_abbr,
               COUNT(DISTINCT sm.user_id) FILTER (WHERE sm.is_active = TRUE) AS member_count,
               COALESCE(AVG(r.score), 0)::numeric(3,2) AS avg_rating,
               COUNT(DISTINCT r.id) AS rating_count
@@ -20,7 +20,7 @@ export async function GET(
        LEFT JOIN society_memberships sm ON s.id = sm.society_id AND sm.is_active = TRUE
        LEFT JOIN ratings r ON r.target_type = 'SOCIETY' AND r.target_id = s.id
        WHERE s.id = $1
-       GROUP BY s.id, ns.name, ns.abbreviation`,
+       GROUP BY s.id, ns.full_name, ns.abbreviation`,
       [id]
     );
 

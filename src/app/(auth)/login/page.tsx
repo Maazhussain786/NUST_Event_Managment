@@ -34,7 +34,9 @@ export default function LoginPage() {
         throw new Error(data.error);
       }
       localStorage.setItem('user', JSON.stringify(data.user));
-      router.push('/home');
+      // Full page reload so middleware picks up the new cookie
+      // and AuthProvider re-initialises from localStorage
+      window.location.href = '/home';
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {

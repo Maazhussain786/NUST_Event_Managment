@@ -12,12 +12,16 @@ export async function GET(req: NextRequest) {
 
     const status = req.nextUrl.searchParams.get('status');
 
-    let q = `SELECT s.id, s.name, s.description, s.logo_url, s.category,
-                    s.status, s.created_at,
+    let q = `SELECT s.id, s.name, s.description, s.logo_url,
+                    COALESCE(ns.abbreviation, CASE WHEN s.is_nust_wide THEN 'NUST-Wide' ELSE NULL END) AS category,
+                    s.status, s.created_at, s.president_name, s.contact_number,
+                    u.full_name AS created_by_name, u.email AS created_by_email,
                     COUNT(DISTINCT sm.user_id) as member_count,
                     COUNT(DISTINCT e.id) as event_count
              FROM societies s
-             LEFT JOIN society_memberships sm ON sm.society_id = s.id AND sm.status = 'ACTIVE'
+             LEFT JOIN nust_schools ns ON s.school_id = ns.id
+             LEFT JOIN users u ON s.created_by = u.id
+             LEFT JOIN society_memberships sm ON sm.society_id = s.id AND sm.is_active = TRUE
              LEFT JOIN events e ON e.society_id = s.id`;
 
     const params: string[] = [];
@@ -26,7 +30,7 @@ export async function GET(req: NextRequest) {
       params.push(status);
     }
 
-    q += ' GROUP BY s.id ORDER BY s.created_at DESC';
+    q += ' GROUP BY s.id, ns.abbreviation, u.full_name, u.email ORDER BY s.created_at DESC';
 
     const result = await query(q, params);
     return NextResponse.json(result.rows);

@@ -19,7 +19,7 @@ export default function SettingsPage() {
   const handleLogout = () => {
     localStorage.removeItem('user');
     document.cookie = 'auth_token=; path=/; max-age=0';
-    router.push('/login');
+    window.location.href = '/login';
   };
 
   const sections: { title: string; items: { icon: typeof Palette; label: string; value: string; action?: () => void }[] }[] = [

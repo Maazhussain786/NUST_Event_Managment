@@ -31,7 +31,11 @@ export default function RegisterPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      router.push(`/verify-otp?userId=${data.userId}`);
+      // Store user info and go straight to home (OTP disabled for testing)
+      if (data.user) {
+        localStorage.setItem('user', JSON.stringify(data.user));
+      }
+      window.location.href = '/home';
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Registration failed');
     } finally {

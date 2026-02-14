@@ -45,6 +45,10 @@ interface AdminSociety {
   created_at: string;
   member_count: string;
   event_count: string;
+  president_name?: string;
+  contact_number?: string;
+  created_by_name?: string;
+  created_by_email?: string;
 }
 
 interface AdminUser {
@@ -68,6 +72,8 @@ export default function AdminDashboard() {
   const [eventFilter, setEventFilter] = useState('PENDING');
   const [societyFilter, setSocietyFilter] = useState('');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [showRejectModal, setShowRejectModal] = useState<string | null>(null); // socId
 
   const fetchStats = useCallback(async () => {
     try {
@@ -120,16 +126,18 @@ export default function AdminDashboard() {
     setActionLoading(null);
   };
 
-  const handleSocietyAction = async (socId: string, action: string) => {
+  const handleSocietyAction = async (socId: string, action: string, reason?: string) => {
     setActionLoading(socId);
     try {
       await fetch(`/api/admin/societies/${socId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({ action, rejectionReason: reason }),
       });
       fetchSocieties();
       fetchStats();
+      setShowRejectModal(null);
+      setRejectionReason('');
     } catch (e) { console.error(e); }
     setActionLoading(null);
   };
@@ -389,7 +397,16 @@ export default function AdminDashboard() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <h3 className="text-primary text-sm font-semibold truncate">{soc.name}</h3>
-                          <p className="text-muted text-xs">{soc.category} · {soc.member_count} members · {soc.event_count} events</p>
+                          <p className="text-muted text-xs">
+                            {soc.category ? `${soc.category} · ` : ''}
+                            {soc.member_count} members · {soc.event_count} events
+                          </p>
+                          {soc.status === 'PENDING' && soc.president_name && (
+                            <p className="text-muted text-[10px] mt-0.5">
+                              By: {soc.created_by_name || soc.president_name}
+                              {soc.created_by_email ? ` (${soc.created_by_email})` : ''}
+                            </p>
+                          )}
                         </div>
                         <span className={`text-[10px] px-2 py-1 rounded-full font-medium ${
                           soc.status === 'APPROVED' ? 'bg-green-500/10 text-green-600' :
@@ -413,7 +430,7 @@ export default function AdminDashboard() {
                               Approve
                             </button>
                             <button
-                              onClick={() => handleSocietyAction(soc.id, 'REJECTED')}
+                              onClick={() => setShowRejectModal(soc.id)}
                               disabled={actionLoading === soc.id}
                               className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-red-500/10 text-red-500 text-xs font-medium"
                             >
@@ -422,13 +439,21 @@ export default function AdminDashboard() {
                           </>
                         )}
                         {soc.status === 'APPROVED' && (
-                          <button
-                            onClick={() => handleSocietyAction(soc.id, 'SUSPENDED')}
-                            disabled={actionLoading === soc.id}
-                            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-amber-500/10 text-amber-600 text-xs font-medium"
-                          >
-                            <AlertTriangle className="w-3.5 h-3.5" /> Suspend
-                          </button>
+                          <>
+                            <button
+                              onClick={() => router.push(`/society-dashboard/${soc.id}`)}
+                              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-brand-500/10 text-brand-500 text-xs font-medium"
+                            >
+                              <Shield className="w-3.5 h-3.5" /> Manage
+                            </button>
+                            <button
+                              onClick={() => handleSocietyAction(soc.id, 'SUSPENDED')}
+                              disabled={actionLoading === soc.id}
+                              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-amber-500/10 text-amber-600 text-xs font-medium"
+                            >
+                              <AlertTriangle className="w-3.5 h-3.5" /> Suspend
+                            </button>
+                          </>
                         )}
                         {soc.status === 'SUSPENDED' && (
                           <button
@@ -495,6 +520,39 @@ export default function AdminDashboard() {
           )}
         </AnimatePresence>
       </div>
+
+      {/* Rejection Reason Modal */}
+      <AnimatePresence>
+        {showRejectModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center px-5" style={{ background: 'rgba(0,0,0,0.5)' }}>
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }}
+              className="w-full max-w-sm rounded-2xl p-6" style={{ background: 'var(--bg-card)' }}>
+              <h3 className="text-lg font-bold text-primary mb-1">Reject Society</h3>
+              <p className="text-muted text-xs mb-4">Provide a reason for the applicant</p>
+              <textarea
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+                placeholder="Reason for rejection (optional)..."
+                rows={3}
+                className="input-field w-full py-3 px-4 text-sm resize-none mb-4"
+              />
+              <div className="flex gap-2">
+                <button onClick={() => { setShowRejectModal(null); setRejectionReason(''); }}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-medium text-muted" style={{ background: 'var(--bg-input)' }}>
+                  Cancel
+                </button>
+                <button onClick={() => handleSocietyAction(showRejectModal, 'REJECTED', rejectionReason)}
+                  disabled={actionLoading === showRejectModal}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-red-500 text-white flex items-center justify-center gap-1.5">
+                  {actionLoading === showRejectModal ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <XCircle className="w-3.5 h-3.5" />}
+                  Reject
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

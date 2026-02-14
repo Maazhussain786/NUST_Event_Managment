@@ -25,10 +25,11 @@ const slides = [
 const swipeConfidenceThreshold = 8000;
 const swipePower = (offset: number, velocity: number) => Math.abs(offset) * velocity;
 
+/* Vertical slide variants */
 const variants = {
-  enter: (dir: number) => ({ x: dir > 0 ? 300 : -300, opacity: 0, scale: 0.95 }),
-  center: { x: 0, opacity: 1, scale: 1 },
-  exit: (dir: number) => ({ x: dir < 0 ? 300 : -300, opacity: 0, scale: 0.95 }),
+  enter: (dir: number) => ({ y: dir > 0 ? 300 : -300, opacity: 0, scale: 0.95 }),
+  center: { y: 0, opacity: 1, scale: 1 },
+  exit: (dir: number) => ({ y: dir < 0 ? 300 : -300, opacity: 0, scale: 0.95 }),
 };
 
 export default function OnboardingPage() {
@@ -45,7 +46,7 @@ export default function OnboardingPage() {
   }, [current, router]);
 
   const handleDragEnd = (_: unknown, info: PanInfo) => {
-    const swipe = swipePower(info.offset.x, info.velocity.x);
+    const swipe = swipePower(info.offset.y, info.velocity.y);
     if (swipe < -swipeConfidenceThreshold) paginate(1);
     else if (swipe > swipeConfidenceThreshold) paginate(-1);
   };
@@ -53,21 +54,21 @@ export default function OnboardingPage() {
   const slide = slides[current];
 
   return (
-    <div className="min-h-screen bg-surface-950 flex flex-col relative overflow-hidden select-none">
-      {/* Ambient glow */}
-      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[500px] h-[500px] rounded-full bg-brand-500/15 blur-[128px] pointer-events-none" />
+    <div className="min-h-screen bg-white flex flex-col relative overflow-hidden select-none">
+      {/* Soft ambient glow */}
+      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[500px] h-[500px] rounded-full bg-brand-500/10 blur-[128px] pointer-events-none" />
 
       {/* Skip */}
       <div className="relative z-20 flex justify-end px-6 pt-14">
         <button
           onClick={() => router.push('/login')}
-          className="text-surface-400 text-sm font-medium tracking-wide hover:text-white transition-colors"
+          className="text-surface-400 text-sm font-medium tracking-wide hover:text-surface-700 transition-colors"
         >
           Skip
         </button>
       </div>
 
-      {/* Swipeable Content */}
+      {/* Swipeable Content – vertical drag */}
       <div className="relative z-10 flex-1 flex flex-col px-7 mt-2 overflow-hidden">
         <AnimatePresence initial={false} custom={direction} mode="wait">
           <motion.div
@@ -77,9 +78,9 @@ export default function OnboardingPage() {
             initial="enter"
             animate="center"
             exit="exit"
-            transition={{ x: { type: 'spring', stiffness: 300, damping: 30 }, opacity: { duration: 0.25 }, scale: { duration: 0.25 } }}
-            drag="x"
-            dragConstraints={{ left: 0, right: 0 }}
+            transition={{ y: { type: 'spring', stiffness: 300, damping: 30 }, opacity: { duration: 0.25 }, scale: { duration: 0.25 } }}
+            drag="y"
+            dragConstraints={{ top: 0, bottom: 0 }}
             dragElastic={1}
             onDragEnd={handleDragEnd}
             className="flex-1 flex flex-col cursor-grab active:cursor-grabbing"
@@ -87,7 +88,7 @@ export default function OnboardingPage() {
             {/* Heading */}
             <div>
               {slide.heading.map((line, i) => (
-                <h1 key={i} className="text-[2.75rem] leading-[1.1] font-extrabold text-white tracking-tight">
+                <h1 key={i} className="text-[2.75rem] leading-[1.1] font-extrabold text-surface-900 tracking-tight">
                   {line}
                 </h1>
               ))}
@@ -107,7 +108,7 @@ export default function OnboardingPage() {
                   className="w-full h-full object-cover pointer-events-none"
                   draggable={false}
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-surface-950/70 via-transparent to-surface-950/20" />
+                <div className="absolute inset-0 bg-gradient-to-t from-white/50 via-transparent to-white/10" />
               </div>
             </div>
           </motion.div>
@@ -125,7 +126,7 @@ export default function OnboardingPage() {
                 ? 'border-brand-500 bg-brand-500 text-white scale-110'
                 : i < current
                   ? 'border-brand-500/40 bg-brand-500/20 text-brand-400'
-                  : 'border-surface-600 text-surface-500'
+                  : 'border-surface-300 text-surface-400'
             }`}
           >
             {i + 1}
@@ -141,7 +142,7 @@ export default function OnboardingPage() {
             <div
               key={i}
               className={`h-1.5 rounded-full transition-all duration-300 ${
-                i === current ? 'w-8 bg-brand-500' : 'w-1.5 bg-surface-600'
+                i === current ? 'w-8 bg-brand-500' : 'w-1.5 bg-surface-300'
               }`}
             />
           ))}
@@ -152,12 +153,12 @@ export default function OnboardingPage() {
               <button onClick={() => router.push('/login')} className="text-brand-500 font-semibold text-base block mx-auto">
                 Sign In →
               </button>
-              <button onClick={() => router.push('/home')} className="text-surface-400 text-xs block mx-auto hover:text-white transition-colors">
+              <button onClick={() => router.push('/home')} className="text-surface-400 text-xs block mx-auto hover:text-surface-700 transition-colors">
                 Continue as Guest
               </button>
             </div>
           ) : (
-            'Swipe left to continue'
+            'Swipe up to continue'
           )}
         </div>
       </div>

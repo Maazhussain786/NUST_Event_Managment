@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Loader2, Users } from 'lucide-react';
+import { Search, Loader2, Users, Plus } from 'lucide-react';
 import SocietyCard from '@/components/SocietyCard';
+import Link from 'next/link';
 
 interface Society {
   id: string;
@@ -133,6 +134,12 @@ export default function SocietiesPage() {
           </div>
         )}
       </div>
+
+      {/* Register Society FAB */}
+      <Link href="/register-society"
+        className="fixed bottom-24 right-5 z-20 w-14 h-14 bg-brand-500 rounded-2xl flex items-center justify-center shadow-lg shadow-brand-500/30 hover:bg-brand-600 transition-colors">
+        <Plus className="w-6 h-6 text-white" />
+      </Link>
     </div>
   );
 }

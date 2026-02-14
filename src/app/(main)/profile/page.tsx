@@ -5,9 +5,10 @@ import { motion } from 'framer-motion';
 import {
   User, Mail, School, LogOut, Settings, ChevronRight,
   Moon, Sun, Bell, Shield, Heart, HelpCircle, Loader2,
-  ShieldCheck, LogIn
+  ShieldCheck, LogIn, Building2, Crown, Plus, Clock
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useTheme } from '@/components/ThemeProvider';
 import { useAuth } from '@/components/AuthProvider';
 
@@ -18,24 +19,46 @@ interface UserProfile {
   userType: string;
 }
 
+interface MySociety {
+  id: string;
+  name: string;
+  logo_url: string | null;
+  status: string;
+  role_name: string;
+  hierarchy_level: number;
+  member_count: number;
+  president_name?: string;
+  contact_number?: string;
+  rejection_reason?: string;
+}
+
 export default function ProfilePage() {
   const router = useRouter();
   const { theme, toggleTheme } = useTheme();
   const { isLoggedIn, requireAuth } = useAuth();
   const isDark = theme === 'dark';
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [mySocieties, setMySocieties] = useState<MySociety[]>([]);
+  const [loadingSocieties, setLoadingSocieties] = useState(false);
 
   useEffect(() => {
     const stored = localStorage.getItem('user');
     if (stored) {
       setUser(JSON.parse(stored));
+      // Fetch societies where this user has a role
+      setLoadingSocieties(true);
+      fetch('/api/my-societies')
+        .then(r => r.ok ? r.json() : [])
+        .then(data => setMySocieties(Array.isArray(data) ? data : []))
+        .catch(() => {})
+        .finally(() => setLoadingSocieties(false));
     }
   }, []);
 
   const handleLogout = () => {
     localStorage.removeItem('user');
     document.cookie = 'auth_token=; path=/; max-age=0';
-    router.push('/login');
+    window.location.href = '/login';
   };
 
   const authGuard = (action: () => void, msg: string) => {
@@ -125,6 +148,90 @@ export default function ProfilePage() {
             <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${isDark ? 'translate-x-5' : 'translate-x-0'}`} />
           </div>
         </button>
+
+        {/* My Societies */}
+        {user && (
+          <div className="mt-2">
+            <div className="flex items-center justify-between mb-2 px-1">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">My Societies</h3>
+              <Link href="/register-society" className="text-brand-500 text-xs font-medium flex items-center gap-1">
+                <Plus className="w-3 h-3" /> Register
+              </Link>
+            </div>
+            {loadingSocieties ? (
+              <div className="card p-4 flex items-center justify-center">
+                <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
+              </div>
+            ) : mySocieties.length > 0 ? (
+              <div className="space-y-2">
+                {mySocieties.map((soc) => (
+                  <button
+                    key={soc.id + soc.role_name}
+                    onClick={() => {
+                      if (soc.status === 'APPROVED') {
+                        router.push(`/society-dashboard/${soc.id}`);
+                      }
+                    }}
+                    className={`w-full card p-4 flex items-center gap-3 transition-colors ${
+                      soc.status !== 'APPROVED' ? 'opacity-90' : ''
+                    }`}
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-brand-500/10 flex items-center justify-center overflow-hidden flex-shrink-0">
+                      {soc.logo_url ? (
+                        <img src={soc.logo_url} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <Building2 className="w-5 h-5 text-brand-500" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0 text-left">
+                      <h4 className="text-primary text-sm font-medium truncate">{soc.name}</h4>
+                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                        {soc.status === 'PENDING' ? (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-amber-500/10 text-amber-600 border border-amber-500/20">
+                            Pending Approval
+                          </span>
+                        ) : soc.status === 'REJECTED' ? (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-red-500/10 text-red-500 border border-red-500/20">
+                            Rejected
+                          </span>
+                        ) : (
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                            soc.role_name === 'President' ? 'bg-amber-500/10 text-amber-600' :
+                            soc.role_name === 'Vice President' ? 'bg-blue-500/10 text-blue-600' :
+                            soc.role_name === 'Director' ? 'bg-purple-500/10 text-purple-600' :
+                            'bg-surface-200 dark:bg-surface-700 text-muted'
+                          }`}>
+                            {soc.role_name}
+                          </span>
+                        )}
+                      </div>
+                      {soc.status === 'REJECTED' && soc.rejection_reason && (
+                        <p className="text-[10px] text-red-400 mt-1 truncate">Reason: {soc.rejection_reason}</p>
+                      )}
+                    </div>
+                    {soc.status === 'APPROVED' && (
+                      <ChevronRight className="w-4 h-4 text-muted flex-shrink-0" />
+                    )}
+                    {soc.status === 'PENDING' && (
+                      <Clock className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <Link href="/register-society" className="w-full card p-4 flex items-center gap-3 border-2 border-dashed border-brand-500/30">
+                <div className="w-10 h-10 rounded-xl bg-brand-500/10 flex items-center justify-center">
+                  <Crown className="w-5 h-5 text-brand-500" />
+                </div>
+                <div className="flex-1 text-left">
+                  <p className="text-primary text-sm font-medium">Register a Society</p>
+                  <p className="text-muted text-xs">Become a president of your own society</p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-brand-500" />
+              </Link>
+            )}
+          </div>
+        )}
 
       {/* Admin Panel (Super Admin only) */}
         {user?.userType === 'SUPER_ADMIN' && (

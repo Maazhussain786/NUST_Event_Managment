@@ -21,8 +21,8 @@ export async function PATCH(
     }
 
     await query(
-      'UPDATE events SET status = $1, updated_at = NOW() WHERE id = $2',
-      [action, id]
+      `UPDATE events SET status = $1, is_cancelled = $3, updated_at = NOW() WHERE id = $2`,
+      [action, id, action === 'CANCELLED']
     );
 
     // Log the action

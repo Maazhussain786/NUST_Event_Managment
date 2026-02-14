@@ -13,8 +13,10 @@ export async function GET(req: NextRequest) {
     const status = req.nextUrl.searchParams.get('status') || 'PENDING';
 
     const result = await query(
-      `SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.venue,
-              e.status, e.capacity, e.ticket_price, e.banner_url, e.created_at,
+      `SELECT e.id, e.title, e.description, e.event_start AS start_date,
+              e.event_end AS end_date, e.location AS venue,
+              e.status, e.max_tickets AS capacity, e.ticket_price,
+              e.banner_url, e.created_at,
               s.name as society_name, s.logo_url as society_logo,
               u.full_name as created_by_name
        FROM events e

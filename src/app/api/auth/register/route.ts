@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
-import { hashPassword, generateToken, generateOTP } from '@/lib/auth';
+import { hashPassword, generateToken } from '@/lib/auth';
 
 export async function POST(req: Request) {
   try {
@@ -21,34 +21,45 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Account already exists' }, { status: 409 });
     }
 
-    // Hash password & create user
+    // Hash password & create user (skip OTP — directly ACTIVE for testing)
     const passwordHash = await hashPassword(password);
     const result = await query(
       `INSERT INTO users (email, password_hash, full_name, user_type, status) 
-       VALUES ($1, $2, $3, 'STUDENT', 'PENDING_VERIFICATION') 
-       RETURNING id, email, full_name`,
+       VALUES ($1, $2, $3, 'STUDENT', 'ACTIVE') 
+       RETURNING id, email, full_name, user_type`,
       [email, passwordHash, fullName]
     );
 
     const user = result.rows[0];
 
-    // Generate OTP
-    const otpCode = generateOTP();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 min
-    await query(
-      `INSERT INTO otp_tokens (user_id, otp_code, purpose, expires_at) VALUES ($1, $2, 'EMAIL_VERIFICATION', $3)`,
-      [user.id, otpCode, expiresAt]
-    );
-
-    // In production, send via email. For dev, return in response
-    console.log(`OTP for ${email}: ${otpCode}`);
-
-    return NextResponse.json({
-      message: 'Account created. Verify your email with the OTP sent.',
+    // Generate JWT and set cookie so user is logged in immediately
+    const token = generateToken({
       userId: user.id,
-      // DEV ONLY - remove in production
-      devOtp: process.env.NODE_ENV === 'development' ? otpCode : undefined,
+      email: user.email,
+      userType: user.user_type,
+      fullName: user.full_name,
+    });
+
+    const response = NextResponse.json({
+      message: 'Account created successfully.',
+      userId: user.id,
+      user: {
+        id: user.id,
+        email: user.email,
+        fullName: user.full_name,
+        userType: user.user_type,
+      },
     }, { status: 201 });
+
+    response.cookies.set('auth_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60,
+      path: '/',
+    });
+
+    return response;
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Registration failed';
     return NextResponse.json({ error: message }, { status: 500 });
