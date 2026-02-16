@@ -9,7 +9,7 @@ export async function GET() {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const result = await query(
-      `SELECT s.id, s.name, s.description, s.logo_url, s.category, s.status,
+      `SELECT s.id, s.name, s.description, s.logo_url, s.status,
               fs.created_at as favorited_at
        FROM favorite_societies fs
        JOIN societies s ON s.id = fs.society_id

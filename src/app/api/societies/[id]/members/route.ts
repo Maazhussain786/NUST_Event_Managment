@@ -5,10 +5,15 @@ import { getCurrentUser } from '@/lib/auth';
 // GET /api/societies/[id]/members — list all members with roles
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
-    const { id: societyId } = await params;
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { id: societyId } = params;
     const result = await query(
       `SELECT sm.id AS membership_id, sm.user_id, sm.wing_id, sm.portfolio_id,
               sm.is_active, sm.assigned_at,

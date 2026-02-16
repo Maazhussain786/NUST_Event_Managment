@@ -5,13 +5,13 @@ import { getCurrentUser } from '@/lib/auth';
 // DELETE /api/societies/[id]/members/[membershipId] — remove member
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string; membershipId: string }> }
+  { params }: { params: { id: string; membershipId: string } }
 ) {
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { id: societyId, membershipId } = await params;
+    const { id: societyId, membershipId } = params;
 
     // Get requester role
     const myMembership = await query(

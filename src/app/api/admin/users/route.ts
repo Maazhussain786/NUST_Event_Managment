@@ -14,7 +14,7 @@ export async function GET() {
       `SELECT u.id, u.email, u.full_name, u.user_type, u.status, u.created_at,
               COUNT(DISTINCT sm.society_id) as society_count
        FROM users u
-       LEFT JOIN society_memberships sm ON sm.user_id = u.id AND sm.status = 'ACTIVE'
+       LEFT JOIN society_memberships sm ON sm.user_id = u.id AND sm.is_active = TRUE
        GROUP BY u.id
        ORDER BY u.created_at DESC
        LIMIT 100`

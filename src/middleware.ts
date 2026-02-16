@@ -5,18 +5,26 @@ import type { NextRequest } from 'next/server';
 const authRequiredRoutes = ['/admin'];
 
 /**
- * Decode a JWT payload (no crypto needed) and check the `exp` claim.
- * Returns true only if the token is structurally valid AND not expired.
+ * Check if a JWT token appears structurally valid and not expired.
+ *
+ * ⚠️ UX-ONLY CHECK — This does NOT verify the JWT signature.
+ * Next.js middleware runs in Edge Runtime which doesn't support the Node.js
+ * `crypto` module needed by `jsonwebtoken`. This check is solely used for:
+ *   - Clearing stale cookies so users aren't stuck
+ *   - Redirecting unauthenticated users to /login for protected pages
+ *
+ * All actual authentication/authorization is enforced server-side via
+ * `getCurrentUser()` in each API route, which properly verifies JWT signatures.
  */
 function isTokenValid(token: string): boolean {
   try {
     const parts = token.split('.');
     if (parts.length !== 3) return false;
-    // Base64url → Base64 → decode
     const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    const payload = JSON.parse(atob(base64));
-    if (!payload.exp) return false;
-    // exp is in seconds, Date.now() in ms
+    const decoded = atob(base64);
+    if (!decoded) return false;
+    const payload = JSON.parse(decoded);
+    if (typeof payload.exp !== 'number') return false;
     return payload.exp * 1000 > Date.now();
   } catch {
     return false;

@@ -5,10 +5,10 @@ import { getCurrentUser } from '@/lib/auth';
 // GET /api/societies/[id]/wings/[wingId]/portfolios
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string; wingId: string }> }
+  { params }: { params: { id: string; wingId: string } }
 ) {
   try {
-    const { wingId } = await params;
+    const { wingId } = params;
     const result = await query(
       `SELECT p.id, p.name, p.description, p.created_at,
               u.full_name AS created_by_name,
@@ -36,13 +36,13 @@ export async function GET(
 // POST /api/societies/[id]/wings/[wingId]/portfolios — create portfolio (President/VP)
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string; wingId: string }> }
+  { params }: { params: { id: string; wingId: string } }
 ) {
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { id: societyId, wingId } = await params;
+    const { id: societyId, wingId } = params;
 
     // Check president or VP of this wing
     const membership = await query(

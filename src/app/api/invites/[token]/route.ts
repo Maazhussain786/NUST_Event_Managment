@@ -5,10 +5,10 @@ import { getCurrentUser } from '@/lib/auth';
 // GET /api/invites/[token] — get invite details (public, for accept page)
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ token: string }> }
+  { params }: { params: { token: string } }
 ) {
   try {
-    const { token } = await params;
+    const { token } = params;
 
     const result = await query(
       `SELECT it.id, it.role_name, it.invited_email, it.status, it.expires_at,
@@ -50,13 +50,13 @@ export async function GET(
 // POST /api/invites/[token] — accept invite
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ token: string }> }
+  { params }: { params: { token: string } }
 ) {
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: 'Please sign in to accept this invite' }, { status: 401 });
 
-    const { token } = await params;
+    const { token } = params;
 
     // Fetch invite
     const inviteResult = await query(

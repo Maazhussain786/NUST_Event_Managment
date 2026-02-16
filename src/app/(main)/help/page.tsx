@@ -16,7 +16,7 @@ export default function HelpPage() {
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg-primary)' }}>
-      <div className="px-5 pt-12 pb-4 flex items-center gap-3">
+      <div className="flex items-center gap-3 px-5 pt-12 pb-4">
         <button onClick={() => router.back()} className="p-2 rounded-xl" style={{ background: 'var(--bg-card)' }}>
           <ArrowLeft className="w-5 h-5 text-primary" />
         </button>
@@ -24,7 +24,7 @@ export default function HelpPage() {
       </div>
 
       <div className="px-5 pb-32">
-        <h2 className="text-muted text-xs font-semibold uppercase tracking-wider mb-3 mt-4 px-1">
+        <h2 className="px-1 mt-4 mb-3 text-xs font-semibold tracking-wider uppercase text-muted">
           Frequently Asked Questions
         </h2>
         <div className="space-y-2">
@@ -34,18 +34,18 @@ export default function HelpPage() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
-              className="card p-4 group"
+              className="p-4 card group"
             >
-              <summary className="flex items-center gap-3 cursor-pointer list-none">
-                <HelpCircle className="w-5 h-5 text-brand-500 flex-shrink-0" />
-                <span className="text-primary text-sm font-medium flex-1">{faq.q}</span>
+              <summary className="flex items-center gap-3 list-none cursor-pointer">
+                <HelpCircle className="flex-shrink-0 w-5 h-5 text-brand-500" />
+                <span className="flex-1 text-sm font-medium text-primary">{faq.q}</span>
               </summary>
-              <p className="text-muted text-xs mt-3 ml-8 leading-relaxed">{faq.a}</p>
+              <p className="mt-3 ml-8 text-xs leading-relaxed text-muted">{faq.a}</p>
             </motion.details>
           ))}
         </div>
 
-        <h2 className="text-muted text-xs font-semibold uppercase tracking-wider mb-3 mt-8 px-1">
+        <h2 className="px-1 mt-8 mb-3 text-xs font-semibold tracking-wider uppercase text-muted">
           Contact Us
         </h2>
         <div className="space-y-2">
@@ -59,12 +59,12 @@ export default function HelpPage() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: (i + 4) * 0.05 }}
-              className="card p-4 flex items-center gap-3"
+              className="flex items-center gap-3 p-4 card"
             >
               <item.icon className="w-5 h-5 text-brand-500" />
               <div className="flex-1">
-                <h3 className="text-primary text-sm font-medium">{item.label}</h3>
-                <p className="text-muted text-xs">{item.desc}</p>
+                <h3 className="text-sm font-medium text-primary">{item.label}</h3>
+                <p className="text-xs text-muted">{item.desc}</p>
               </div>
             </motion.div>
           ))}

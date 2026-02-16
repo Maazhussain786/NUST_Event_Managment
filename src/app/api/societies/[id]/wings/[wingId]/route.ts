@@ -5,13 +5,13 @@ import { getCurrentUser } from '@/lib/auth';
 // DELETE /api/societies/[id]/wings/[wingId] — soft delete wing (President only)
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string; wingId: string }> }
+  { params }: { params: { id: string; wingId: string } }
 ) {
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { id: societyId, wingId } = await params;
+    const { id: societyId, wingId } = params;
 
     // Check president
     const membership = await query(
@@ -40,10 +40,10 @@ export async function DELETE(
 // GET /api/societies/[id]/wings/[wingId] — get wing details with portfolios
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string; wingId: string }> }
+  { params }: { params: { id: string; wingId: string } }
 ) {
   try {
-    const { id: societyId, wingId } = await params;
+    const { id: societyId, wingId } = params;
 
     const wing = await query(
       `SELECT w.id, w.name, w.description, w.created_at

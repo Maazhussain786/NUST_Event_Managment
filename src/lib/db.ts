@@ -1,15 +1,37 @@
-import { Pool } from 'pg';
+import { Pool, PoolConfig } from 'pg';
 
-const pool = new Pool({
+/**
+ * Database connection pool.
+ * Respects ACTIVE_DB env var to switch between Azure (cloud) and Local configs.
+ */
+
+const isAzure = process.env.ACTIVE_DB !== 'local';
+
+const azureConfig: PoolConfig = {
   host: process.env.AZURE_DB_HOST,
   port: parseInt(process.env.AZURE_DB_PORT || '5432'),
   database: process.env.AZURE_DB_NAME,
   user: process.env.AZURE_DB_USER,
   password: process.env.AZURE_DB_PASSWORD,
-  ssl: { rejectUnauthorized: false },
+  ssl: {
+    rejectUnauthorized: process.env.NODE_ENV === 'production',
+  },
   max: 20,
   idleTimeoutMillis: 30000,
-});
+};
+
+const localConfig: PoolConfig = {
+  host: process.env.LOCAL_DB_HOST || 'localhost',
+  port: parseInt(process.env.LOCAL_DB_PORT || '5432'),
+  database: process.env.LOCAL_DB_NAME || 'event_management',
+  user: process.env.LOCAL_DB_USER || 'postgres',
+  password: process.env.LOCAL_DB_PASSWORD,
+  ssl: false,
+  max: 20,
+  idleTimeoutMillis: 30000,
+};
+
+const pool = new Pool(isAzure ? azureConfig : localConfig);
 
 export async function query(text: string, params?: unknown[]) {
   const start = Date.now();

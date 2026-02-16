@@ -46,7 +46,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-6 relative overflow-hidden"
-         style={{ background: 'var(--bg-primary)' }}>
+      style={{ background: 'var(--bg-primary)' }}>
       {/* Subtle glow */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-80 h-80 bg-brand-500/8 rounded-full blur-[100px] pointer-events-none" />
 
@@ -131,34 +131,36 @@ export default function LoginPage() {
           </Link>
         </p>
 
-        {/* Dev sample credentials */}
-        <div className="mt-6 rounded-2xl p-4" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-card)' }}>
-          <p className="text-xs font-semibold text-muted mb-2 uppercase tracking-wider">Sample Logins</p>
-          <button
-            type="button"
-            onClick={() => { setEmail('mhussain.bscs24seecs@seecs.edu.pk'); setPassword('Mobile 786'); }}
-            className="w-full text-left p-2 rounded-xl hover:bg-brand-500/5 transition-colors mb-1"
-          >
-            <p className="text-xs font-semibold text-brand-500">Super Admin</p>
-            <p className="text-[11px] text-muted">mhussain.bscs24seecs@seecs.edu.pk</p>
-          </button>
-          <button
-            type="button"
-            onClick={() => { setEmail('student1@seecs.edu.pk'); setPassword('test1234'); }}
-            className="w-full text-left p-2 rounded-xl hover:bg-brand-500/5 transition-colors mb-1"
-          >
-            <p className="text-xs font-semibold text-brand-500">Student</p>
-            <p className="text-[11px] text-muted">student1@seecs.edu.pk</p>
-          </button>
-          <button
-            type="button"
-            onClick={() => { setEmail('president.devs@seecs.edu.pk'); setPassword('president123'); }}
-            className="w-full text-left p-2 rounded-xl hover:bg-brand-500/5 transition-colors"
-          >
-            <p className="text-xs font-semibold text-brand-500">Society President</p>
-            <p className="text-[11px] text-muted">president.devs@seecs.edu.pk</p>
-          </button>
-        </div>
+        {/* Dev sample credentials — only visible in development */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="mt-6 rounded-2xl p-4" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-card)' }}>
+            <p className="text-xs font-semibold text-muted mb-2 uppercase tracking-wider">Sample Logins (Dev Only)</p>
+            <button
+              type="button"
+              onClick={() => { setEmail('mhussain.bscs24seecs@seecs.edu.pk'); setPassword('Mobile 786'); }}
+              className="w-full text-left p-2 rounded-xl hover:bg-brand-500/5 transition-colors mb-1"
+            >
+              <p className="text-xs font-semibold text-brand-500">Super Admin</p>
+              <p className="text-[11px] text-muted">mhussain.bscs24seecs@seecs.edu.pk</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setEmail('student1@seecs.edu.pk'); setPassword('test1234'); }}
+              className="w-full text-left p-2 rounded-xl hover:bg-brand-500/5 transition-colors mb-1"
+            >
+              <p className="text-xs font-semibold text-brand-500">Student</p>
+              <p className="text-[11px] text-muted">student1@seecs.edu.pk</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setEmail('president.devs@seecs.edu.pk'); setPassword('president123'); }}
+              className="w-full text-left p-2 rounded-xl hover:bg-brand-500/5 transition-colors"
+            >
+              <p className="text-xs font-semibold text-brand-500">Society President</p>
+              <p className="text-[11px] text-muted">president.devs@seecs.edu.pk</p>
+            </button>
+          </div>
+        )}
       </motion.div>
     </div>
   );

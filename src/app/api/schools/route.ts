@@ -4,7 +4,7 @@ import { query } from '@/lib/db';
 export async function GET() {
   try {
     const result = await query(
-      `SELECT id, name, abbreviation, campus FROM nust_schools ORDER BY abbreviation ASC`
+      `SELECT id, full_name, abbreviation FROM nust_schools ORDER BY abbreviation ASC`
     );
     return NextResponse.json({ schools: result.rows });
   } catch (error: unknown) {

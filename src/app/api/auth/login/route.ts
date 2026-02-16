@@ -51,7 +51,6 @@ export async function POST(req: Request) {
         fullName: user.full_name,
         userType: user.user_type,
       },
-      token,
     });
 
     response.cookies.set('auth_token', token, {

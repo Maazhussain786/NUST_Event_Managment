@@ -5,10 +5,10 @@ import { getCurrentUser } from '@/lib/auth';
 // GET /api/societies/[id]/wings — list wings
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
-    const { id } = await params;
+    const { id } = params;
     const result = await query(
       `SELECT w.id, w.name, w.description, w.created_at,
               u.full_name AS created_by_name,
@@ -37,13 +37,13 @@ export async function GET(
 // POST /api/societies/[id]/wings — create wing (President only)
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { id: societyId } = await params;
+    const { id: societyId } = params;
 
     // Check president
     const membership = await query(

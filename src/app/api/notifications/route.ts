@@ -9,7 +9,7 @@ export async function GET() {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const result = await query(
-      `SELECT id, title, message, type, is_read, metadata, created_at
+      `SELECT id, title, body, link, is_read, created_at
        FROM notifications
        WHERE user_id = $1
        ORDER BY created_at DESC

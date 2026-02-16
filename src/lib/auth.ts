@@ -3,7 +3,14 @@ import bcrypt from 'bcryptjs';
 import { query } from './db';
 import { cookies } from 'next/headers';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'nust-event-mgmt-secret-2026';
+function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET environment variable is required. Set it in .env or .env.local');
+  }
+  return secret;
+}
+const JWT_SECRET: string = getJwtSecret();
 const JWT_EXPIRES = '7d';
 
 export interface JWTPayload {
