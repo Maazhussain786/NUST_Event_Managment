@@ -59,6 +59,11 @@ JWT_SECRET=nust-event-mgmt-secret-2026
 NODE_ENV=development
 ```
 
+**Test your connection:**
+```bash
+node test-connection.js
+```
+
 **Option B: Set Up Your Own Database**
 
 See [DATABASE_SETUP.md](./DATABASE_SETUP.md) for complete instructions.

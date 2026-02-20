@@ -59,8 +59,16 @@ Contact the project admin (Maaz Hussain) to get access credentials for the share
 Test your database connection:
 
 ```bash
-node -e "const {Pool}=require('pg');const p=new Pool({host:process.env.AZURE_DB_HOST,database:process.env.AZURE_DB_NAME,user:process.env.AZURE_DB_USER,password:process.env.AZURE_DB_PASSWORD,port:5432,ssl:{rejectUnauthorized:false}});p.query('SELECT NOW()').then(r=>{console.log('✅ Connected:',r.rows[0].now);p.end()}).catch(e=>{console.error('❌ Error:',e.message);p.end()})"
+node test-connection.js
 ```
+
+This will verify:
+- ✅ Connection to Azure PostgreSQL
+- ✅ SSL configuration
+- ✅ All critical tables exist
+- ✅ Database has data
+
+If successful, you'll see all tests pass. If not, the script provides troubleshooting steps.
 
 ### Step 4: Start Development
 

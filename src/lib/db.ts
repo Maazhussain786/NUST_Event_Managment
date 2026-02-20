@@ -14,10 +14,11 @@ const azureConfig: PoolConfig = {
   user: process.env.AZURE_DB_USER,
   password: process.env.AZURE_DB_PASSWORD,
   ssl: {
-    rejectUnauthorized: process.env.NODE_ENV === 'production',
-  },
+    rejectUnauthorized: false,
+  } as PoolConfig['ssl'],
   max: 20,
   idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000,
 };
 
 const localConfig: PoolConfig = {
