@@ -14,16 +14,17 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
-import { query } from '@/lib/db';
-import { uploadBlob, CONTAINERS } from '@/lib/blob';
+import { query, getClient } from '@/lib/db';
+import { uploadBlob, deleteBlob, CONTAINERS } from '@/lib/blob';
 import {
   validateAnyFile,
   validateMagicBytes,
   processImage,
   checkRateLimit,
   recordUpload,
-  checkSocietyQuota,
-  updateSocietyStorageUsed,
+  checkSocietyQuotaTx,
+  updateSocietyStorageUsedTx,
+  logQuotaExceeded,
   checkEntityMediaCount,
   generateBlobPath,
   LIMITS,
@@ -113,13 +114,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Quota check
-    const quotaError = await checkSocietyQuota(post.society_id, buffer.length);
-    if (quotaError) {
-      return NextResponse.json({ error: quotaError }, { status: 400 });
-    }
-
-    // Process images, pass through documents
+    // Process images, pass through documents — before transaction
     let finalBuffer: Buffer = buffer;
     let finalMimeType = file.type;
 
@@ -129,32 +124,59 @@ export async function POST(request: NextRequest) {
       finalMimeType = processed.mimeType;
     }
 
-    // Upload
-    const blobPath = generateBlobPath('post', postId, 'attachment', file.name);
-    const result = await uploadBlob(
-      CONTAINERS.POST_ATTACHMENTS,
-      blobPath,
-      finalBuffer,
-      finalMimeType,
-      { uploadedBy: user.userId, postId }
-    );
+    // Transactional: quota check → upload → DB save → increment
+    const client = await getClient();
+    let blobUploaded: { url: string; blobName: string; sizeBytes: number } | null = null;
 
-    // Save to DB
-    await query(
-      `INSERT INTO post_attachments
-         (post_id, file_url, file_name, file_size_bytes, mime_type, caption, uploaded_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [postId, result.url, file.name, result.sizeBytes, finalMimeType, caption || null, user.userId]
-    );
+    try {
+      await client.query('BEGIN');
 
-    // Update quota
-    await updateSocietyStorageUsed(post.society_id, result.sizeBytes);
-    recordUpload(user.userId, result.sizeBytes);
+      const quotaResult = await checkSocietyQuotaTx(client, post.society_id, finalBuffer.length);
+      if (!quotaResult.allowed) {
+        await logQuotaExceeded(
+          client, user.userId, post.society_id, finalBuffer.length,
+          quotaResult.quota ?? 0, quotaResult.used ?? 0
+        );
+        await client.query('COMMIT');
+        return NextResponse.json({ error: quotaResult.error }, { status: 403 });
+      }
 
-    return NextResponse.json({
-      success: true,
-      data: { url: result.url, sizeBytes: result.sizeBytes },
-    });
+      const blobPath = generateBlobPath('post', postId, 'attachment', file.name);
+      const result = await uploadBlob(
+        CONTAINERS.POST_ATTACHMENTS,
+        blobPath,
+        finalBuffer,
+        finalMimeType,
+        { uploadedBy: user.userId, postId }
+      );
+      blobUploaded = result;
+
+      await client.query(
+        `INSERT INTO post_attachments
+           (post_id, file_url, file_name, file_size_bytes, mime_type, caption, uploaded_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [postId, result.url, file.name, result.sizeBytes, finalMimeType, caption || null, user.userId]
+      );
+
+      await updateSocietyStorageUsedTx(client, post.society_id, result.sizeBytes);
+
+      await client.query('COMMIT');
+
+      recordUpload(user.userId, result.sizeBytes);
+
+      return NextResponse.json({
+        success: true,
+        data: { url: result.url, sizeBytes: result.sizeBytes },
+      });
+    } catch (txError) {
+      await client.query('ROLLBACK');
+      if (blobUploaded) {
+        try { await deleteBlob(CONTAINERS.POST_ATTACHMENTS, blobUploaded.blobName); } catch { /* best-effort */ }
+      }
+      throw txError;
+    } finally {
+      client.release();
+    }
   } catch (error) {
     console.error('Post attachment upload error:', error);
     return NextResponse.json(

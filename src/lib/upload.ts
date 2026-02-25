@@ -7,6 +7,7 @@
 
 import sharp from 'sharp';
 import { query } from './db';
+import { PoolClient } from 'pg';
 
 // ============================================================================
 // Constants & Limits
@@ -461,6 +462,51 @@ export async function checkSocietyQuota(
 }
 
 /**
+ * Transactional quota check with FOR UPDATE lock.
+ * Must be called within an active transaction (BEGIN already issued).
+ * Locks the society_settings row to prevent race conditions.
+ * Returns { allowed: true } or { allowed: false, error: string, quota, used }.
+ */
+export async function checkSocietyQuotaTx(
+  client: PoolClient,
+  societyId: string,
+  additionalBytes: number
+): Promise<{ allowed: boolean; error?: string; quota?: number; used?: number }> {
+  const result = await client.query(
+    `SELECT
+       COALESCE(ss.storage_quota_bytes, $1) AS quota,
+       COALESCE(ss.storage_used_bytes, 0) AS used
+     FROM societies s
+     LEFT JOIN society_settings ss ON ss.society_id = s.id
+     WHERE s.id = $2
+     FOR UPDATE OF ss`,
+    [LIMITS.DEFAULT_SOCIETY_QUOTA_BYTES, societyId]
+  );
+
+  if (result.rows.length === 0) {
+    return { allowed: false, error: 'Society not found' };
+  }
+
+  const quota = parseInt(result.rows[0].quota, 10);
+  const used = parseInt(result.rows[0].used, 10);
+  const remaining = quota - used;
+
+  if (additionalBytes > remaining) {
+    const usedMB = (used / (1024 * 1024)).toFixed(1);
+    const quotaMB = (quota / (1024 * 1024)).toFixed(0);
+    const remainingMB = Math.max(0, remaining / (1024 * 1024)).toFixed(1);
+    return {
+      allowed: false,
+      error: `Society storage quota exceeded. Used: ${usedMB}MB / ${quotaMB}MB. Remaining: ${remainingMB}MB`,
+      quota,
+      used,
+    };
+  }
+
+  return { allowed: true, quota, used };
+}
+
+/**
  * Update society storage usage after upload/delete.
  */
 export async function updateSocietyStorageUsed(
@@ -472,6 +518,50 @@ export async function updateSocietyStorageUsed(
      SET storage_used_bytes = GREATEST(0, COALESCE(storage_used_bytes, 0) + $1)
      WHERE society_id = $2`,
     [byteDelta, societyId]
+  );
+}
+
+/**
+ * Transactional storage usage update.
+ * Must be called within an active transaction.
+ */
+export async function updateSocietyStorageUsedTx(
+  client: PoolClient,
+  societyId: string,
+  byteDelta: number
+): Promise<void> {
+  await client.query(
+    `UPDATE society_settings
+     SET storage_used_bytes = GREATEST(0, COALESCE(storage_used_bytes, 0) + $1)
+     WHERE society_id = $2`,
+    [byteDelta, societyId]
+  );
+}
+
+/**
+ * Log a QUOTA_EXCEEDED audit event.
+ */
+export async function logQuotaExceeded(
+  client: PoolClient,
+  userId: string,
+  societyId: string,
+  fileBytes: number,
+  quota: number,
+  used: number
+): Promise<void> {
+  await client.query(
+    `INSERT INTO audit_logs (action, performed_by, society_id, target_type, target_id, metadata)
+     VALUES ('QUOTA_EXCEEDED', $1, $2, 'society', $2, $3)`,
+    [
+      userId,
+      societyId,
+      JSON.stringify({
+        attempted_bytes: fileBytes,
+        current_used_bytes: used,
+        quota_bytes: quota,
+        exceeded_by_bytes: (used + fileBytes) - quota,
+      }),
+    ]
   );
 }
 

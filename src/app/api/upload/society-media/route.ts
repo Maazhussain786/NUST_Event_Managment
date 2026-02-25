@@ -17,7 +17,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
-import { query } from '@/lib/db';
+import { query, getClient } from '@/lib/db';
 import { uploadBlob, deleteBlob, extractBlobName, CONTAINERS } from '@/lib/blob';
 import {
   validateImageFile,
@@ -25,8 +25,9 @@ import {
   processImage,
   checkRateLimit,
   recordUpload,
-  checkSocietyQuota,
-  updateSocietyStorageUsed,
+  checkSocietyQuotaTx,
+  updateSocietyStorageUsedTx,
+  logQuotaExceeded,
   checkEntityMediaCount,
   generateBlobPath,
   LIMITS,
@@ -129,89 +130,102 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 10. Quota check
-    const quotaError = await checkSocietyQuota(societyId, buffer.length);
-    if (quotaError) {
-      return NextResponse.json({ error: quotaError }, { status: 400 });
-    }
-
-    // 11. Process image
+    // 10. Process image — before transaction
     const processed = await processImage(buffer, file.type);
 
-    // 12. Upload to blob
-    const blobPath = generateBlobPath('society', societyId, mediaType, file.name);
-    const result = await uploadBlob(
-      CONTAINERS.SOCIETY_MEDIA,
-      blobPath,
-      processed.buffer,
-      processed.mimeType,
-      { uploadedBy: user.userId, societyId, mediaType }
-    );
+    // 11. Transactional: quota check → upload → DB save → increment
+    const client = await getClient();
+    let blobUploaded: { url: string; blobName: string; sizeBytes: number } | null = null;
 
-    // 13. Database operations
-    const dbMediaType = mediaType.toUpperCase() as 'LOGO' | 'COVER' | 'GALLERY';
+    try {
+      await client.query('BEGIN');
 
-    if (mediaType === 'logo' || mediaType === 'cover') {
-      // Soft-delete old media of same type
-      const oldMedia = await query(
-        `SELECT id, file_url FROM society_media
-         WHERE society_id = $1 AND media_type = $2 AND is_deleted = FALSE`,
-        [societyId, dbMediaType]
-      );
-
-      for (const old of oldMedia.rows) {
-        const oldBlob = extractBlobName(old.file_url, CONTAINERS.SOCIETY_MEDIA);
-        if (oldBlob) await deleteBlob(CONTAINERS.SOCIETY_MEDIA, oldBlob);
-      }
-
-      await query(
-        `UPDATE society_media SET is_deleted = TRUE, updated_at = NOW()
-         WHERE society_id = $1 AND media_type = $2 AND is_deleted = FALSE`,
-        [societyId, dbMediaType]
-      );
-
-      // Also update societies.logo_url for backward compatibility
-      if (mediaType === 'logo') {
-        await query(
-          'UPDATE societies SET logo_url = $1, updated_at = NOW() WHERE id = $2',
-          [result.url, societyId]
+      // Lock society_settings row and check quota
+      const quotaResult = await checkSocietyQuotaTx(client, societyId, processed.buffer.length);
+      if (!quotaResult.allowed) {
+        await logQuotaExceeded(
+          client, user.userId, societyId, processed.buffer.length,
+          quotaResult.quota ?? 0, quotaResult.used ?? 0
         );
+        await client.query('COMMIT');
+        return NextResponse.json({ error: quotaResult.error }, { status: 403 });
       }
-    }
 
-    // Insert new media record
-    await query(
-      `INSERT INTO society_media
-         (society_id, media_type, file_url, file_name, file_size_bytes, mime_type, caption, uploaded_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [
-        societyId,
-        dbMediaType,
-        result.url,
-        file.name,
-        result.sizeBytes,
+      // Upload to blob
+      const blobPath = generateBlobPath('society', societyId, mediaType, file.name);
+      const result = await uploadBlob(
+        CONTAINERS.SOCIETY_MEDIA,
+        blobPath,
+        processed.buffer,
         processed.mimeType,
-        caption || null,
-        user.userId,
-      ]
-    );
+        { uploadedBy: user.userId, societyId, mediaType }
+      );
+      blobUploaded = result;
 
-    // 14. Update storage usage
-    await updateSocietyStorageUsed(societyId, result.sizeBytes);
+      // DB operations
+      const dbMediaType = mediaType.toUpperCase() as 'LOGO' | 'COVER' | 'GALLERY';
 
-    // 15. Record rate limit
-    recordUpload(user.userId, result.sizeBytes);
+      if (mediaType === 'logo' || mediaType === 'cover') {
+        // Soft-delete old media (trigger handles storage decrement)
+        const oldMedia = await client.query(
+          `SELECT id, file_url FROM society_media
+           WHERE society_id = $1 AND media_type = $2 AND is_deleted = FALSE`,
+          [societyId, dbMediaType]
+        );
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        url: result.url,
-        mediaType,
-        sizeBytes: result.sizeBytes,
-        width: processed.width,
-        height: processed.height,
-      },
-    });
+        for (const old of oldMedia.rows) {
+          const oldBlob = extractBlobName(old.file_url, CONTAINERS.SOCIETY_MEDIA);
+          if (oldBlob) await deleteBlob(CONTAINERS.SOCIETY_MEDIA, oldBlob);
+        }
+
+        await client.query(
+          `UPDATE society_media SET is_deleted = TRUE, updated_at = NOW()
+           WHERE society_id = $1 AND media_type = $2 AND is_deleted = FALSE`,
+          [societyId, dbMediaType]
+        );
+
+        if (mediaType === 'logo') {
+          await client.query(
+            'UPDATE societies SET logo_url = $1, updated_at = NOW() WHERE id = $2',
+            [result.url, societyId]
+          );
+        }
+      }
+
+      // Insert new media record
+      await client.query(
+        `INSERT INTO society_media
+           (society_id, media_type, file_url, file_name, file_size_bytes, mime_type, caption, uploaded_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [societyId, dbMediaType, result.url, file.name, result.sizeBytes, processed.mimeType, caption || null, user.userId]
+      );
+
+      // Atomic storage increment
+      await updateSocietyStorageUsedTx(client, societyId, result.sizeBytes);
+
+      await client.query('COMMIT');
+
+      recordUpload(user.userId, result.sizeBytes);
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          url: result.url,
+          mediaType,
+          sizeBytes: result.sizeBytes,
+          width: processed.width,
+          height: processed.height,
+        },
+      });
+    } catch (txError) {
+      await client.query('ROLLBACK');
+      if (blobUploaded) {
+        try { await deleteBlob(CONTAINERS.SOCIETY_MEDIA, blobUploaded.blobName); } catch { /* best-effort */ }
+      }
+      throw txError;
+    } finally {
+      client.release();
+    }
   } catch (error) {
     console.error('Society media upload error:', error);
     return NextResponse.json(
