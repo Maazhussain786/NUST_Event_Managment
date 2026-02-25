@@ -42,10 +42,12 @@ export async function POST(
     }
 
     // ── Fetch event with lock ─────────────────────────────────────────
+    // FOR UPDATE OF e serializes all concurrent registrations for the same event.
+    // participants_count is read from the locked row — no separate COUNT needed.
     const eventResult = await client.query(
       `SELECT e.id, e.title, e.society_id, e.is_cancelled, e.status,
               e.event_start, e.event_end, e.registration_end, e.max_participants,
-              e.visibility,
+              e.participants_count, e.visibility,
               s.status as society_status, s.name as society_name
        FROM events e
        JOIN societies s ON e.society_id = s.id
@@ -98,34 +100,91 @@ export async function POST(
       }
     }
 
-    // ── Max participants check ────────────────────────────────────────
-    if (event.max_participants) {
-      const countResult = await client.query(
-        `SELECT COUNT(*) as cnt FROM event_registrations
-         WHERE event_id = $1 AND cancelled_at IS NULL`,
-        [eventId]
-      );
-      const currentCount = parseInt(countResult.rows[0].cnt, 10);
-      if (currentCount >= event.max_participants) {
-        await client.query('ROLLBACK');
-        return NextResponse.json({ error: 'Event has reached maximum participants' }, { status: 409 });
-      }
-    }
-
-    // ── Check duplicate registration ──────────────────────────────────
+    // ── Check duplicate registration / waitlist ─────────────────────
     const existingReg = await client.query(
       `SELECT id, cancelled_at FROM event_registrations
        WHERE event_id = $1 AND user_id = $2`,
       [eventId, user.userId]
     );
 
-    let registrationId: string;
+    if (existingReg.rows.length > 0 && existingReg.rows[0].cancelled_at === null) {
+      await client.query('ROLLBACK');
+      return NextResponse.json({ error: 'You are already registered for this event' }, { status: 409 });
+    }
 
+    // Also check if already on waitlist
+    const existingWait = await client.query(
+      `SELECT id FROM event_waitlist
+       WHERE event_id = $1 AND user_id = $2 AND cancelled_at IS NULL AND promoted_at IS NULL`,
+      [eventId, user.userId]
+    );
+    if (existingWait.rows.length > 0) {
+      await client.query('ROLLBACK');
+      return NextResponse.json({ error: 'You are already on the waitlist for this event' }, { status: 409 });
+    }
+
+    // ── Capacity check using participants_count (from locked row) ──
+    // No separate COUNT query needed — the trigger-maintained counter
+    // is read atomically with the FOR UPDATE lock.
+    const isFull = event.max_participants
+      ? event.participants_count >= event.max_participants
+      : false;
+
+    let registrationId: string | null = null;
+    let waitlistId: string | null = null;
+    let waitlistPosition: number | null = null;
+
+    if (isFull) {
+      // ── Event full → add to waitlist ─────────────────────────────
+      const posResult = await client.query(
+        `SELECT COALESCE(MAX(position), 0) + 1 AS next_pos
+         FROM event_waitlist
+         WHERE event_id = $1 AND cancelled_at IS NULL AND promoted_at IS NULL`,
+        [eventId]
+      );
+      waitlistPosition = posResult.rows[0].next_pos;
+
+      const wl = await client.query(
+        `INSERT INTO event_waitlist (event_id, user_id, position)
+         VALUES ($1, $2, $3)
+         RETURNING id`,
+        [eventId, user.userId, waitlistPosition]
+      );
+      waitlistId = wl.rows[0].id;
+
+      // Audit log for waitlist
+      await client.query(
+        `INSERT INTO audit_logs (action, performed_by, society_id, target_type, target_id, new_value, metadata)
+         VALUES ('EVENT_WAITLISTED', $1, $2, 'event_waitlist', $3, $4, $5)`,
+        [
+          user.userId,
+          event.society_id,
+          waitlistId,
+          JSON.stringify({ event_id: eventId, user_id: user.userId, position: waitlistPosition }),
+          JSON.stringify({
+            eventTitle: event.title,
+            societyName: event.society_name,
+            waitlistPosition,
+          }),
+        ]
+      );
+
+      await client.query('COMMIT');
+
+      return NextResponse.json({
+        success: true,
+        waitlisted: true,
+        waitlist: {
+          id: waitlistId,
+          eventId,
+          eventTitle: event.title,
+          position: waitlistPosition,
+        },
+      }, { status: 202 });
+    }
+
+    // ── Capacity available → register ──────────────────────────────
     if (existingReg.rows.length > 0) {
-      if (existingReg.rows[0].cancelled_at === null) {
-        await client.query('ROLLBACK');
-        return NextResponse.json({ error: 'You are already registered for this event' }, { status: 409 });
-      }
       // Re-register (was previously cancelled)
       const reReg = await client.query(
         `UPDATE event_registrations
@@ -167,6 +226,7 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
+      waitlisted: false,
       registration: {
         id: registrationId,
         eventId,
@@ -176,9 +236,12 @@ export async function POST(
   } catch (error) {
     await client.query('ROLLBACK');
 
-    // Handle unique constraint violation gracefully
+    // Handle unique constraint violations gracefully
     if (error instanceof Error && error.message.includes('uq_event_registration')) {
       return NextResponse.json({ error: 'You are already registered for this event' }, { status: 409 });
+    }
+    if (error instanceof Error && error.message.includes('uq_waitlist_entry')) {
+      return NextResponse.json({ error: 'You are already on the waitlist for this event' }, { status: 409 });
     }
 
     console.error('Event registration error:', error);
