@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 // Routes that REQUIRE login (no guest access)
-const authRequiredRoutes = ['/admin'];
+const authRequiredRoutes = ['/admin', '/platform'];
 
 /**
  * Check if a JWT token appears structurally valid and not expired.

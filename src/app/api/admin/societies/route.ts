@@ -17,12 +17,15 @@ export async function GET(req: NextRequest) {
                     s.status, s.created_at, s.president_name, s.contact_number,
                     u.full_name AS created_by_name, u.email AS created_by_email,
                     COUNT(DISTINCT sm.user_id) as member_count,
-                    COUNT(DISTINCT e.id) as event_count
+                    COUNT(DISTINCT e.id) as event_count,
+                    ss.storage_used_bytes,
+                    COALESCE(ss.storage_quota_bytes, 524288000) AS storage_quota_bytes
              FROM societies s
              LEFT JOIN nust_schools ns ON s.school_id = ns.id
              LEFT JOIN users u ON s.created_by = u.id
              LEFT JOIN society_memberships sm ON sm.society_id = s.id AND sm.is_active = TRUE
-             LEFT JOIN events e ON e.society_id = s.id`;
+             LEFT JOIN events e ON e.society_id = s.id
+             LEFT JOIN society_settings ss ON ss.society_id = s.id`;
 
     const params: string[] = [];
     if (status) {
@@ -30,7 +33,7 @@ export async function GET(req: NextRequest) {
       params.push(status);
     }
 
-    q += ' GROUP BY s.id, ns.abbreviation, u.full_name, u.email ORDER BY s.created_at DESC';
+    q += ' GROUP BY s.id, ns.abbreviation, u.full_name, u.email, ss.storage_used_bytes, ss.storage_quota_bytes ORDER BY s.created_at DESC';
 
     const result = await query(q, params);
     return NextResponse.json(result.rows);

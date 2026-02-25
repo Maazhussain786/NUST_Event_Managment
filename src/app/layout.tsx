@@ -26,9 +26,7 @@ export default function RootLayout({
       <body className="min-h-screen">
         <ThemeProvider>
           <AuthProvider>
-            <div className="max-w-lg mx-auto relative">
-              {children}
-            </div>
+            {children}
           </AuthProvider>
         </ThemeProvider>
       </body>
