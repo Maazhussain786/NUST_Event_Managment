@@ -12,6 +12,13 @@ export async function GET(req: NextRequest) {
 
     const status = req.nextUrl.searchParams.get('status') || 'PENDING';
 
+    let whereClause = '';
+    const params: string[] = [];
+    if (status !== 'ALL') {
+      whereClause = 'WHERE e.status = $1';
+      params.push(status);
+    }
+
     const result = await query(
       `SELECT e.id, e.title, e.description, e.event_start AS start_date,
               e.event_end AS end_date, e.location AS venue,
@@ -22,9 +29,10 @@ export async function GET(req: NextRequest) {
        FROM events e
        JOIN societies s ON s.id = e.society_id
        LEFT JOIN users u ON u.id = e.created_by
-       WHERE e.status = $1
-       ORDER BY e.created_at DESC`,
-      [status]
+       ${whereClause}
+       ORDER BY e.created_at DESC
+       LIMIT 200`,
+      params
     );
 
     return NextResponse.json(result.rows);

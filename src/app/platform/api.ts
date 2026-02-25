@@ -10,11 +10,20 @@
 import type {
   PlatformStats,
   AdminUser,
+  UserDetail,
+  Administrator,
   AdminSociety,
   AdminEvent,
+  FinanceData,
   AuditLogResponse,
   AnalyticsData,
   StorageResponse,
+  SecurityMetrics,
+  FeatureFlag,
+  SystemConfigItem,
+  Incident,
+  SearchResults,
+  HealthStatus,
 } from './types';
 
 // ─── Base Fetch ─────────────────────────────────────────────────────────────
@@ -55,16 +64,44 @@ async function api<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
-// ─── Stats ──────────────────────────────────────────────────────────────────
+// ─── Overview (Command Center) ──────────────────────────────────────────────
 
 export function fetchStats(): Promise<PlatformStats> {
   return api<PlatformStats>('/api/admin/stats');
+}
+
+// ─── Administrators ─────────────────────────────────────────────────────────
+
+export function fetchAdministrators(): Promise<{ administrators: Administrator[]; totalCount: number }> {
+  return api('/api/admin/administrators');
+}
+
+export function addAdministrator(userId: string): Promise<{ success: boolean; message: string }> {
+  return api('/api/admin/administrators', {
+    method: 'POST',
+    body: JSON.stringify({ userId }),
+  });
 }
 
 // ─── Users ──────────────────────────────────────────────────────────────────
 
 export function fetchUsers(): Promise<AdminUser[]> {
   return api<AdminUser[]>('/api/admin/users');
+}
+
+export function fetchUserDetail(id: string): Promise<UserDetail> {
+  return api<UserDetail>(`/api/admin/users/${id}`);
+}
+
+export function suspendUser(id: string, reason: string): Promise<{ success: boolean }> {
+  return api(`/api/admin/users/${id}/suspend`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export function reactivateUser(id: string): Promise<{ success: boolean }> {
+  return api(`/api/admin/users/${id}/reactivate`, { method: 'POST' });
 }
 
 // ─── Societies ──────────────────────────────────────────────────────────────
@@ -128,9 +165,8 @@ export function updateStorageLimit(
 
 // ─── Events ─────────────────────────────────────────────────────────────────
 
-export function fetchEvents(status?: string): Promise<AdminEvent[]> {
-  const qs = status ? `?status=${status}` : '';
-  return api<AdminEvent[]>(`/api/admin/events${qs}`);
+export function fetchEvents(status: string = 'ALL'): Promise<AdminEvent[]> {
+  return api<AdminEvent[]>(`/api/admin/events?status=${status}`);
 }
 
 export function patchEvent(
@@ -142,6 +178,12 @@ export function patchEvent(
     method: 'PATCH',
     body: JSON.stringify({ action, reason }),
   });
+}
+
+// ─── Financial Intelligence ─────────────────────────────────────────────────
+
+export function fetchFinance(): Promise<FinanceData> {
+  return api<FinanceData>('/api/admin/finance');
 }
 
 // ─── Audit Logs ─────────────────────────────────────────────────────────────
@@ -177,4 +219,76 @@ export function fetchAnalytics(): Promise<AnalyticsData> {
 export function fetchStorageOverview(sort?: string): Promise<StorageResponse> {
   const qs = sort ? `?sort=${sort}` : '';
   return api<StorageResponse>(`/api/admin/storage${qs}`);
+}
+
+// ─── Security Monitoring ────────────────────────────────────────────────────
+
+export function fetchSecurityMetrics(): Promise<SecurityMetrics> {
+  return api<SecurityMetrics>('/api/admin/security');
+}
+
+// ─── Feature Flags ──────────────────────────────────────────────────────────
+
+export function fetchFeatureFlags(): Promise<FeatureFlag[]> {
+  return api<FeatureFlag[]>('/api/admin/feature-flags');
+}
+
+export function updateFeatureFlag(key: string, enabled: boolean): Promise<{ success: boolean }> {
+  return api('/api/admin/feature-flags', {
+    method: 'PATCH',
+    body: JSON.stringify({ key, enabled }),
+  });
+}
+
+// ─── System Configuration ───────────────────────────────────────────────────
+
+export function fetchSystemConfig(): Promise<SystemConfigItem[]> {
+  return api<SystemConfigItem[]>('/api/admin/system-config');
+}
+
+export function updateSystemConfig(key: string, value: string | number): Promise<{ success: boolean }> {
+  return api('/api/admin/system-config', {
+    method: 'PATCH',
+    body: JSON.stringify({ key, value }),
+  });
+}
+
+// ─── Incident Management ────────────────────────────────────────────────────
+
+export function fetchIncidents(): Promise<Incident[]> {
+  return api<Incident[]>('/api/admin/incidents');
+}
+
+export function createIncident(data: {
+  title: string;
+  description?: string;
+  severity: string;
+}): Promise<{ success: boolean; id: string }> {
+  return api('/api/admin/incidents', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateIncident(id: number | string, data: {
+  status?: string;
+  severity?: string;
+  note?: string;
+}): Promise<{ success: boolean }> {
+  return api(`/api/admin/incidents/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+// ─── Global Search ──────────────────────────────────────────────────────────
+
+export function globalSearch(query: string): Promise<SearchResults> {
+  return api<SearchResults>(`/api/admin/search?q=${encodeURIComponent(query)}`);
+}
+
+// ─── Health Monitor ─────────────────────────────────────────────────────────
+
+export function fetchHealthStatus(): Promise<HealthStatus> {
+  return api<HealthStatus>('/api/admin/health');
 }

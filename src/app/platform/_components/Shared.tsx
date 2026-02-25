@@ -1,6 +1,7 @@
 'use client';
 
 import { Loader2 } from 'lucide-react';
+export { StatusBadge } from './StatusBadge';
 
 export function PageLoader() {
   return (

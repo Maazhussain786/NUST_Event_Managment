@@ -2,17 +2,24 @@
  * Platform Dashboard — TypeScript Interfaces
  * ============================================================================
  * All types consumed by the /platform SuperAdmin dashboard.
- * These mirror backend API response shapes exactly.
+ * PostgreSQL returns COUNT/SUM/AGG as strings — keep them as strings here,
+ * convert with Number() in UI code.
  * ========================================================================== */
 
-// ─── Core Stats ─────────────────────────────────────────────────────────────
+// ─── Command Center (Overview) ──────────────────────────────────────────────
 
 export interface PlatformStats {
   totalUsers: number;
   totalSocieties: number;
   totalEvents: number;
+  activeEvents: number;
   pendingEvents: number;
   pendingSocieties: number;
+  revenueToday: string;
+  globalStorageUsed: string;
+  globalStorageQuota: string;
+  qrScansToday: number;
+  suspensionsToday: number;
 }
 
 // ─── Users ──────────────────────────────────────────────────────────────────
@@ -25,6 +32,47 @@ export interface AdminUser {
   status: 'ACTIVE' | 'PENDING_VERIFICATION' | 'SUSPENDED';
   created_at: string;
   society_count: string;
+}
+
+export interface UserDetail {
+  id: string;
+  email: string;
+  full_name: string;
+  user_type: 'SUPER_ADMIN' | 'STUDENT';
+  status: string;
+  avatar_url: string | null;
+  created_at: string;
+  memberships: UserMembership[];
+  events: UserEventParticipation[];
+  auditLogs: AuditLog[];
+}
+
+export interface UserMembership {
+  society_id: string;
+  society_name: string;
+  role: string;
+  is_active: boolean;
+  joined_at: string;
+}
+
+export interface UserEventParticipation {
+  event_id: string;
+  event_title: string;
+  society_name: string;
+  registered_at: string;
+  status: string;
+}
+
+// ─── Administrators ─────────────────────────────────────────────────────────
+
+export interface Administrator {
+  id: string;
+  email: string;
+  full_name: string;
+  status: string;
+  created_at: string;
+  action_count: string;
+  last_action_at: string | null;
 }
 
 // ─── Societies ──────────────────────────────────────────────────────────────
@@ -68,6 +116,54 @@ export interface AdminEvent {
   society_logo: string | null;
   created_by_name: string;
   created_at: string;
+  participant_count?: string;
+  waitlist_count?: string;
+  revenue?: string;
+}
+
+// ─── Financial Intelligence ─────────────────────────────────────────────────
+
+export interface FinanceData {
+  revenueBySociety: RevenueBySociety[];
+  revenueByEvent: RevenueByEvent[];
+  paymentBreakdown: PaymentBreakdown;
+  recentPayments: RecentPayment[];
+  monthlyRevenue: MonthlyCount[];
+}
+
+export interface RevenueBySociety {
+  society_id: string;
+  society_name: string;
+  total_revenue: string;
+  ticket_count: string;
+  event_count: string;
+}
+
+export interface RevenueByEvent {
+  event_id: string;
+  event_title: string;
+  society_name: string;
+  ticket_price: string;
+  tickets_sold: string;
+  total_revenue: string;
+  event_date: string;
+}
+
+export interface PaymentBreakdown {
+  total: string;
+  approved: string;
+  pending: string;
+  rejected: string;
+  total_revenue: string;
+}
+
+export interface RecentPayment {
+  id: string;
+  user_name: string;
+  event_title: string;
+  amount: string;
+  status: string;
+  purchased_at: string;
 }
 
 // ─── Audit Logs ─────────────────────────────────────────────────────────────
@@ -206,4 +302,126 @@ export interface StorageAggregate {
 export interface StorageResponse {
   societies: SocietyStorage[];
   aggregate: StorageAggregate;
+}
+
+// ─── Security Monitoring ────────────────────────────────────────────────────
+
+export interface SecurityMetrics {
+  failedLogins24h: number;
+  qrScanBursts: number;
+  rapidRegistrations: number;
+  lockingConflicts: number;
+  paymentRetrySpikes: number;
+  apiErrors24h: number;
+  suspiciousActivities: SuspiciousActivity[];
+  recentSecurityEvents: SecurityEvent[];
+}
+
+export interface SuspiciousActivity {
+  user_id: string;
+  user_name: string;
+  user_email: string;
+  indicator: string;
+  count: string;
+  last_occurred: string;
+}
+
+export interface SecurityEvent {
+  id: string;
+  action: string;
+  performed_by: string | null;
+  user_name: string | null;
+  user_email: string | null;
+  ip_address: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
+// ─── Feature Flags ──────────────────────────────────────────────────────────
+
+export interface FeatureFlag {
+  key: string;
+  label: string;
+  description: string;
+  enabled: boolean;
+  scope: 'global' | 'per_society';
+  category: string;
+}
+
+// ─── System Configuration ───────────────────────────────────────────────────
+
+export interface SystemConfigItem {
+  key: string;
+  label: string;
+  description: string;
+  value: string | number;
+  type: 'number' | 'string' | 'boolean';
+  unit?: string;
+  category: string;
+}
+
+// ─── Incident Management ────────────────────────────────────────────────────
+
+export interface Incident {
+  id: string;
+  title: string;
+  description: string | null;
+  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  status: 'OPEN' | 'INVESTIGATING' | 'RESOLVED' | 'CLOSED';
+  created_by_name: string;
+  created_by_email: string;
+  assigned_to_name: string | null;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+  notes: IncidentNote[];
+}
+
+export interface IncidentNote {
+  id: string;
+  note: string;
+  created_by_name: string;
+  created_at: string;
+}
+
+// ─── Global Search ──────────────────────────────────────────────────────────
+
+export interface SearchResults {
+  users: SearchResultItem[];
+  societies: SearchResultItem[];
+  events: SearchResultItem[];
+  auditLogs: SearchResultItem[];
+}
+
+export interface SearchResultItem {
+  id: string;
+  type: 'user' | 'society' | 'event' | 'audit_log';
+  title: string;
+  subtitle: string | null;
+  status: string | null;
+  created_at: string;
+}
+
+// ─── Health Monitor ─────────────────────────────────────────────────────────
+
+export interface HealthStatus {
+  database: ServiceHealth;
+  storage: ServiceHealth;
+  api: ServiceHealth;
+  overall: 'healthy' | 'degraded' | 'unhealthy';
+  timestamp: string;
+  systemInfo: {
+    totalUsers: number;
+    totalSocieties: number;
+    totalEvents: number;
+    dbResponseTime: number;
+    uptimeHours: number;
+    errorRate24h: number;
+  };
+}
+
+export interface ServiceHealth {
+  status: 'healthy' | 'degraded' | 'unhealthy';
+  latency: number;
+  message: string;
 }

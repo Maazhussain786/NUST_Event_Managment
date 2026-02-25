@@ -38,7 +38,7 @@ export default function EventsPage() {
     try {
       setLoading(true);
       setError(null);
-      const data = await fetchEvents(activeTab === 'ALL' ? undefined : activeTab);
+      const data = await fetchEvents(activeTab);
       setEvents(data);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load events');

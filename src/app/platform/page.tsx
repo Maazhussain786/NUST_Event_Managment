@@ -12,12 +12,26 @@ import {
   CheckCircle2,
   XCircle,
   RefreshCw,
+  DollarSign,
+  HardDrive,
+  Zap,
+  Shield,
+  Activity,
 } from 'lucide-react';
 import { StatCard } from './_components/StatCard';
 import { StatusBadge } from './_components/StatusBadge';
 import { PageLoader, ErrorState } from './_components/Shared';
 import { fetchStats, fetchSocieties, fetchEvents, patchSociety, patchEvent } from './api';
 import type { PlatformStats, AdminSociety, AdminEvent } from './types';
+
+function formatBytes(bytes: string | number): string {
+  const b = typeof bytes === 'string' ? Number(bytes) : bytes;
+  if (b === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(b) / Math.log(k));
+  return parseFloat((b / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
 
 export default function PlatformOverviewPage() {
   const [stats, setStats] = useState<PlatformStats | null>(null);
@@ -76,36 +90,75 @@ export default function PlatformOverviewPage() {
   if (error) return <ErrorState message={error} onRetry={load} />;
   if (!stats) return null;
 
+  const storagePercent = Number(stats.globalStorageQuota) > 0
+    ? ((Number(stats.globalStorageUsed) / Number(stats.globalStorageQuota)) * 100).toFixed(1)
+    : '0';
+
   return (
     <div className="space-y-8">
-      {/* Page title */}
+      {/* Title bar */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>Overview</h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>Platform-wide statistics and pending actions</p>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
+            Command Center
+          </h1>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+            Platform-wide overview · {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+          </p>
         </div>
         <button
           onClick={load}
-          className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium
             hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors"
-          style={{ color: 'var(--text-secondary)' }}
+          style={{ color: 'var(--text-secondary)', border: '1px solid var(--border-primary)' }}
         >
           <RefreshCw className="w-4 h-4" />
           Refresh
         </button>
       </div>
 
-      {/* Stats grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      {/* Primary stats grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Total Users" value={stats.totalUsers} icon={Users} accent="blue" />
         <StatCard label="Societies" value={stats.totalSocieties} icon={Building2} accent="green" />
-        <StatCard label="Events" value={stats.totalEvents} icon={Calendar} accent="purple" />
+        <StatCard label="Total Events" value={stats.totalEvents} icon={Calendar} accent="purple" />
         <StatCard
           label="Pending Actions"
           value={stats.pendingSocieties + stats.pendingEvents}
           icon={Clock}
           accent="amber"
           trend={`${stats.pendingSocieties} societies · ${stats.pendingEvents} events`}
+        />
+      </div>
+
+      {/* Secondary stats grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          label="Active Events"
+          value={stats.activeEvents}
+          icon={Zap}
+          accent="green"
+          trend="Currently running"
+        />
+        <StatCard
+          label="Revenue Today"
+          value={`Rs. ${Number(stats.revenueToday).toLocaleString()}`}
+          icon={DollarSign}
+          accent="brand"
+        />
+        <StatCard
+          label="Storage Used"
+          value={formatBytes(stats.globalStorageUsed)}
+          icon={HardDrive}
+          accent="blue"
+          trend={`${storagePercent}% of ${formatBytes(stats.globalStorageQuota)}`}
+        />
+        <StatCard
+          label="QR Scans Today"
+          value={stats.qrScansToday}
+          icon={Activity}
+          accent="purple"
+          trend={stats.suspensionsToday > 0 ? `${stats.suspensionsToday} suspension(s)` : 'No suspensions today'}
         />
       </div>
 
@@ -144,7 +197,9 @@ export default function PlatformOverviewPage() {
                   >
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-primary)' }}>{soc.name}</p>
-                      <p className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>{soc.description}</p>
+                      <p className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>
+                        {soc.created_by_name ? `by ${soc.created_by_name}` : soc.description}
+                      </p>
                     </div>
                     <div className="flex items-center gap-1.5 ml-3 shrink-0">
                       <button
@@ -238,22 +293,26 @@ export default function PlatformOverviewPage() {
         </div>
       </div>
 
-      {/* Quick links */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      {/* Quick navigation */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {[
-          { href: '/platform/audit-logs', label: 'Audit Logs', icon: '📋' },
-          { href: '/platform/analytics', label: 'Analytics', icon: '📊' },
-          { href: '/platform/storage', label: 'Storage', icon: '💾' },
-          { href: '/platform/users', label: 'Users', icon: '👥' },
-        ].map(l => (
+          { href: '/platform/administrators', label: 'Administrators', icon: Shield, color: 'text-brand-500 bg-brand-500/10' },
+          { href: '/platform/finance', label: 'Finance', icon: DollarSign, color: 'text-emerald-500 bg-emerald-500/10' },
+          { href: '/platform/analytics', label: 'Analytics', icon: Activity, color: 'text-blue-500 bg-blue-500/10' },
+          { href: '/platform/audit-logs', label: 'Audit Logs', icon: Clock, color: 'text-purple-500 bg-purple-500/10' },
+          { href: '/platform/storage', label: 'Storage', icon: HardDrive, color: 'text-amber-500 bg-amber-500/10' },
+          { href: '/platform/security', label: 'Security', icon: Shield, color: 'text-red-500 bg-red-500/10' },
+        ].map(({ href, label, icon: Icon, color }) => (
           <Link
-            key={l.href}
-            href={l.href}
-            className="card p-4 flex items-center gap-3 hover:shadow-lg transition-shadow group"
+            key={href}
+            href={href}
+            className="card p-4 flex flex-col items-center gap-2 hover:shadow-lg transition-shadow group text-center"
           >
-            <span className="text-xl">{l.icon}</span>
-            <span className="text-sm font-semibold group-hover:text-brand-500 transition-colors" style={{ color: 'var(--text-primary)' }}>
-              {l.label}
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${color}`}>
+              <Icon className="w-5 h-5" />
+            </div>
+            <span className="text-xs font-semibold group-hover:text-brand-500 transition-colors" style={{ color: 'var(--text-primary)' }}>
+              {label}
             </span>
           </Link>
         ))}
