@@ -12,8 +12,9 @@ import {
   Clock,
 } from 'lucide-react';
 import { PageLoader, ErrorState, EmptyState } from '../_components/Shared';
-import { fetchAuditLogs } from '../api';
+import { fetchAuditLogs, exportAuditLogsCsv } from '../api';
 import type { AuditLogResponse } from '../types';
+import { Download } from 'lucide-react';
 
 const ACTION_OPTIONS: { label: string; value: string }[] = [
   { label: 'Society Approved', value: 'SOCIETY_APPROVED' },
@@ -60,6 +61,31 @@ export default function AuditLogsPage() {
 
   // Expanded rows
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportCsv = async () => {
+    try {
+      setExporting(true);
+      const csv = await exportAuditLogsCsv({
+        action: action || undefined,
+        userId: userId || undefined,
+        societyId: societyId || undefined,
+        from: fromDate || undefined,
+        to: toDate || undefined,
+      });
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `audit-logs-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert('Failed to export CSV');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const load = useCallback(async () => {
     try {
@@ -130,14 +156,24 @@ export default function AuditLogsPage() {
             Track all platform actions and changes
           </p>
         </div>
-        <button
-          onClick={() => setShowFilters(!showFilters)}
-          className="btn-secondary text-sm py-2.5 px-4 flex items-center gap-2"
-        >
-          <Filter className="w-4 h-4" />
-          Filters
-          <ChevronDown className={`w-3 h-3 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleExportCsv}
+            disabled={exporting}
+            className="btn-secondary text-sm py-2.5 px-4 flex items-center gap-2 disabled:opacity-50"
+          >
+            <Download className="w-4 h-4" />
+            {exporting ? 'Exporting…' : 'Export CSV'}
+          </button>
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className="btn-secondary text-sm py-2.5 px-4 flex items-center gap-2"
+          >
+            <Filter className="w-4 h-4" />
+            Filters
+            <ChevronDown className={`w-3 h-3 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+          </button>
+        </div>
       </div>
 
       {/* Filters Panel */}

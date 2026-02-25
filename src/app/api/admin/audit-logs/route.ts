@@ -69,6 +69,42 @@ export async function GET(req: NextRequest) {
       ? 'WHERE ' + conditions.join(' AND ')
       : '';
 
+    // ─── CSV Export ──────────────────────────────────────────────────────
+    const format = sp.get('format');
+    if (format === 'csv') {
+      const csvResult = await query(
+        `SELECT al.id, al.action, al.performed_by,
+                u.full_name AS performed_by_name,
+                u.email AS performed_by_email,
+                al.society_id, s.name AS society_name,
+                al.target_type, al.target_id,
+                al.ip_address, al.created_at
+         FROM audit_logs al
+         LEFT JOIN users u ON u.id = al.performed_by
+         LEFT JOIN societies s ON s.id = al.society_id
+         ${whereClause}
+         ORDER BY al.created_at DESC
+         LIMIT 5000`,
+        params
+      );
+
+      const headers = ['ID', 'Action', 'Performed By', 'Name', 'Email', 'Society', 'Target Type', 'Target ID', 'IP Address', 'Timestamp'];
+      const csvRows = csvResult.rows.map((r: Record<string, unknown>) =>
+        [r.id, r.action, r.performed_by, r.performed_by_name || '', r.performed_by_email || '', r.society_name || '', r.target_type || '', r.target_id || '', r.ip_address || '', r.created_at]
+          .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+          .join(',')
+      );
+      const csv = [headers.join(','), ...csvRows].join('\n');
+
+      return new NextResponse(csv, {
+        headers: {
+          'Content-Type': 'text/csv',
+          'Content-Disposition': `attachment; filename="audit-logs-${new Date().toISOString().slice(0, 10)}.csv"`,
+        },
+      });
+    }
+
+    // ─── JSON (paginated) ───────────────────────────────────────────────
     // Count total
     const countResult = await query(
       `SELECT COUNT(*) AS total FROM audit_logs al ${whereClause}`,

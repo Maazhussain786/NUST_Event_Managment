@@ -24,6 +24,11 @@ import type {
   Incident,
   SearchResults,
   HealthStatus,
+  UniversityEvent,
+  CoHostRequest,
+  PlatformNotification,
+  BlackoutDate,
+  EmergencyStatus,
 } from './types';
 
 // ─── Base Fetch ─────────────────────────────────────────────────────────────
@@ -291,4 +296,139 @@ export function globalSearch(query: string): Promise<SearchResults> {
 
 export function fetchHealthStatus(): Promise<HealthStatus> {
   return api<HealthStatus>('/api/admin/health');
+}
+
+// ─── University Events (NUST Official) ──────────────────────────────────────
+
+export function fetchUniversityEvents(): Promise<UniversityEvent[]> {
+  return api<UniversityEvent[]>('/api/admin/university-events');
+}
+
+export function createUniversityEvent(data: {
+  title: string;
+  description?: string;
+  event_start: string;
+  event_end?: string;
+  location?: string;
+  ticket_price?: number;
+  max_tickets?: number;
+  is_pinned?: boolean;
+  priority_rank?: number;
+}): Promise<{ success: boolean; id: string }> {
+  return api('/api/admin/university-events', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export function patchUniversityEvent(
+  id: string,
+  data: { is_pinned?: boolean; is_locked?: boolean; priority_rank?: number; status?: string }
+): Promise<{ success: boolean }> {
+  return api(`/api/admin/university-events/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+// ─── Co-Host Request Workflow ───────────────────────────────────────────────
+
+export function fetchCoHostRequests(status?: string): Promise<CoHostRequest[]> {
+  const qs = status ? `?status=${status}` : '';
+  return api<CoHostRequest[]>(`/api/admin/cohost-requests${qs}`);
+}
+
+export function updateCoHostRequest(
+  id: string,
+  data: { action: 'APPROVED' | 'REJECTED'; admin_note?: string }
+): Promise<{ success: boolean }> {
+  return api(`/api/admin/cohost-requests/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+// ─── Notification Engine (In-App) ───────────────────────────────────────────
+
+export function fetchNotifications(): Promise<PlatformNotification[]> {
+  return api<PlatformNotification[]>('/api/admin/notifications');
+}
+
+export function createNotification(data: {
+  title: string;
+  body: string;
+  priority?: string;
+  target_type?: string;
+  target_id?: string;
+  scheduled_at?: string;
+  expires_at?: string;
+}): Promise<{ success: boolean; id: string }> {
+  return api('/api/admin/notifications', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteNotification(id: string): Promise<{ success: boolean }> {
+  return api(`/api/admin/notifications/${id}`, { method: 'DELETE' });
+}
+
+// ─── Blackout Calendar ──────────────────────────────────────────────────────
+
+export function fetchBlackoutDates(): Promise<BlackoutDate[]> {
+  return api<BlackoutDate[]>('/api/admin/blackout-dates');
+}
+
+export function createBlackoutDate(data: {
+  title: string;
+  start_date: string;
+  end_date: string;
+  reason?: string;
+  scope?: string;
+}): Promise<{ success: boolean; id: string }> {
+  return api('/api/admin/blackout-dates', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteBlackoutDate(id: string): Promise<{ success: boolean }> {
+  return api(`/api/admin/blackout-dates/${id}`, { method: 'DELETE' });
+}
+
+// ─── Emergency Controls ─────────────────────────────────────────────────────
+
+export function fetchEmergencyStatus(): Promise<EmergencyStatus> {
+  return api<EmergencyStatus>('/api/admin/emergency');
+}
+
+export function toggleEmergencyFlag(
+  key: string,
+  enabled: boolean
+): Promise<{ success: boolean }> {
+  return api('/api/admin/emergency', {
+    method: 'POST',
+    body: JSON.stringify({ key, enabled }),
+  });
+}
+
+// ─── Audit Logs CSV Export ──────────────────────────────────────────────────
+
+export function exportAuditLogsCsv(params: {
+  action?: string;
+  userId?: string;
+  societyId?: string;
+  from?: string;
+  to?: string;
+}): Promise<string> {
+  const sp = new URLSearchParams();
+  sp.set('format', 'csv');
+  if (params.action) sp.set('action', params.action);
+  if (params.userId) sp.set('userId', params.userId);
+  if (params.societyId) sp.set('societyId', params.societyId);
+  if (params.from) sp.set('from', params.from);
+  if (params.to) sp.set('to', params.to);
+  return fetch(`/api/admin/audit-logs?${sp.toString()}`, {
+    credentials: 'include',
+  }).then(r => r.text());
 }

@@ -425,3 +425,98 @@ export interface ServiceHealth {
   latency: number;
   message: string;
 }
+
+// ─── University Events (NUST Official) ──────────────────────────────────────
+
+export interface UniversityEvent {
+  id: string;
+  title: string;
+  description: string | null;
+  event_start: string;
+  event_end: string | null;
+  location: string | null;
+  status: string;
+  banner_url: string | null;
+  ticket_price: string;
+  max_tickets: string | null;
+  is_pinned: boolean;
+  is_locked: boolean;
+  priority_rank: number;
+  created_by_name: string | null;
+  society_name: string | null;
+  society_id: string | null;
+  registration_count: string;
+  created_at: string;
+}
+
+// ─── Co-Host Request Workflow ───────────────────────────────────────────────
+
+export type CoHostRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED';
+
+export interface CoHostRequest {
+  id: string;
+  event_id: string;
+  event_title: string;
+  requesting_society_id: string;
+  requesting_society_name: string;
+  host_society_id: string;
+  host_society_name: string;
+  requested_by_name: string;
+  status: CoHostRequestStatus;
+  reason: string | null;
+  admin_note: string | null;
+  created_at: string;
+  updated_at: string;
+  expires_at: string | null;
+}
+
+// ─── Notification Engine (In-App) ───────────────────────────────────────────
+
+export type NotificationPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
+export type NotificationTargetType = 'ALL' | 'SOCIETY' | 'EVENT' | 'USER';
+
+export interface PlatformNotification {
+  id: string;
+  title: string;
+  body: string;
+  priority: NotificationPriority;
+  target_type: NotificationTargetType;
+  target_id: string | null;
+  target_label: string | null;
+  scheduled_at: string | null;
+  expires_at: string | null;
+  is_active: boolean;
+  read_count: string;
+  total_target: string;
+  sender_name: string;
+  created_at: string;
+}
+
+// ─── Blackout Calendar ──────────────────────────────────────────────────────
+
+export interface BlackoutDate {
+  id: string;
+  title: string;
+  start_date: string;
+  end_date: string;
+  reason: string | null;
+  scope: 'ALL' | 'EVENTS' | 'REGISTRATIONS';
+  created_by_name: string;
+  created_at: string;
+}
+
+// ─── Emergency Controls ─────────────────────────────────────────────────────
+
+export interface EmergencyStatus {
+  flags: EmergencyFlag[];
+  activeIncidents: number;
+  lastEmergencyAction: string | null;
+}
+
+export interface EmergencyFlag {
+  key: string;
+  label: string;
+  description: string;
+  enabled: boolean;
+  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+}

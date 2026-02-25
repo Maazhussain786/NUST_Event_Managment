@@ -24,6 +24,11 @@ import {
   Search,
   Activity,
   UserCog,
+  GraduationCap,
+  Handshake,
+  Bell,
+  ShieldOff,
+  CalendarOff,
 } from 'lucide-react';
 
 interface PlatformShellProps {
@@ -45,6 +50,8 @@ const NAV_SECTIONS = [
     items: [
       { href: '/platform/societies', label: 'Societies', icon: Building2 },
       { href: '/platform/events', label: 'Events', icon: Calendar },
+      { href: '/platform/university-events', label: 'University Events', icon: GraduationCap },
+      { href: '/platform/cohost-requests', label: 'Co-Host Requests', icon: Handshake },
       { href: '/platform/finance', label: 'Finance', icon: DollarSign },
       { href: '/platform/storage', label: 'Storage', icon: HardDrive },
     ],
@@ -58,11 +65,19 @@ const NAV_SECTIONS = [
     ],
   },
   {
+    label: 'Communication',
+    items: [
+      { href: '/platform/notifications', label: 'Notifications', icon: Bell },
+      { href: '/platform/blackout-calendar', label: 'Blackout Calendar', icon: CalendarOff },
+    ],
+  },
+  {
     label: 'System',
     items: [
       { href: '/platform/feature-flags', label: 'Feature Flags', icon: ToggleLeft },
       { href: '/platform/system-config', label: 'Configuration', icon: Settings },
       { href: '/platform/incidents', label: 'Incidents', icon: AlertOctagon },
+      { href: '/platform/emergency', label: 'Emergency', icon: ShieldOff },
       { href: '/platform/health', label: 'Health', icon: Activity },
     ],
   },
