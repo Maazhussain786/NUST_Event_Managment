@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET  /api/admin/incidents — list all incidents
  * POST /api/admin/incidents — create new incident

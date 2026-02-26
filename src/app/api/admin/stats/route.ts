@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
@@ -29,7 +31,7 @@ export async function GET() {
       query(`SELECT COUNT(*) as count FROM events
              WHERE status = 'APPROVED'
                AND event_start <= NOW()
-               AND (event_end IS NULL OR event_end >= NOW())`),
+               AND event_end >= NOW()`),
       query(`SELECT COALESCE(SUM(e.ticket_price), 0) as total
              FROM tickets t
              JOIN events e ON e.id = t.event_id

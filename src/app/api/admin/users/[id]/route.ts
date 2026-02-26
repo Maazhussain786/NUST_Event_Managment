@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/admin/users/[id] — detailed user profile with memberships, events, audit
  */

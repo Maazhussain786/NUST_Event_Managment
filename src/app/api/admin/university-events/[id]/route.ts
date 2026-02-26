@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * PATCH /api/admin/university-events/[id] — update pin/lock/priority/status
  */

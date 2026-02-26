@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET   /api/admin/cohost-requests — list all co-host requests
  * PATCH /api/admin/cohost-requests — (unused, use /[id])

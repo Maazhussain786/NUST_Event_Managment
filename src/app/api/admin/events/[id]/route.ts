@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
@@ -27,7 +29,7 @@ export async function PATCH(
 
     // Log the action
     await query(
-      `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
+      `INSERT INTO audit_logs (performed_by, action, target_type, target_id, metadata)
        VALUES ($1, $2, $3, $4, $5)`,
       [user.userId, `EVENT_${action}`, 'EVENT', id, JSON.stringify({ reason: reason || '' })]
     );

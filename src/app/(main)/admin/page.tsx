@@ -27,7 +27,7 @@ interface AdminEvent {
   venue: string;
   status: string;
   capacity: number;
-  ticket_price: number;
+  ticket_price: number | null;
   banner_url: string | null;
   society_name: string;
   society_logo: string | null;
@@ -40,7 +40,7 @@ interface AdminSociety {
   name: string;
   description: string;
   logo_url: string | null;
-  category: string;
+  category: string | null;
   status: string;
   created_at: string;
   member_count: string;
@@ -132,7 +132,7 @@ export default function AdminDashboard() {
       await fetch(`/api/admin/societies/${socId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, rejectionReason: reason }),
+        body: JSON.stringify({ action, reason }),
       });
       fetchSocieties();
       fetchStats();
@@ -153,7 +153,7 @@ export default function AdminDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg-primary)' }}>
+      <div className="flex items-center justify-center min-h-screen" style={{ background: 'var(--bg-primary)' }}>
         <Loader2 className="w-8 h-8 animate-spin text-brand-500" />
       </div>
     );
@@ -162,19 +162,19 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg-primary)' }}>
       {/* Header */}
-      <div className="px-5 pt-12 pb-2 flex items-center gap-3">
+      <div className="flex items-center gap-3 px-5 pt-12 pb-2">
         <button onClick={() => router.back()} className="p-2 rounded-xl" style={{ background: 'var(--bg-card)' }}>
           <ArrowLeft className="w-5 h-5 text-primary" />
         </button>
         <div className="flex-1">
           <h1 className="text-xl font-bold text-primary">Admin Panel</h1>
-          <p className="text-muted text-xs">Super Admin Dashboard</p>
+          <p className="text-xs text-muted">Super Admin Dashboard</p>
         </div>
         <Shield className="w-6 h-6 text-brand-500" />
       </div>
 
       {/* Tab Bar */}
-      <div className="px-5 mt-4 flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+      <div className="flex gap-2 px-5 pb-2 mt-4 overflow-x-auto no-scrollbar">
         {tabs.map(t => (
           <button
             key={t.key}
@@ -210,53 +210,53 @@ export default function AdminDashboard() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.1 }}
-                    className="card p-4"
+                    className="p-4 card"
                   >
                     <div className={`w-10 h-10 rounded-xl ${stat.bg} flex items-center justify-center mb-3`}>
                       <stat.icon className={`w-5 h-5 ${stat.color}`} />
                     </div>
                     <p className="text-2xl font-bold text-primary">{stat.value}</p>
-                    <p className="text-muted text-xs mt-1">{stat.label}</p>
+                    <p className="mt-1 text-xs text-muted">{stat.label}</p>
                   </motion.div>
                 ))}
               </div>
 
               {/* Quick Actions */}
-              <h2 className="text-muted text-xs font-semibold uppercase tracking-wider mt-6 mb-3">Quick Actions</h2>
+              <h2 className="mt-6 mb-3 text-xs font-semibold tracking-wider uppercase text-muted">Quick Actions</h2>
               <div className="space-y-2">
                 {stats.pendingEvents > 0 && (
                   <button onClick={() => { setTab('events'); setEventFilter('PENDING'); }}
-                    className="w-full card p-4 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
+                    className="flex items-center w-full gap-3 p-4 card">
+                    <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-amber-500/10">
                       <AlertTriangle className="w-5 h-5 text-amber-500" />
                     </div>
                     <div className="flex-1 text-left">
-                      <p className="text-primary text-sm font-medium">{stats.pendingEvents} events need approval</p>
-                      <p className="text-muted text-xs">Review and approve pending events</p>
+                      <p className="text-sm font-medium text-primary">{stats.pendingEvents} events need approval</p>
+                      <p className="text-xs text-muted">Review and approve pending events</p>
                     </div>
                     <ChevronRight className="w-4 h-4 text-muted" />
                   </button>
                 )}
                 {stats.pendingSocieties > 0 && (
                   <button onClick={() => { setTab('societies'); setSocietyFilter('PENDING'); }}
-                    className="w-full card p-4 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center">
+                    className="flex items-center w-full gap-3 p-4 card">
+                    <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-orange-500/10">
                       <Building2 className="w-5 h-5 text-orange-500" />
                     </div>
                     <div className="flex-1 text-left">
-                      <p className="text-primary text-sm font-medium">{stats.pendingSocieties} societies pending</p>
-                      <p className="text-muted text-xs">Review new society applications</p>
+                      <p className="text-sm font-medium text-primary">{stats.pendingSocieties} societies pending</p>
+                      <p className="text-xs text-muted">Review new society applications</p>
                     </div>
                     <ChevronRight className="w-4 h-4 text-muted" />
                   </button>
                 )}
-                <button onClick={() => setTab('users')} className="w-full card p-4 flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                <button onClick={() => setTab('users')} className="flex items-center w-full gap-3 p-4 card">
+                  <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-blue-500/10">
                     <UserCheck className="w-5 h-5 text-blue-500" />
                   </div>
                   <div className="flex-1 text-left">
-                    <p className="text-primary text-sm font-medium">Manage Users</p>
-                    <p className="text-muted text-xs">View and manage all registered users</p>
+                    <p className="text-sm font-medium text-primary">Manage Users</p>
+                    <p className="text-xs text-muted">View and manage all registered users</p>
                   </div>
                   <ChevronRight className="w-4 h-4 text-muted" />
                 </button>
@@ -283,9 +283,9 @@ export default function AdminDashboard() {
               </div>
 
               {events.length === 0 ? (
-                <div className="text-center py-16">
-                  <Calendar className="w-12 h-12 mx-auto text-surface-400 mb-3" />
-                  <p className="text-muted text-sm">No {eventFilter.toLowerCase()} events</p>
+                <div className="py-16 text-center">
+                  <Calendar className="w-12 h-12 mx-auto mb-3 text-surface-400" />
+                  <p className="text-sm text-muted">No {eventFilter.toLowerCase()} events</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -295,19 +295,19 @@ export default function AdminDashboard() {
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: i * 0.05 }}
-                      className="card p-4"
+                      className="p-4 card"
                     >
                       <div className="flex items-start gap-3">
-                        <div className="w-14 h-14 rounded-xl bg-brand-500/10 flex items-center justify-center text-brand-500 font-bold overflow-hidden flex-shrink-0">
+                        <div className="flex items-center justify-center flex-shrink-0 overflow-hidden font-bold w-14 h-14 rounded-xl bg-brand-500/10 text-brand-500">
                           {ev.banner_url ? (
-                            <img src={ev.banner_url} alt="" className="w-full h-full object-cover" />
+                            <img src={ev.banner_url} alt="" className="object-cover w-full h-full" />
                           ) : (
                             ev.title.charAt(0)
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h3 className="text-primary text-sm font-semibold truncate">{ev.title}</h3>
-                          <p className="text-muted text-xs">{ev.society_name}</p>
+                          <h3 className="text-sm font-semibold truncate text-primary">{ev.title}</h3>
+                          <p className="text-xs text-muted">{ev.society_name}</p>
                           <p className="text-muted text-[11px] mt-1">{formatDate(ev.start_date)} · {ev.venue}</p>
                           <div className="flex items-center gap-2 mt-1">
                             <span className="text-xs px-2 py-0.5 rounded-full bg-surface-200 dark:bg-surface-700 text-muted">
@@ -373,9 +373,9 @@ export default function AdminDashboard() {
               </div>
 
               {societies.length === 0 ? (
-                <div className="text-center py-16">
-                  <Building2 className="w-12 h-12 mx-auto text-surface-400 mb-3" />
-                  <p className="text-muted text-sm">No societies found</p>
+                <div className="py-16 text-center">
+                  <Building2 className="w-12 h-12 mx-auto mb-3 text-surface-400" />
+                  <p className="text-sm text-muted">No societies found</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -385,19 +385,19 @@ export default function AdminDashboard() {
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: i * 0.05 }}
-                      className="card p-4"
+                      className="p-4 card"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-xl bg-brand-500/10 flex items-center justify-center text-brand-500 font-bold overflow-hidden">
+                        <div className="flex items-center justify-center w-12 h-12 overflow-hidden font-bold rounded-xl bg-brand-500/10 text-brand-500">
                           {soc.logo_url ? (
-                            <img src={soc.logo_url} alt="" className="w-full h-full object-cover" />
+                            <img src={soc.logo_url} alt="" className="object-cover w-full h-full" />
                           ) : (
                             soc.name.charAt(0)
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h3 className="text-primary text-sm font-semibold truncate">{soc.name}</h3>
-                          <p className="text-muted text-xs">
+                          <h3 className="text-sm font-semibold truncate text-primary">{soc.name}</h3>
+                          <p className="text-xs text-muted">
                             {soc.category ? `${soc.category} · ` : ''}
                             {soc.member_count} members · {soc.event_count} events
                           </p>
@@ -483,9 +483,9 @@ export default function AdminDashboard() {
           {tab === 'users' && (
             <motion.div key="users" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               {users.length === 0 ? (
-                <div className="text-center py-16">
-                  <Users className="w-12 h-12 mx-auto text-surface-400 mb-3" />
-                  <p className="text-muted text-sm">No users found</p>
+                <div className="py-16 text-center">
+                  <Users className="w-12 h-12 mx-auto mb-3 text-surface-400" />
+                  <p className="text-sm text-muted">No users found</p>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -495,14 +495,14 @@ export default function AdminDashboard() {
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: i * 0.03 }}
-                      className="card p-4 flex items-center gap-3"
+                      className="flex items-center gap-3 p-4 card"
                     >
-                      <div className="w-10 h-10 rounded-xl bg-brand-500/10 flex items-center justify-center text-brand-500 font-bold text-sm">
+                      <div className="flex items-center justify-center w-10 h-10 text-sm font-bold rounded-xl bg-brand-500/10 text-brand-500">
                         {u.full_name?.split(' ').map(n => n[0]).join('').slice(0, 2) || 'U'}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h3 className="text-primary text-sm font-medium truncate">{u.full_name}</h3>
-                        <p className="text-muted text-xs truncate">{u.email}</p>
+                        <h3 className="text-sm font-medium truncate text-primary">{u.full_name}</h3>
+                        <p className="text-xs truncate text-muted">{u.email}</p>
                       </div>
                       <div className="text-right">
                         <span className={`text-[10px] px-2 py-1 rounded-full font-medium ${
@@ -527,15 +527,15 @@ export default function AdminDashboard() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center px-5" style={{ background: 'rgba(0,0,0,0.5)' }}>
             <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }}
-              className="w-full max-w-sm rounded-2xl p-6" style={{ background: 'var(--bg-card)' }}>
-              <h3 className="text-lg font-bold text-primary mb-1">Reject Society</h3>
-              <p className="text-muted text-xs mb-4">Provide a reason for the applicant</p>
+              className="w-full max-w-sm p-6 rounded-2xl" style={{ background: 'var(--bg-card)' }}>
+              <h3 className="mb-1 text-lg font-bold text-primary">Reject Society</h3>
+              <p className="mb-4 text-xs text-muted">Provide a reason for the applicant</p>
               <textarea
                 value={rejectionReason}
                 onChange={(e) => setRejectionReason(e.target.value)}
                 placeholder="Reason for rejection (optional)..."
                 rows={3}
-                className="input-field w-full py-3 px-4 text-sm resize-none mb-4"
+                className="w-full px-4 py-3 mb-4 text-sm resize-none input-field"
               />
               <div className="flex gap-2">
                 <button onClick={() => { setShowRejectModal(null); setRejectionReason(''); }}

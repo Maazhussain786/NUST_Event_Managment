@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { query, getClient } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
@@ -5,7 +7,7 @@ import { getCurrentUser } from '@/lib/auth';
 // PATCH /api/admin/societies/[id] — approve/reject/suspend
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await getCurrentUser();
@@ -13,7 +15,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const { id } = params;
+    const { id } = await params;
     const { action, reason } = await req.json();
 
     if (!['APPROVED', 'REJECTED', 'SUSPENDED', 'PENDING'].includes(action)) {

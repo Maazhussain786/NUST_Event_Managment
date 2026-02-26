@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET  /api/admin/emergency — current emergency status + flags
  * POST /api/admin/emergency — toggle an emergency control flag

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET  /api/admin/administrators — list all SUPER_ADMIN users with action counts
  * POST /api/admin/administrators — promote a STUDENT to SUPER_ADMIN

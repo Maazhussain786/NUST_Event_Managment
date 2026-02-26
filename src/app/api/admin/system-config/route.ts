@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET   /api/admin/system-config — list system configuration
  * PATCH /api/admin/system-config — update a config value

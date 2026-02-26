@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET   /api/admin/feature-flags — list all feature flags
  * PATCH /api/admin/feature-flags — toggle a feature flag

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * PATCH /api/admin/incidents/[id] — update incident status/severity or add a note
  */

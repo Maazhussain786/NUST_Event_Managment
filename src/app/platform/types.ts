@@ -99,7 +99,7 @@ export interface AdminSociety {
 
 // ─── Events ─────────────────────────────────────────────────────────────────
 
-export type EventStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+export type EventStatus = 'DRAFT' | 'PENDING' | 'UPCOMING' | 'ONGOING' | 'COMPLETED' | 'APPROVED' | 'REJECTED' | 'ARCHIVED' | 'CANCELLED';
 
 export interface AdminEvent {
   id: string;

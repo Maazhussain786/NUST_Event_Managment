@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET  /api/admin/university-events — list NUST official/university events
  * POST /api/admin/university-events — create a new university-level event

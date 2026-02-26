@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/admin/security — security monitoring metrics
  *
@@ -21,21 +23,26 @@ export async function GET() {
       suspiciousActivities,
       recentSecurityEvents,
     ] = await Promise.all([
-      // QR scan bursts — users scanning > 10 times in 1 hour
+      // QR scan bursts — users scanning > 10 times in 24h
       query(`
-        SELECT COUNT(DISTINCT performed_by) AS count
-        FROM audit_logs
-        WHERE action = 'QR_SCANNED'
-          AND created_at >= NOW() - INTERVAL '24 hours'
-        HAVING COUNT(*) > 10
+        SELECT COUNT(*)::text AS count FROM (
+          SELECT performed_by FROM audit_logs
+          WHERE action = 'QR_SCANNED'
+            AND created_at >= NOW() - INTERVAL '24 hours'
+          GROUP BY performed_by
+          HAVING COUNT(*) > 10
+        ) AS bursts
       `),
 
-      // Rapid registrations — users registering for 5+ events in 1 hour
+      // Rapid registrations — users registering for 5+ events in 24h
       query(`
-        SELECT COUNT(DISTINCT performed_by) AS count
-        FROM audit_logs
-        WHERE action = 'EVENT_REGISTERED'
-          AND created_at >= NOW() - INTERVAL '24 hours'
+        SELECT COUNT(*)::text AS count FROM (
+          SELECT performed_by FROM audit_logs
+          WHERE action = 'EVENT_REGISTERED'
+            AND created_at >= NOW() - INTERVAL '24 hours'
+          GROUP BY performed_by
+          HAVING COUNT(*) > 5
+        ) AS rapid
       `),
 
       // Suspicious activities — users with high action volumes in last 24h

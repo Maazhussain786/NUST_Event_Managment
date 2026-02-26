@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET  /api/admin/notifications — list all platform notifications
  * POST /api/admin/notifications — create a new notification broadcast

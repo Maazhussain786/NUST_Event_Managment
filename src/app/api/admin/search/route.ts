@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/admin/search?q=term — global search across users, societies, events, audit logs
  */

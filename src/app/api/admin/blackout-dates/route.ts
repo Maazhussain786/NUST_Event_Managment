@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * GET    /api/admin/blackout-dates — list all blackout periods
  * POST   /api/admin/blackout-dates — create a blackout period

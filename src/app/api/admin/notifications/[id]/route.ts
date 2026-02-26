@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * DELETE /api/admin/notifications/[id] — deactivate/delete a notification
  */

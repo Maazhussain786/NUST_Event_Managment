@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 /**
  * DELETE /api/media/[id]
  * PATCH  /api/media/[id]  (restore)
