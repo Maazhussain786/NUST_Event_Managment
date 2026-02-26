@@ -3,190 +3,499 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
-  Users, Calendar, Ticket, ScanLine, Network, HardDrive,
-  Wallet, TrendingUp, Clock, Activity,
+  ArrowLeft,
+  Users,
+  Star,
+  Calendar,
+  MapPin,
+  Mail,
+  Phone,
+  ExternalLink,
+  Image as ImageIcon,
+  UserCheck,
+  MessageCircle,
+  Share2,
+  Loader2,
+  ChevronRight,
+  Clock,
+  Shield,
+  Globe,
+  Instagram,
+  Linkedin,
+  Youtube,
+  Settings,
 } from 'lucide-react';
-import { fetchGovernanceOverview, SocietyApiError } from '../api';
-import { PageLoader, ErrorState, StatCard, StatusBadge } from '../_components/Shared';
-import type { GovernanceOverview } from '../types';
 
-export default function SocietyOverviewPage() {
-  const { societyId } = useParams<{ societyId: string }>();
+// ─── Types ──────────────────────────────────────────────────────────────────
+
+interface Society {
+  id: string;
+  name: string;
+  description: string;
+  logo_url: string | null;
+  status: string;
+  is_nust_wide: boolean;
+  school_name: string | null;
+  school_abbr: string | null;
+  member_count: string;
+  avg_rating: string;
+  rating_count: string;
+  created_at: string;
+}
+
+interface Profile {
+  tagline: string | null;
+  cover_url: string | null;
+  mission: string | null;
+  established_year: number | null;
+  faculty_advisor: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  office_location: string | null;
+  social_links: Record<string, string> | null;
+  primary_color: string | null;
+  accent_color: string | null;
+  pin_announcement: string | null;
+  featured_event_id: string | null;
+  is_public: boolean;
+}
+
+interface PublicEvent {
+  id: string;
+  title: string;
+  description: string | null;
+  banner_url: string | null;
+  location: string | null;
+  event_start: string;
+  event_end: string | null;
+  ticket_price: string | null;
+  visibility: string;
+  tickets_sold: string;
+}
+
+interface TeamMember {
+  membership_id: string;
+  user_id: string;
+  full_name: string;
+  avatar_url: string | null;
+  role_name: string;
+  hierarchy_level: number;
+  wing_name: string | null;
+  portfolio_name: string | null;
+}
+
+interface GalleryItem {
+  id: string;
+  title: string;
+  description: string | null;
+  file_url: string;
+  file_type: string;
+  created_at: string;
+  uploaded_by: string;
+}
+
+interface Wing {
+  id: string;
+  name: string;
+  description: string | null;
+  member_count: string;
+}
+
+type Tab = 'about' | 'events' | 'gallery' | 'team' | 'contact';
+
+// ─── Page ───────────────────────────────────────────────────────────────────
+
+export default function PublicSocietyPage() {
+  const params = useParams();
   const router = useRouter();
-  const [data, setData] = useState<GovernanceOverview | null>(null);
+  const societyId = params.societyId as string;
+
+  const [society, setSociety] = useState<Society | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [events, setEvents] = useState<PublicEvent[]>([]);
+  const [team, setTeam] = useState<TeamMember[]>([]);
+  const [gallery, setGallery] = useState<GalleryItem[]>([]);
+  const [wings, setWings] = useState<Wing[]>([]);
+  const [activeTab, setActiveTab] = useState<Tab>('about');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const overview = await fetchGovernanceOverview(societyId);
-      setData(overview);
-    } catch (err) {
-      if (err instanceof SocietyApiError) {
-        if (err.status === 401) { router.push('/login'); return; }
-        if (err.status === 403) { setError('You do not have access to this dashboard.'); return; }
-        setError(err.message);
-      } else {
-        setError('Failed to load dashboard');
-      }
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    fetch(`/api/societies/${societyId}/public`)
+      .then(r => {
+        if (!r.ok) throw new Error('Not found');
+        return r.json();
+      })
+      .then(data => {
+        setSociety(data.society);
+        setProfile(data.profile);
+        setEvents(data.events || []);
+        setTeam(data.team || []);
+        setGallery(data.gallery || []);
+        setWings(data.wings || []);
+      })
+      .catch(() => setError('Society not found'))
+      .finally(() => setLoading(false));
+  }, [societyId]);
+
+  const brandColor = profile?.primary_color || '#FF9F43';
+
+  const handleShare = useCallback(() => {
+    if (navigator.share) {
+      navigator.share({ title: society?.name, url: window.location.href });
+    } else {
+      navigator.clipboard.writeText(window.location.href);
     }
-  }, [societyId, router]);
+  }, [society]);
 
-  useEffect(() => { load(); }, [load]);
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-primary">
+        <Loader2 className="w-8 h-8 animate-spin" style={{ color: brandColor }} />
+      </div>
+    );
+  }
 
-  if (loading) return <PageLoader />;
-  if (error || !data) return <ErrorState message={error || 'Failed to load'} onRetry={load} />;
+  if (error || !society) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-primary">
+        <p className="text-muted text-lg">Society not found</p>
+        <button onClick={() => router.push('/home')} className="btn-primary">Go Home</button>
+      </div>
+    );
+  }
 
-  const { stats, upcomingEvents, recentActivity, myRole } = data;
+  const tabs: { key: Tab; label: string; count?: number }[] = [
+    { key: 'about', label: 'About' },
+    { key: 'events', label: 'Events', count: events.length },
+    { key: 'gallery', label: 'Gallery', count: gallery.length },
+    { key: 'team', label: 'Team', count: team.length },
+    { key: 'contact', label: 'Contact' },
+  ];
+
+  return (
+    <div className="min-h-screen bg-primary">
+      {/* ─── Cover Banner ─── */}
+      <div className="relative h-52 sm:h-64" style={{ background: profile?.cover_url ? undefined : `linear-gradient(135deg, ${brandColor}, ${profile?.accent_color || '#e08a30'})` }}>
+        {profile?.cover_url && (
+          <img src={profile.cover_url} alt="Cover" className="w-full h-full object-cover" />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+        <div className="absolute top-4 left-4 right-4 flex justify-between z-10">
+          <button onClick={() => router.back()} className="w-10 h-10 rounded-2xl bg-black/30 backdrop-blur-md flex items-center justify-center text-white">
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <div className="flex gap-2">
+            <button onClick={handleShare} className="w-10 h-10 rounded-2xl bg-black/30 backdrop-blur-md flex items-center justify-center text-white">
+              <Share2 className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Society Info ─── */}
+      <div className="px-5 -mt-14 relative z-10 max-w-3xl mx-auto">
+        <div className="flex items-end gap-4 mb-3">
+          <div className="w-24 h-24 rounded-2xl shrink-0 border-4 flex items-center justify-center text-3xl font-bold overflow-hidden" style={{ background: 'var(--bg-primary)', borderColor: 'var(--bg-primary)', color: brandColor }}>
+            {society.logo_url ? (
+              <img src={society.logo_url} alt={society.name} className="w-full h-full object-cover" />
+            ) : (
+              society.name[0]
+            )}
+          </div>
+          <div className="pb-1 flex-1 min-w-0">
+            <h1 className="text-xl font-bold text-primary truncate">{society.name}</h1>
+            {profile?.tagline && <p className="text-muted text-sm mt-0.5">{profile.tagline}</p>}
+            <p className="text-muted text-xs mt-0.5">
+              {society.is_nust_wide ? 'NUST-Wide' : society.school_abbr || 'Society'}
+              {profile?.established_year && ` · Est. ${profile.established_year}`}
+            </p>
+          </div>
+        </div>
+
+        {/* Stats row */}
+        <div className="flex flex-wrap gap-4 mb-4">
+          <div className="flex items-center gap-1 text-sm text-secondary">
+            <Users className="w-4 h-4" style={{ color: brandColor }} />
+            <span className="font-semibold text-primary">{Number(society.member_count)}</span> members
+          </div>
+          <div className="flex items-center gap-1 text-sm text-secondary">
+            <Star className="w-4 h-4 text-amber-500" />
+            <span className="font-semibold text-primary">{society.avg_rating}</span>
+            <span>({society.rating_count})</span>
+          </div>
+          <div className="flex items-center gap-1 text-sm text-secondary">
+            <Calendar className="w-4 h-4" style={{ color: brandColor }} />
+            <span>{events.length} events</span>
+          </div>
+        </div>
+
+        {/* Pinned announcement */}
+        {profile?.pin_announcement && (
+          <div className="card p-3 mb-4 border-l-4 flex items-start gap-2" style={{ borderLeftColor: brandColor }}>
+            <MessageCircle className="w-4 h-4 mt-0.5 shrink-0" style={{ color: brandColor }} />
+            <p className="text-sm text-secondary">{profile.pin_announcement}</p>
+          </div>
+        )}
+
+        {/* ─── Tabs ─── */}
+        <div className="flex overflow-x-auto gap-1 mb-5 -mx-1 px-1 scrollbar-hide" style={{ borderBottom: '1px solid var(--border-primary)' }}>
+          {tabs.map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`whitespace-nowrap pb-3 px-3 text-sm font-medium transition-colors relative ${activeTab === tab.key ? '' : 'text-muted'}`}
+              style={activeTab === tab.key ? { color: brandColor } : undefined}
+            >
+              {tab.label}{tab.count !== undefined ? ` (${tab.count})` : ''}
+              {activeTab === tab.key && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full" style={{ background: brandColor }} />
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* ─── Tab Content ─── */}
+        <div className="pb-8">
+          {activeTab === 'about' && <AboutTab society={society} profile={profile} wings={wings} brandColor={brandColor} />}
+          {activeTab === 'events' && <EventsTab events={events} brandColor={brandColor} router={router} />}
+          {activeTab === 'gallery' && <GalleryTab gallery={gallery} />}
+          {activeTab === 'team' && <TeamTab team={team} brandColor={brandColor} />}
+          {activeTab === 'contact' && <ContactTab profile={profile} society={society} brandColor={brandColor} />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── About Tab ──────────────────────────────────────────────────────────────
+
+function AboutTab({ society, profile, wings, brandColor }: { society: Society; profile: Profile | null; wings: Wing[]; brandColor: string }) {
+  return (
+    <div className="space-y-5">
+      {/* Mission */}
+      {profile?.mission && (
+        <div className="card p-4">
+          <h3 className="text-sm font-semibold text-primary mb-2 flex items-center gap-2">
+            <Shield size={16} style={{ color: brandColor }} /> Our Mission
+          </h3>
+          <p className="text-secondary text-sm leading-relaxed">{profile.mission}</p>
+        </div>
+      )}
+
+      {/* Description */}
+      <div className="card p-4">
+        <h3 className="text-sm font-semibold text-primary mb-2">Description</h3>
+        <p className="text-secondary text-sm leading-relaxed">{society.description || 'No description available.'}</p>
+      </div>
+
+      {/* Faculty Advisor */}
+      {profile?.faculty_advisor && (
+        <div className="card p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-brand-500/10 flex items-center justify-center">
+            <UserCheck size={18} style={{ color: brandColor }} />
+          </div>
+          <div>
+            <p className="text-xs text-muted">Faculty Advisor</p>
+            <p className="text-sm font-medium text-primary">{profile.faculty_advisor}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Wings */}
+      {wings.length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold text-primary mb-3">Wings ({wings.length})</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {wings.map(wing => (
+              <div key={wing.id} className="card p-4">
+                <h4 className="text-sm font-semibold text-primary">{wing.name}</h4>
+                <p className="text-xs text-muted mt-1 line-clamp-2">{wing.description || 'No description'}</p>
+                <p className="text-xs text-muted mt-2 flex items-center gap-1">
+                  <Users size={12} /> {Number(wing.member_count)} members
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Quick info */}
+      <div className="card p-4">
+        <h3 className="text-sm font-semibold text-primary mb-2">Info</h3>
+        <div className="space-y-2 text-sm">
+          <div className="flex items-center gap-2 text-secondary">
+            <Calendar size={14} className="text-muted" />
+            <span>Founded {new Date(society.created_at).getFullYear()}</span>
+          </div>
+          {profile?.established_year && (
+            <div className="flex items-center gap-2 text-secondary">
+              <Clock size={14} className="text-muted" />
+              <span>Established {profile.established_year}</span>
+            </div>
+          )}
+          {profile?.office_location && (
+            <div className="flex items-center gap-2 text-secondary">
+              <MapPin size={14} className="text-muted" />
+              <span>{profile.office_location}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Events Tab ─────────────────────────────────────────────────────────────
+
+function EventsTab({ events, brandColor, router }: { events: PublicEvent[]; brandColor: string; router: ReturnType<typeof useRouter> }) {
+  if (events.length === 0) {
+    return <p className="text-center text-muted py-12">No events yet</p>;
+  }
+
+  const now = new Date();
+
+  return (
+    <div className="space-y-3">
+      {events.map(ev => {
+        const start = new Date(ev.event_start);
+        const end = ev.event_end ? new Date(ev.event_end) : null;
+        const isUpcoming = start > now;
+        const isOngoing = start <= now && (!end || end >= now);
+
+        return (
+          <button key={ev.id} onClick={() => router.push(`/events/${ev.id}`)} className="card p-0 w-full text-left overflow-hidden flex flex-col sm:flex-row">
+            {ev.banner_url ? (
+              <img src={ev.banner_url} alt={ev.title} className="w-full sm:w-40 h-32 sm:h-auto object-cover shrink-0" />
+            ) : (
+              <div className="w-full sm:w-40 h-32 sm:h-auto shrink-0 flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${brandColor}33, ${brandColor}11)` }}>
+                <Calendar size={32} style={{ color: brandColor }} />
+              </div>
+            )}
+            <div className="p-4 flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                {isOngoing && <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-green-500/10 text-green-500">Ongoing</span>}
+                {isUpcoming && <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-500">Upcoming</span>}
+                {!isUpcoming && !isOngoing && <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-gray-500/10 text-gray-500">Past</span>}
+              </div>
+              <h4 className="text-sm font-semibold text-primary truncate">{ev.title}</h4>
+              <p className="text-xs text-muted mt-1">{start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+              {ev.location && <p className="text-xs text-muted flex items-center gap-1 mt-0.5"><MapPin size={10} /> {ev.location}</p>}
+              <div className="flex items-center gap-3 mt-2">
+                {ev.ticket_price && Number(ev.ticket_price) > 0 && (
+                  <span className="text-xs font-medium" style={{ color: brandColor }}>PKR {Number(ev.ticket_price).toLocaleString()}</span>
+                )}
+                <span className="text-xs text-muted">{Number(ev.tickets_sold)} attended</span>
+              </div>
+            </div>
+            <div className="hidden sm:flex items-center pr-3"><ChevronRight size={16} className="text-muted" /></div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Gallery Tab ────────────────────────────────────────────────────────────
+
+function GalleryTab({ gallery }: { gallery: GalleryItem[] }) {
+  const [lightbox, setLightbox] = useState<string | null>(null);
+
+  if (gallery.length === 0) {
+    return <p className="text-center text-muted py-12">No gallery items yet</p>;
+  }
+
+  return (
+    <>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        {gallery.map(item => (
+          <button
+            key={item.id}
+            onClick={() => item.file_type?.startsWith('image') && setLightbox(item.file_url)}
+            className="relative overflow-hidden rounded-xl aspect-square group"
+          >
+            {item.file_type?.startsWith('image') ? (
+              <img src={item.file_url} alt={item.title} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
+            ) : (
+              <div className="w-full h-full bg-secondary flex items-center justify-center">
+                <ImageIcon size={32} className="text-muted" />
+              </div>
+            )}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
+              <p className="text-white text-xs truncate">{item.title}</p>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {/* Lightbox */}
+      {lightbox && (
+        <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4" onClick={() => setLightbox(null)}>
+          <img src={lightbox} alt="Preview" className="max-w-full max-h-full object-contain rounded-lg" />
+        </div>
+      )}
+    </>
+  );
+}
+
+// ─── Team Tab ───────────────────────────────────────────────────────────────
+
+function TeamTab({ team, brandColor }: { team: TeamMember[]; brandColor: string }) {
+  if (team.length === 0) {
+    return <p className="text-center text-muted py-12">Team info not available</p>;
+  }
+
+  // Group by hierarchy
+  const leadership = team.filter(m => m.hierarchy_level >= 8);
+  const directors = team.filter(m => m.hierarchy_level >= 3 && m.hierarchy_level < 8);
 
   return (
     <div className="space-y-6">
-      {/* Role banner */}
-      <div className="card p-4 flex items-center gap-3">
-        <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-brand-500/10 text-brand-500">
-          <Activity size={20} />
-        </div>
+      {/* Leadership */}
+      {leadership.length > 0 && (
         <div>
-          <p className="text-sm font-semibold text-primary">
-            Welcome back — you are the <span className="text-brand-500">{myRole.role_name}</span>
-          </p>
-          <p className="text-xs text-muted">
-            Society is <StatusBadge status={data.society.status} />
-          </p>
-        </div>
-      </div>
-
-      {/* Stat grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Members" value={stats.totalMembers} icon={Users} accent="blue" />
-        <StatCard label="Events" value={stats.totalEvents} icon={Calendar} accent="purple" />
-        <StatCard label="Upcoming" value={stats.upcomingEvents} icon={Clock} accent="amber" />
-        <StatCard label="Ongoing" value={stats.ongoingEvents} icon={Activity} accent="green" />
-        <StatCard label="Pending Tickets" value={stats.pendingTickets} icon={Ticket} accent="red" />
-        <StatCard label="Total Check-ins" value={stats.totalCheckins} icon={ScanLine} accent="brand" />
-        <StatCard label="Wings" value={stats.totalWings} icon={Network} accent="blue" />
-        <StatCard
-          label="Revenue"
-          value={`Rs. ${Number(stats.totalRevenue || 0).toLocaleString()}`}
-          icon={Wallet}
-          accent="green"
-        />
-      </div>
-
-      {/* Storage bar */}
-      <div className="card p-4">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-medium text-primary flex items-center gap-2">
-            <HardDrive size={16} className="text-muted" /> Storage Usage
-          </span>
-          <span className="text-xs text-muted">
-            {stats.storagePercentUsed.toFixed(1)}% used
-          </span>
-        </div>
-        <div className="h-2 rounded-full bg-secondary overflow-hidden">
-          <div
-            className={`h-full rounded-full transition-all ${
-              stats.storagePercentUsed > 90 ? 'bg-red-500' :
-              stats.storagePercentUsed > 70 ? 'bg-amber-500' : 'bg-brand-500'
-            }`}
-            style={{ width: `${Math.min(stats.storagePercentUsed, 100)}%` }}
-          />
-        </div>
-      </div>
-
-      <div className="grid lg:grid-cols-2 gap-6">
-        {/* Upcoming events */}
-        <div className="card p-4">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-primary">Upcoming Events</h2>
-            <button
-              onClick={() => router.push(`/society/${societyId}/events`)}
-              className="text-xs text-brand-500 hover:underline"
-            >
-              View all
-            </button>
+          <h3 className="text-sm font-semibold text-primary mb-3">Leadership</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {leadership.map(m => (
+              <div key={m.membership_id} className="card p-4 flex items-center gap-3">
+                {m.avatar_url ? (
+                  <img src={m.avatar_url} alt={m.full_name} className="w-12 h-12 rounded-full object-cover" />
+                ) : (
+                  <div className="w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold" style={{ background: `${brandColor}15`, color: brandColor }}>
+                    {m.full_name[0]}
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-primary truncate">{m.full_name}</p>
+                  <p className="text-xs font-medium" style={{ color: brandColor }}>{m.role_name}</p>
+                  {m.wing_name && <p className="text-xs text-muted">{m.wing_name}</p>}
+                </div>
+              </div>
+            ))}
           </div>
-          {upcomingEvents.length === 0 ? (
-            <p className="text-sm text-muted text-center py-8">No upcoming events</p>
-          ) : (
-            <div className="space-y-3">
-              {upcomingEvents.slice(0, 5).map(event => (
-                <div key={event.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-secondary/50 transition-colors">
-                  <div className="h-10 w-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-500">
-                    <Calendar size={18} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-primary truncate">{event.title}</p>
-                    <p className="text-xs text-muted">
-                      {new Date(event.event_start).toLocaleDateString('en-US', {
-                        month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
-                      })}
-                    </p>
-                  </div>
-                  <StatusBadge status={event.status} />
-                </div>
-              ))}
-            </div>
-          )}
         </div>
+      )}
 
-        {/* Recent activity */}
-        <div className="card p-4">
-          <h2 className="text-sm font-semibold text-primary mb-4">Recent Activity</h2>
-          {recentActivity.length === 0 ? (
-            <p className="text-sm text-muted text-center py-8">No recent activity</p>
-          ) : (
-            <div className="space-y-3">
-              {recentActivity.slice(0, 8).map(log => (
-                <div key={log.id} className="flex items-start gap-3 py-1">
-                  <div className="h-2 w-2 rounded-full bg-brand-500 mt-1.5 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-primary">
-                      <span className="font-medium">{log.performedByName || 'System'}</span>{' '}
-                      <span className="text-muted">{formatAction(log.action)}</span>
-                    </p>
-                    <p className="text-xs text-muted">
-                      {new Date(log.createdAt).toLocaleString('en-US', {
-                        month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
-                      })}
-                    </p>
+      {/* Directors */}
+      {directors.length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold text-primary mb-3">Directors</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {directors.map(m => (
+              <div key={m.membership_id} className="card p-3 flex items-center gap-3">
+                {m.avatar_url ? (
+                  <img src={m.avatar_url} alt={m.full_name} className="w-10 h-10 rounded-full object-cover" />
+                ) : (
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold bg-secondary text-primary">
+                    {m.full_name[0]}
                   </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-primary truncate">{m.full_name}</p>
+                  <p className="text-xs text-muted">{m.role_name}{m.wing_name ? ` · ${m.wing_name}` : ''}{m.portfolio_name ? ` · ${m.portfolio_name}` : ''}</p>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Quick actions */}
-      {myRole.hierarchy_level >= 5 && (
-        <div className="card p-4">
-          <h2 className="text-sm font-semibold text-primary mb-3">Quick Actions</h2>
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => router.push(`/society/${societyId}/events`)}
-              className="btn-primary text-sm px-4 py-2"
-            >
-              Create Event
-            </button>
-            <button
-              onClick={() => router.push(`/society/${societyId}/members`)}
-              className="btn-secondary text-sm px-4 py-2"
-            >
-              Manage Members
-            </button>
-            {myRole.hierarchy_level >= 8 && (
-              <button
-                onClick={() => router.push(`/society/${societyId}/ticket-approvals`)}
-                className="btn-secondary text-sm px-4 py-2"
-              >
-                Review Tickets
-              </button>
-            )}
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -194,9 +503,78 @@ export default function SocietyOverviewPage() {
   );
 }
 
-function formatAction(action: string): string {
-  return action
-    .replace(/_/g, ' ')
-    .toLowerCase()
-    .replace(/\b\w/g, c => c.toUpperCase());
+// ─── Contact Tab ────────────────────────────────────────────────────────────
+
+function ContactTab({ profile, society, brandColor }: { profile: Profile | null; society: Society; brandColor: string }) {
+  const socials = profile?.social_links || {};
+  const hasSocials = Object.values(socials).some(v => v);
+  const hasContactInfo = profile?.contact_email || profile?.contact_phone || profile?.office_location;
+
+  if (!hasContactInfo && !hasSocials) {
+    return <p className="text-center text-muted py-12">No contact information available</p>;
+  }
+
+  const socialIcons: Record<string, React.ReactNode> = {
+    instagram: <Instagram size={18} />,
+    linkedin: <Linkedin size={18} />,
+    youtube: <Youtube size={18} />,
+    website: <Globe size={18} />,
+  };
+
+  return (
+    <div className="space-y-5">
+      {/* Contact info */}
+      {hasContactInfo && (
+        <div className="card p-4 space-y-3">
+          <h3 className="text-sm font-semibold text-primary">Contact Details</h3>
+          {profile?.contact_email && (
+            <a href={`mailto:${profile.contact_email}`} className="flex items-center gap-3 text-sm text-secondary hover:text-primary transition-colors">
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: `${brandColor}10` }}>
+                <Mail size={16} style={{ color: brandColor }} />
+              </div>
+              {profile.contact_email}
+            </a>
+          )}
+          {profile?.contact_phone && (
+            <a href={`tel:${profile.contact_phone}`} className="flex items-center gap-3 text-sm text-secondary hover:text-primary transition-colors">
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: `${brandColor}10` }}>
+                <Phone size={16} style={{ color: brandColor }} />
+              </div>
+              {profile.contact_phone}
+            </a>
+          )}
+          {profile?.office_location && (
+            <div className="flex items-center gap-3 text-sm text-secondary">
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: `${brandColor}10` }}>
+                <MapPin size={16} style={{ color: brandColor }} />
+              </div>
+              {profile.office_location}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Social links */}
+      {hasSocials && (
+        <div className="card p-4">
+          <h3 className="text-sm font-semibold text-primary mb-3">Social Media</h3>
+          <div className="flex flex-wrap gap-3">
+            {Object.entries(socials).filter(([, v]) => v).map(([key, url]) => (
+              <a
+                key={key}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-secondary hover:text-primary transition-colors"
+                style={{ background: `${brandColor}08` }}
+              >
+                {socialIcons[key] || <ExternalLink size={16} />}
+                <span className="capitalize">{key}</span>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }

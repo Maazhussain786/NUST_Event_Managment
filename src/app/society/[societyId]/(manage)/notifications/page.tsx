@@ -3,9 +3,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Bell, Check, Clock, AlertTriangle, Info, CheckCircle } from 'lucide-react';
-import { fetchSocietyNotifications, markNotificationRead, SocietyApiError } from '../../api';
-import { PageLoader, ErrorState, EmptyState } from '../../_components/Shared';
-import type { SocietyNotification } from '../../types';
+import { fetchSocietyNotifications, markNotificationRead, SocietyApiError } from '../../../api';
+import { PageLoader, ErrorState, EmptyState } from '../../../_components/Shared';
+import type { SocietyNotification } from '../../../types';
 
 const TYPE_ICONS: Record<string, React.ReactNode> = {
   'info': <Info size={16} className="text-blue-500" />,

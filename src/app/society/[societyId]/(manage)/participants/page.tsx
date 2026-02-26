@@ -6,9 +6,9 @@ import {
   UserCheck, Search, Download, Filter, Calendar,
   CheckCircle, XCircle,
 } from 'lucide-react';
-import { fetchParticipants, fetchSocietyEvents, SocietyApiError } from '../../api';
-import { PageLoader, ErrorState, EmptyState, StatusBadge } from '../../_components/Shared';
-import type { EventParticipant, SocietyEvent } from '../../types';
+import { fetchParticipants, fetchSocietyEvents, SocietyApiError } from '../../../api';
+import { PageLoader, ErrorState, EmptyState, StatusBadge } from '../../../_components/Shared';
+import type { EventParticipant, SocietyEvent } from '../../../types';
 
 export default function ParticipantsPage() {
   const { societyId } = useParams<{ societyId: string }>();

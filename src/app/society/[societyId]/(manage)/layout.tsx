@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getCurrentUser } from '@/lib/auth';
 import { query } from '@/lib/db';
-import SocietyShell from '../_components/SocietyShell';
+import SocietyShell from '../../_components/SocietyShell';
 
 export const dynamic = 'force-dynamic';
 

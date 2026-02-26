@@ -339,6 +339,58 @@ export interface SocietySettings {
   transfer_deadline_hours: number;
 }
 
+// ─── Society Profile (Public Branding) ──────────────────────────────────────
+
+export interface SocietyProfile {
+  society_id: string;
+  tagline: string | null;
+  cover_url: string | null;
+  mission: string | null;
+  established_year: number | null;
+  faculty_advisor: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  office_location: string | null;
+  social_links: Record<string, string>;
+  primary_color: string | null;
+  accent_color: string | null;
+  ticket_footer_text: string | null;
+  is_public: boolean;
+  member_approval: boolean;
+  auto_approve_ticket: boolean;
+  pin_announcement: string | null;
+  featured_event_id: string | null;
+}
+
+// ─── Chat ───────────────────────────────────────────────────────────────────
+
+export interface ChatChannel {
+  id: string;
+  society_id: string;
+  wing_id: string | null;
+  portfolio_id: string | null;
+  name: string;
+  description: string | null;
+  mode: string;
+  is_active: boolean;
+  created_by: string;
+  created_at: string;
+  message_count?: string;
+  last_message_at?: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  chat_id: string;
+  sender_id: string;
+  sender_name: string;
+  sender_avatar: string | null;
+  content: string;
+  reply_to_id: string | null;
+  is_deleted: boolean;
+  created_at: string;
+}
+
 // ─── Navigation Items ───────────────────────────────────────────────────────
 
 export interface NavItem {

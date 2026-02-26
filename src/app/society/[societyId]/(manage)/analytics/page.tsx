@@ -6,9 +6,9 @@ import {
   BarChart3, Users, Calendar, TrendingUp,
   Award, Target, ScanLine,
 } from 'lucide-react';
-import { fetchAnalytics, SocietyApiError } from '../../api';
-import { PageLoader, ErrorState, EmptyState, StatCard } from '../../_components/Shared';
-import type { SocietyAnalytics } from '../../types';
+import { fetchAnalytics, SocietyApiError } from '../../../api';
+import { PageLoader, ErrorState, EmptyState, StatCard } from '../../../_components/Shared';
+import type { SocietyAnalytics } from '../../../types';
 
 export default function AnalyticsPage() {
   const { societyId } = useParams<{ societyId: string }>();

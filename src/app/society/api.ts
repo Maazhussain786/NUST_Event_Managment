@@ -23,6 +23,9 @@ import type {
   SocietyAnalytics,
   SocietyAuditLogResponse,
   SocietySettings,
+  SocietyProfile,
+  ChatChannel,
+  ChatMessage,
   MyRole,
 } from './types';
 
@@ -336,6 +339,58 @@ export function transferPresidency(
   data: { targetUserId: string }
 ): Promise<{ success: boolean; message: string }> {
   return api(`${s(societyId)}/transfer-presidency`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+// ─── Society Profile ────────────────────────────────────────────────────────
+
+export function fetchSocietyProfile(societyId: string): Promise<SocietyProfile | null> {
+  return api<SocietyProfile | null>(`${s(societyId)}/profile`);
+}
+
+export function updateSocietyProfile(
+  societyId: string,
+  data: Partial<SocietyProfile>
+): Promise<{ success: boolean }> {
+  return api(`${s(societyId)}/profile`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+// ─── Chat ───────────────────────────────────────────────────────────────────
+
+export function fetchChatChannels(societyId: string): Promise<ChatChannel[]> {
+  return api<ChatChannel[]>(`${s(societyId)}/chat`);
+}
+
+export function createChatChannel(
+  societyId: string,
+  data: { name: string; description?: string; wing_id?: string; portfolio_id?: string; mode?: string }
+): Promise<{ success: boolean; channel: ChatChannel }> {
+  return api(`${s(societyId)}/chat`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export function fetchChatMessages(
+  societyId: string,
+  chatId: string,
+  before?: string
+): Promise<{ messages: ChatMessage[]; hasMore: boolean }> {
+  const qs = before ? `?before=${before}` : '';
+  return api(`${s(societyId)}/chat/${chatId}/messages${qs}`);
+}
+
+export function sendChatMessage(
+  societyId: string,
+  chatId: string,
+  data: { content: string; reply_to_id?: string }
+): Promise<{ success: boolean; message: ChatMessage }> {
+  return api(`${s(societyId)}/chat/${chatId}/messages`, {
     method: 'POST',
     body: JSON.stringify(data),
   });

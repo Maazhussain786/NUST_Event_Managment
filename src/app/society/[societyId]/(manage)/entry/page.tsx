@@ -6,9 +6,9 @@ import {
   ScanLine, UserCheck, Users, Search, QrCode,
   Clock, Check, AlertTriangle,
 } from 'lucide-react';
-import { fetchEntryStats, manualCheckIn, fetchSocietyEvents, SocietyApiError } from '../../api';
-import { PageLoader, ErrorState, EmptyState, StatCard } from '../../_components/Shared';
-import type { EntryStats, AttendanceRecord, SocietyEvent } from '../../types';
+import { fetchEntryStats, manualCheckIn, fetchSocietyEvents, SocietyApiError } from '../../../api';
+import { PageLoader, ErrorState, EmptyState, StatCard } from '../../../_components/Shared';
+import type { EntryStats, AttendanceRecord, SocietyEvent } from '../../../types';
 
 export default function EntryControlPage() {
   const { societyId } = useParams<{ societyId: string }>();

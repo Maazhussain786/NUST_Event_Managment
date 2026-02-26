@@ -5,9 +5,9 @@ import { useParams, useRouter } from 'next/navigation';
 import {
   HardDrive, Trash2, Image, File, AlertTriangle,
 } from 'lucide-react';
-import { fetchStorage, deleteMedia, SocietyApiError } from '../../api';
-import { PageLoader, ErrorState, EmptyState, ConfirmDialog } from '../../_components/Shared';
-import type { SocietyStorageInfo, MediaItem } from '../../types';
+import { fetchStorage, deleteMedia, SocietyApiError } from '../../../api';
+import { PageLoader, ErrorState, EmptyState, ConfirmDialog } from '../../../_components/Shared';
+import type { SocietyStorageInfo, MediaItem } from '../../../types';
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';

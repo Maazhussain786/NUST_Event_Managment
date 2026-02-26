@@ -6,9 +6,9 @@ import {
   Ticket, Check, X, RotateCcw, Filter, Eye,
   CheckSquare, Image, AlertTriangle,
 } from 'lucide-react';
-import { fetchPendingTickets, reviewTicket, bulkReviewTickets, SocietyApiError } from '../../api';
-import { PageLoader, ErrorState, EmptyState, StatusBadge, StatCard, ConfirmDialog } from '../../_components/Shared';
-import type { PendingTicket, TicketStatus } from '../../types';
+import { fetchPendingTickets, reviewTicket, bulkReviewTickets, SocietyApiError } from '../../../api';
+import { PageLoader, ErrorState, EmptyState, StatusBadge, StatCard, ConfirmDialog } from '../../../_components/Shared';
+import type { PendingTicket, TicketStatus } from '../../../types';
 
 const FILTER_TABS: { label: string; value: string }[] = [
   { label: 'Pending', value: 'PENDING' },

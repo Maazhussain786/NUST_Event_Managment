@@ -6,9 +6,9 @@ import {
   Calendar, Plus, Eye, Users as UsersIcon,
   Clock, MapPin, Ticket, Filter,
 } from 'lucide-react';
-import { fetchSocietyEvents, createSocietyEvent, SocietyApiError } from '../../api';
-import { PageLoader, ErrorState, EmptyState, StatusBadge } from '../../_components/Shared';
-import type { SocietyEvent, EventStatus } from '../../types';
+import { fetchSocietyEvents, createSocietyEvent, SocietyApiError } from '../../../api';
+import { PageLoader, ErrorState, EmptyState, StatusBadge } from '../../../_components/Shared';
+import type { SocietyEvent, EventStatus } from '../../../types';
 
 const STATUS_TABS: { label: string; value: string }[] = [
   { label: 'All', value: 'ALL' },

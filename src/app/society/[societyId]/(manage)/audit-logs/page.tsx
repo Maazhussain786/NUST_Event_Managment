@@ -7,9 +7,9 @@ import {
   User, Calendar, Settings, UserPlus, Trash2,
   Edit, Eye, Lock, Unlock, AlertTriangle,
 } from 'lucide-react';
-import { fetchAuditLogs, SocietyApiError } from '../../api';
-import { PageLoader, ErrorState, EmptyState, StatusBadge } from '../../_components/Shared';
-import type { SocietyAuditLog, SocietyAuditLogResponse, SocietyAuditAction } from '../../types';
+import { fetchAuditLogs, SocietyApiError } from '../../../api';
+import { PageLoader, ErrorState, EmptyState, StatusBadge } from '../../../_components/Shared';
+import type { SocietyAuditLog, SocietyAuditLogResponse, SocietyAuditAction } from '../../../types';
 
 const ACTION_FILTERS: { label: string; value: SocietyAuditAction | '' }[] = [
   { label: 'All', value: '' },

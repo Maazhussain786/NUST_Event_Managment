@@ -6,9 +6,9 @@ import {
   Wallet, Download, TrendingUp, Ticket, DollarSign,
   Calendar, BarChart3,
 } from 'lucide-react';
-import { fetchFinance, exportFinanceCsv, SocietyApiError } from '../../api';
-import { PageLoader, ErrorState, EmptyState, StatCard } from '../../_components/Shared';
-import type { SocietyFinance } from '../../types';
+import { fetchFinance, exportFinanceCsv, SocietyApiError } from '../../../api';
+import { PageLoader, ErrorState, EmptyState, StatCard } from '../../../_components/Shared';
+import type { SocietyFinance } from '../../../types';
 
 export default function FinancePage() {
   const { societyId } = useParams<{ societyId: string }>();

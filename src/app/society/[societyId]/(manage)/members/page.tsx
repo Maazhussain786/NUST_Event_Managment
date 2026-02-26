@@ -6,9 +6,9 @@ import {
   Users, Search, Shield, UserMinus, UserPlus,
   Crown, ArrowUpDown, Filter,
 } from 'lucide-react';
-import { fetchMembers, removeMember, SocietyApiError } from '../../api';
-import { PageLoader, ErrorState, EmptyState, StatusBadge, ConfirmDialog } from '../../_components/Shared';
-import type { SocietyMember, RoleName } from '../../types';
+import { fetchMembers, removeMember, SocietyApiError } from '../../../api';
+import { PageLoader, ErrorState, EmptyState, StatusBadge, ConfirmDialog } from '../../../_components/Shared';
+import type { SocietyMember, RoleName } from '../../../types';
 
 const ROLE_COLORS: Record<string, string> = {
   'President': 'bg-amber-500/10 text-amber-600 dark:text-amber-400',

@@ -10,9 +10,9 @@ import {
   fetchWings, createWing, deleteWing, createPortfolio,
   fetchRolePrivileges, updatePrivilege, fetchMembers,
   SocietyApiError,
-} from '../../api';
-import { PageLoader, ErrorState, EmptyState, ConfirmDialog } from '../../_components/Shared';
-import type { Wing, RolePrivileges, SocietyMember } from '../../types';
+} from '../../../api';
+import { PageLoader, ErrorState, EmptyState, ConfirmDialog } from '../../../_components/Shared';
+import type { Wing, RolePrivileges, SocietyMember } from '../../../types';
 
 export default function WingsPortfoliosPage() {
   const { societyId } = useParams<{ societyId: string }>();
