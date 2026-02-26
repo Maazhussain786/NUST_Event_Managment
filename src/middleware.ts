@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 // Routes that REQUIRE login (no guest access)
-const authRequiredRoutes = ['/admin', '/platform'];
+const authRequiredRoutes = ['/admin', '/platform', '/society'];
 
 // Routes that are public / auth-flow — never redirect away from these
 const publicRoutes = ['/login', '/register', '/verify-otp'];
@@ -74,8 +74,8 @@ export function middleware(request: NextRequest) {
     const isOnPlatform = pathname.startsWith('/platform');
     const isOnPublic = publicRoutes.some((r) => pathname.startsWith(r));
 
-    // SUPER_ADMIN on user routes → redirect to /platform
-    if (isSuperAdmin && !isOnPlatform && !isOnPublic) {
+    // SUPER_ADMIN on user routes → redirect to /platform (except /society which they can also access)
+    if (isSuperAdmin && !isOnPlatform && !isOnPublic && !pathname.startsWith('/society')) {
       return NextResponse.redirect(new URL('/platform', request.url));
     }
 
