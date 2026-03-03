@@ -55,6 +55,17 @@ export default function ProfilePage() {
         .then(data => setMySocieties(Array.isArray(data) ? data : []))
         .catch(() => {})
         .finally(() => setLoadingSocieties(false));
+
+      // Refresh profile from server to get a fresh signed avatar URL
+      fetch('/api/me')
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (data?.user) {
+            setUser(data.user);
+            localStorage.setItem('user', JSON.stringify(data.user));
+          }
+        })
+        .catch(() => {});
     }
   }, []);
 

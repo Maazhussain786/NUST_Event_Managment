@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { query } from '@/lib/db';
-import { uploadBlob, deleteBlob, extractBlobName, CONTAINERS } from '@/lib/blob';
+import { uploadBlob, deleteBlob, extractBlobName, generateReadUrl, CONTAINERS } from '@/lib/blob';
 import {
   validateImageFile,
   validateMagicBytes,
@@ -85,25 +85,31 @@ export async function POST(request: NextRequest) {
     const oldUrl = oldAvatar.rows[0]?.avatar_url;
 
     if (oldUrl) {
-      const oldBlobName = extractBlobName(oldUrl, CONTAINERS.PROFILE_PICTURES);
+      // Old URL could be a blob name or full URL — try both
+      const oldBlobName = oldUrl.startsWith('http')
+        ? extractBlobName(oldUrl, CONTAINERS.PROFILE_PICTURES)
+        : oldUrl;
       if (oldBlobName) {
         await deleteBlob(CONTAINERS.PROFILE_PICTURES, oldBlobName);
       }
     }
 
-    // 10. Update user avatar_url in database
+    // 10. Store the blob path (not the raw URL) so we can generate SAS URLs on demand
     await query(
       'UPDATE users SET avatar_url = $1, updated_at = NOW() WHERE id = $2',
-      [result.url, user.userId]
+      [result.blobName, user.userId]
     );
 
-    // 11. Record upload for rate limiting
+    // 11. Generate a SAS read URL for immediate use (24 hours)
+    const signedUrl = generateReadUrl(CONTAINERS.PROFILE_PICTURES, result.blobName, 60 * 24);
+
+    // 12. Record upload for rate limiting
     recordUpload(user.userId, result.sizeBytes);
 
     return NextResponse.json({
       success: true,
       data: {
-        url: result.url,
+        url: signedUrl,
         sizeBytes: result.sizeBytes,
         width: processed.width,
         height: processed.height,

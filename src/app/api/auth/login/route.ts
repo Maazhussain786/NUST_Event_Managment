@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { verifyPassword, generateToken } from '@/lib/auth';
 import { extractIpAddress, checkApiRateLimit, ApiErrors } from '@/lib/api-utils';
+import { generateReadUrl, CONTAINERS } from '@/lib/blob';
 
 export async function POST(req: NextRequest) {
   try {
@@ -51,13 +52,23 @@ export async function POST(req: NextRequest) {
       fullName: user.full_name,
     });
 
+    // Generate signed avatar URL if avatar exists
+    let avatarUrl: string | null = null;
+    if (user.avatar_url) {
+      try {
+        avatarUrl = user.avatar_url.startsWith('http')
+          ? user.avatar_url
+          : generateReadUrl(CONTAINERS.PROFILE_PICTURES, user.avatar_url, 60 * 24);
+      } catch { avatarUrl = null; }
+    }
+
     const response = NextResponse.json({
       user: {
         id: user.id,
         email: user.email,
         fullName: user.full_name,
         userType: user.user_type,
-        avatarUrl: user.avatar_url || null,
+        avatarUrl,
       },
     });
 
