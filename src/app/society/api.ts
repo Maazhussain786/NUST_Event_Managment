@@ -27,6 +27,13 @@ import type {
   ChatChannel,
   ChatMessage,
   MyRole,
+  SocietyPost,
+  SocietyAlbum,
+  AlbumPhoto,
+  CreatePostData,
+  CreateAlbumData,
+  EventEditData,
+  UploadResponse,
 } from './types';
 
 // ─── Base Fetch ─────────────────────────────────────────────────────────────
@@ -394,4 +401,214 @@ export function sendChatMessage(
     method: 'POST',
     body: JSON.stringify(data),
   });
+}
+
+// ─── Society Posts (Feed) ───────────────────────────────────────────────────
+
+export function fetchPosts(
+  societyId: string,
+  page?: number
+): Promise<{ posts: SocietyPost[]; total: number; hasMore: boolean }> {
+  const qs = page ? `?page=${page}` : '';
+  return api(`${s(societyId)}/posts${qs}`);
+}
+
+export function createPost(
+  societyId: string,
+  data: CreatePostData
+): Promise<{ success: boolean; post: SocietyPost }> {
+  return api(`${s(societyId)}/posts`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export function updatePost(
+  societyId: string,
+  postId: string,
+  data: Partial<CreatePostData>
+): Promise<{ success: boolean }> {
+  return api(`${s(societyId)}/posts/${postId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export function deletePost(
+  societyId: string,
+  postId: string
+): Promise<{ success: boolean }> {
+  return api(`${s(societyId)}/posts/${postId}`, { method: 'DELETE' });
+}
+
+// ─── Photo Albums ───────────────────────────────────────────────────────────
+
+export function fetchAlbums(
+  societyId: string
+): Promise<SocietyAlbum[]> {
+  return api<SocietyAlbum[]>(`${s(societyId)}/albums`);
+}
+
+export function createAlbum(
+  societyId: string,
+  data: CreateAlbumData
+): Promise<{ success: boolean; album: SocietyAlbum }> {
+  return api(`${s(societyId)}/albums`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateAlbum(
+  societyId: string,
+  albumId: string,
+  data: Partial<CreateAlbumData>
+): Promise<{ success: boolean }> {
+  return api(`${s(societyId)}/albums/${albumId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteAlbum(
+  societyId: string,
+  albumId: string
+): Promise<{ success: boolean }> {
+  return api(`${s(societyId)}/albums/${albumId}`, { method: 'DELETE' });
+}
+
+export function fetchAlbumPhotos(
+  societyId: string,
+  albumId: string
+): Promise<AlbumPhoto[]> {
+  return api<AlbumPhoto[]>(`${s(societyId)}/albums/${albumId}/photos`);
+}
+
+export function deleteAlbumPhoto(
+  societyId: string,
+  albumId: string,
+  photoId: string
+): Promise<{ success: boolean }> {
+  return api(`${s(societyId)}/albums/${albumId}/photos/${photoId}`, { method: 'DELETE' });
+}
+
+export function setFeaturedPhoto(
+  societyId: string,
+  albumId: string,
+  photoId: string
+): Promise<{ success: boolean }> {
+  return api(`${s(societyId)}/albums/${albumId}/photos/${photoId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ is_featured: true }),
+  });
+}
+
+// ─── Event Management (Edit / Delete / Cancel) ─────────────────────────────
+
+export function editEvent(
+  eventId: string,
+  data: EventEditData
+): Promise<{ success: boolean; event: SocietyEvent }> {
+  return api(`/api/events/${eventId}/edit`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export function cancelEvent(
+  eventId: string,
+  reason?: string
+): Promise<{ success: boolean; message: string }> {
+  return api(`/api/events/${eventId}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export function deleteEvent(
+  societyId: string,
+  eventId: string
+): Promise<{ success: boolean }> {
+  return api(`${s(societyId)}/events/${eventId}`, { method: 'DELETE' });
+}
+
+export function fetchEventDetail(
+  eventId: string
+): Promise<{ event: SocietyEvent }> {
+  return api<{ event: SocietyEvent }>(`/api/events/${eventId}`);
+}
+
+// ─── Media Upload (multipart) ───────────────────────────────────────────────
+
+async function uploadFile(
+  path: string,
+  file: File,
+  caption?: string
+): Promise<UploadResponse> {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (caption) formData.append('caption', caption);
+
+  const res = await fetch(path, {
+    method: 'POST',
+    credentials: 'include',
+    body: formData,
+  });
+
+  if (!res.ok) {
+    let body;
+    try { body = await res.json(); } catch { body = { error: `HTTP ${res.status}` }; }
+    throw new SocietyApiError(res.status, body);
+  }
+
+  return res.json();
+}
+
+export function uploadSocietyMedia(
+  societyId: string,
+  type: 'logo' | 'cover' | 'gallery',
+  file: File,
+  caption?: string
+): Promise<UploadResponse> {
+  return uploadFile(
+    `/api/upload/society-media?societyId=${societyId}&type=${type}`,
+    file,
+    caption
+  );
+}
+
+export function uploadEventMedia(
+  eventId: string,
+  type: 'thumbnail' | 'banner' | 'gallery' | 'document',
+  file: File,
+  caption?: string
+): Promise<UploadResponse> {
+  return uploadFile(
+    `/api/upload/event-media?eventId=${eventId}&type=${type}`,
+    file,
+    caption
+  );
+}
+
+export function uploadPostImage(
+  postId: string,
+  file: File
+): Promise<UploadResponse> {
+  return uploadFile(
+    `/api/upload/post-attachment?postId=${postId}&type=image`,
+    file
+  );
+}
+
+export function uploadAlbumPhoto(
+  societyId: string,
+  albumId: string,
+  file: File,
+  caption?: string
+): Promise<UploadResponse> {
+  return uploadFile(
+    `/api/upload/society-media?societyId=${societyId}&type=gallery&albumId=${albumId}`,
+    file,
+    caption
+  );
 }

@@ -101,7 +101,7 @@ interface Wing {
   member_count: string;
 }
 
-type Tab = 'about' | 'events' | 'gallery' | 'team' | 'contact';
+type Tab = 'home' | 'about' | 'events' | 'photos' | 'team' | 'contact';
 
 // ─── Page ───────────────────────────────────────────────────────────────────
 
@@ -116,23 +116,29 @@ export default function PublicSocietyPage() {
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [gallery, setGallery] = useState<GalleryItem[]>([]);
   const [wings, setWings] = useState<Wing[]>([]);
-  const [activeTab, setActiveTab] = useState<Tab>('about');
+  const [activeTab, setActiveTab] = useState<Tab>('home');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // New: posts & albums for Home/Photos tabs
+  const [posts, setPosts] = useState<any[]>([]);
+  const [albums, setAlbums] = useState<any[]>([]);
+
   useEffect(() => {
-    fetch(`/api/societies/${societyId}/public`)
-      .then(r => {
-        if (!r.ok) throw new Error('Not found');
-        return r.json();
-      })
-      .then(data => {
+    Promise.all([
+      fetch(`/api/societies/${societyId}/public`).then(r => { if (!r.ok) throw new Error('Not found'); return r.json(); }),
+      fetch(`/api/societies/${societyId}/posts?limit=10`).then(r => r.ok ? r.json() : { posts: [] }).catch(() => ({ posts: [] })),
+      fetch(`/api/societies/${societyId}/albums`).then(r => r.ok ? r.json() : { albums: [] }).catch(() => ({ albums: [] })),
+    ])
+      .then(([data, postsData, albumsData]) => {
         setSociety(data.society);
         setProfile(data.profile);
         setEvents(data.events || []);
         setTeam(data.team || []);
         setGallery(data.gallery || []);
         setWings(data.wings || []);
+        setPosts(postsData.posts || []);
+        setAlbums(albumsData.albums || []);
       })
       .catch(() => setError('Society not found'))
       .finally(() => setLoading(false));
@@ -166,9 +172,10 @@ export default function PublicSocietyPage() {
   }
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
+    { key: 'home', label: 'Home' },
     { key: 'about', label: 'About' },
     { key: 'events', label: 'Events', count: events.length },
-    { key: 'gallery', label: 'Gallery', count: gallery.length },
+    { key: 'photos', label: 'Photos', count: albums.length },
     { key: 'team', label: 'Team', count: team.length },
     { key: 'contact', label: 'Contact' },
   ];
@@ -230,8 +237,8 @@ export default function PublicSocietyPage() {
           </div>
         </div>
 
-        {/* Pinned announcement */}
-        {profile?.pin_announcement && (
+        {/* Pinned announcement - visible on non-home tabs */}
+        {profile?.pin_announcement && activeTab !== 'home' && (
           <div className="card p-3 mb-4 border-l-4 flex items-start gap-2" style={{ borderLeftColor: brandColor }}>
             <MessageCircle className="w-4 h-4 mt-0.5 shrink-0" style={{ color: brandColor }} />
             <p className="text-sm text-secondary">{profile.pin_announcement}</p>
@@ -257,13 +264,118 @@ export default function PublicSocietyPage() {
 
         {/* ─── Tab Content ─── */}
         <div className="pb-8">
+          {activeTab === 'home' && <HomeTab posts={posts} profile={profile} events={events} brandColor={brandColor} router={router} />}
           {activeTab === 'about' && <AboutTab society={society} profile={profile} wings={wings} brandColor={brandColor} />}
           {activeTab === 'events' && <EventsTab events={events} brandColor={brandColor} router={router} />}
-          {activeTab === 'gallery' && <GalleryTab gallery={gallery} />}
+          {activeTab === 'photos' && <PhotosTab albums={albums} gallery={gallery} brandColor={brandColor} />}
           {activeTab === 'team' && <TeamTab team={team} brandColor={brandColor} />}
           {activeTab === 'contact' && <ContactTab profile={profile} society={society} brandColor={brandColor} />}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Home Tab (Feed) ────────────────────────────────────────────────────────
+
+function HomeTab({ posts, profile, events, brandColor, router }: { posts: any[]; profile: Profile | null; events: PublicEvent[]; brandColor: string; router: ReturnType<typeof useRouter> }) {
+  // Featured/upcoming event
+  const upcomingEvent = events.find(e => new Date(e.event_start) > new Date());
+
+  return (
+    <div className="space-y-4">
+      {/* Pinned announcement */}
+      {profile?.pin_announcement && (
+        <div className="card p-3 border-l-4 flex items-start gap-2" style={{ borderLeftColor: brandColor }}>
+          <MessageCircle className="w-4 h-4 mt-0.5 shrink-0" style={{ color: brandColor }} />
+          <p className="text-sm text-secondary">{profile.pin_announcement}</p>
+        </div>
+      )}
+
+      {/* Featured event card */}
+      {upcomingEvent && (
+        <button
+          onClick={() => router.push(`/events/${upcomingEvent.id}`)}
+          className="card p-0 w-full text-left overflow-hidden"
+        >
+          {upcomingEvent.banner_url ? (
+            <img src={upcomingEvent.banner_url} alt="" className="w-full h-40 object-cover" />
+          ) : (
+            <div className="w-full h-40 flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${brandColor}33, ${brandColor}11)` }}>
+              <Calendar size={40} style={{ color: brandColor }} />
+            </div>
+          )}
+          <div className="p-4">
+            <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-500 mb-2 inline-block">Upcoming Event</span>
+            <h4 className="text-sm font-semibold text-primary">{upcomingEvent.title}</h4>
+            <p className="text-xs text-muted mt-1 flex items-center gap-1">
+              <Calendar size={12} />
+              {new Date(upcomingEvent.event_start).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+            </p>
+          </div>
+        </button>
+      )}
+
+      {/* Posts feed */}
+      {posts.length === 0 ? (
+        <div className="text-center py-12 text-muted">
+          <MessageCircle size={32} className="mx-auto mb-2 opacity-50" />
+          <p className="text-sm">No posts yet</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {posts.map((post: any) => (
+            <div key={post.id} className="card overflow-hidden">
+              {/* Post pinned badge */}
+              {post.is_pinned && (
+                <div className="px-4 pt-2 flex items-center gap-1.5 text-xs text-amber-500">
+                  <Shield size={12} /> Pinned
+                </div>
+              )}
+              {/* Author */}
+              <div className="p-4 pb-2 flex items-center gap-3">
+                {post.author_avatar ? (
+                  <img src={post.author_avatar} alt="" className="w-10 h-10 rounded-full object-cover" />
+                ) : (
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm" style={{ background: `${brandColor}15`, color: brandColor }}>
+                    {post.author_name?.[0] || '?'}
+                  </div>
+                )}
+                <div>
+                  <p className="text-sm font-semibold text-primary">{post.author_name}</p>
+                  <p className="text-xs text-muted">{getTimeAgo(post.created_at)}</p>
+                </div>
+              </div>
+              {/* Content */}
+              {post.content && (
+                <p className="px-4 pb-2 text-sm text-secondary whitespace-pre-wrap">{post.content}</p>
+              )}
+              {/* Images */}
+              {post.images && post.images.length > 0 && (
+                <div className={`${post.images.length === 1 ? '' : 'grid gap-0.5 grid-cols-2'}`}>
+                  {post.images.slice(0, 4).map((img: any, i: number) => (
+                    <img key={img.id} src={img.file_url} alt="" className={`w-full object-cover ${post.images.length === 1 ? 'max-h-[400px]' : 'aspect-square'}`} />
+                  ))}
+                </div>
+              )}
+              {/* Shared event */}
+              {post.shared_event_title && (
+                <div className="mx-4 mb-3 rounded-lg border border-themed p-3">
+                  <p className="text-sm font-semibold text-primary">{post.shared_event_title}</p>
+                  {post.shared_event_date && (
+                    <p className="text-xs text-muted flex items-center gap-1 mt-1"><Calendar size={12} />{new Date(post.shared_event_date).toLocaleDateString()}</p>
+                  )}
+                </div>
+              )}
+              {/* Engagement */}
+              <div className="border-t border-themed px-4 py-2 flex items-center gap-4 text-xs text-muted">
+                <span className="flex items-center gap-1"><Star size={14} /> {post.like_count || 0}</span>
+                <span className="flex items-center gap-1"><MessageCircle size={14} /> {post.comment_count || 0}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -396,37 +508,70 @@ function EventsTab({ events, brandColor, router }: { events: PublicEvent[]; bran
   );
 }
 
-// ─── Gallery Tab ────────────────────────────────────────────────────────────
+// ─── Photos Tab ─────────────────────────────────────────────────────────────
 
-function GalleryTab({ gallery }: { gallery: GalleryItem[] }) {
+function PhotosTab({ albums, gallery, brandColor }: { albums: any[]; gallery: GalleryItem[]; brandColor: string }) {
   const [lightbox, setLightbox] = useState<string | null>(null);
-
-  if (gallery.length === 0) {
-    return <p className="text-center text-muted py-12">No gallery items yet</p>;
-  }
 
   return (
     <>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-        {gallery.map(item => (
-          <button
-            key={item.id}
-            onClick={() => item.file_type?.startsWith('image') && setLightbox(item.file_url)}
-            className="relative overflow-hidden rounded-xl aspect-square group"
-          >
-            {item.file_type?.startsWith('image') ? (
-              <img src={item.file_url} alt={item.title} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
-            ) : (
-              <div className="w-full h-full bg-secondary flex items-center justify-center">
-                <ImageIcon size={32} className="text-muted" />
+      {/* Albums */}
+      {albums.length > 0 && (
+        <div className="mb-6">
+          <h3 className="text-sm font-semibold text-primary mb-3">Albums</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {albums.map((album: any) => (
+              <div key={album.id} className="card overflow-hidden group cursor-pointer">
+                <div className="aspect-[4/3] bg-surface-100 dark:bg-surface-800 relative overflow-hidden">
+                  {album.cover_photo_url ? (
+                    <img src={album.cover_photo_url} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <ImageIcon size={28} className="text-muted opacity-30" />
+                    </div>
+                  )}
+                  <span className="absolute top-2 left-2 text-[10px] px-1.5 py-0.5 rounded-full bg-black/50 text-white">{album.category}</span>
+                </div>
+                <div className="p-2.5">
+                  <p className="text-sm font-semibold text-primary truncate">{album.name}</p>
+                  <p className="text-xs text-muted">{album.photo_count} photo{album.photo_count !== 1 ? 's' : ''}</p>
+                </div>
               </div>
-            )}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
-              <p className="text-white text-xs truncate">{item.title}</p>
-            </div>
-          </button>
-        ))}
-      </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Legacy gallery */}
+      {gallery.length > 0 && (
+        <div>
+          {albums.length > 0 && <h3 className="text-sm font-semibold text-primary mb-3">Gallery</h3>}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {gallery.map(item => (
+              <button
+                key={item.id}
+                onClick={() => item.file_type?.startsWith('image') && setLightbox(item.file_url)}
+                className="relative overflow-hidden rounded-xl aspect-square group"
+              >
+                {item.file_type?.startsWith('image') ? (
+                  <img src={item.file_url} alt={item.title} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
+                ) : (
+                  <div className="w-full h-full bg-secondary flex items-center justify-center">
+                    <ImageIcon size={32} className="text-muted" />
+                  </div>
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
+                  <p className="text-white text-xs truncate">{item.title}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {albums.length === 0 && gallery.length === 0 && (
+        <p className="text-center text-muted py-12">No photos yet</p>
+      )}
 
       {/* Lightbox */}
       {lightbox && (
@@ -577,4 +722,20 @@ function ContactTab({ profile, society, brandColor }: { profile: Profile | null;
       )}
     </div>
   );
+}
+
+function getTimeAgo(dateStr: string): string {
+  const now = new Date();
+  const date = new Date(dateStr);
+  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+  if (seconds < 60) return 'Just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  const weeks = Math.floor(days / 7);
+  if (weeks < 4) return `${weeks}w ago`;
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
 }

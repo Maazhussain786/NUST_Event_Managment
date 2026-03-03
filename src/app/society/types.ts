@@ -345,6 +345,7 @@ export interface SocietyProfile {
   society_id: string;
   tagline: string | null;
   cover_url: string | null;
+  logo_url: string | null;
   mission: string | null;
   established_year: number | null;
   faculty_advisor: string | null;
@@ -400,3 +401,111 @@ export interface NavItem {
   badge?: number;
   requiredLevel?: number;  // minimum hierarchy_level to see this item
 }
+
+// ─── Society Posts (Feed) ───────────────────────────────────────────────────
+
+export type PostType = 'TEXT' | 'IMAGE' | 'GALLERY' | 'EVENT_SHARE';
+
+export interface SocietyPost {
+  id: string;
+  society_id: string;
+  author_id: string;
+  author_name: string;
+  author_avatar: string | null;
+  author_role: string | null;
+  content: string | null;
+  post_type: PostType;
+  shared_event_id: string | null;
+  shared_event_title: string | null;
+  shared_event_banner: string | null;
+  shared_event_date: string | null;
+  is_pinned: boolean;
+  like_count: number;
+  comment_count: number;
+  images: PostImage[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PostImage {
+  id: string;
+  file_url: string;
+  file_name: string | null;
+  display_order: number;
+}
+
+export interface CreatePostData {
+  content?: string;
+  post_type?: PostType;
+  shared_event_id?: string;
+  is_pinned?: boolean;
+  image_urls?: { file_url: string; file_name: string; file_size_bytes: number; mime_type: string }[];
+}
+
+// ─── Photo Albums ───────────────────────────────────────────────────────────
+
+export type AlbumCategory = 'GENERAL' | 'EVENTS' | 'ACHIEVEMENTS' | 'TEAM' | 'OTHER';
+
+export interface SocietyAlbum {
+  id: string;
+  society_id: string;
+  name: string;
+  description: string | null;
+  category: AlbumCategory;
+  cover_photo_url: string | null;
+  photo_count: number;
+  created_by_name: string;
+  created_at: string;
+}
+
+export interface AlbumPhoto {
+  id: string;
+  album_id: string;
+  file_url: string;
+  file_name: string | null;
+  file_size_bytes: number;
+  caption: string | null;
+  is_featured: boolean;
+  display_order: number;
+  uploaded_by_name: string;
+  created_at: string;
+}
+
+export interface CreateAlbumData {
+  name: string;
+  description?: string;
+  category?: AlbumCategory;
+}
+
+// ─── Event Management (Edit/Delete) ─────────────────────────────────────────
+
+export interface EventEditData {
+  version: number;
+  title?: string;
+  description?: string;
+  location?: string;
+  venue_details?: string;
+  event_start?: string;
+  event_end?: string;
+  registration_start?: string;
+  registration_end?: string;
+  is_paid?: boolean;
+  ticket_price?: number | null;
+  max_tickets?: number | null;
+  max_participants?: number | null;
+  visibility?: 'PUBLIC' | 'MEMBERS_ONLY';
+  transfer_deadline?: string;
+  banner_url?: string;
+  thumbnail_url?: string;
+}
+
+// ─── Upload Response ────────────────────────────────────────────────────────
+
+export interface UploadResponse {
+  success: boolean;
+  url: string;
+  blobName: string;
+  sizeBytes: number;
+  mediaId?: string;
+}
+

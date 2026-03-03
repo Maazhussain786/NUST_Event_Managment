@@ -104,7 +104,7 @@ export async function PATCH(
       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
       ON CONFLICT (society_id) DO UPDATE SET
         tagline = COALESCE($2, society_profiles.tagline),
-        cover_url = COALESCE($2, society_profiles.cover_url),
+        cover_url = COALESCE($3, society_profiles.cover_url),
         mission = COALESCE($4, society_profiles.mission),
         established_year = COALESCE($5, society_profiles.established_year),
         faculty_advisor = COALESCE($6, society_profiles.faculty_advisor),

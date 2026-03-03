@@ -4,9 +4,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Calendar, Plus, Eye, Users as UsersIcon,
-  Clock, MapPin, Ticket, Filter,
+  Clock, MapPin, Ticket, Filter, Edit3, Trash2,
+  XCircle, MoreHorizontal, Loader2, X, Upload,
 } from 'lucide-react';
-import { fetchSocietyEvents, createSocietyEvent, SocietyApiError } from '../../../api';
+import {
+  fetchSocietyEvents, createSocietyEvent, editEvent, cancelEvent,
+  deleteEvent, uploadSocietyMedia, SocietyApiError,
+} from '../../../api';
 import { PageLoader, ErrorState, EmptyState, StatusBadge } from '../../../_components/Shared';
 import type { SocietyEvent, EventStatus } from '../../../types';
 
@@ -36,6 +40,22 @@ export default function SocietyEventsPage() {
     venue: '', visibility: 'PUBLIC', ticket_price: '',
     max_participants: '', registration_deadline: '', thumbnail_url: '',
   });
+
+  // Edit/Delete/Cancel state
+  const [menuEvent, setMenuEvent] = useState<string | null>(null);
+  const [editingEvent, setEditingEvent] = useState<SocietyEvent | null>(null);
+  const [editForm, setEditForm] = useState({
+    title: '', description: '', event_start: '', event_end: '',
+    venue: '', visibility: 'PUBLIC', ticket_price: '',
+    max_participants: '', banner_url: '',
+  });
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState<SocietyEvent | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelling, setCancelling] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<SocietyEvent | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [uploadingBanner, setUploadingBanner] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -103,6 +123,93 @@ export default function SocietyEventsPage() {
       return () => clearTimeout(t);
     }
   }, [toast]);
+
+  const openEdit = (evt: SocietyEvent) => {
+    setEditingEvent(evt);
+    setEditForm({
+      title: evt.title,
+      description: evt.description || '',
+      event_start: evt.event_start ? new Date(evt.event_start).toISOString().slice(0, 16) : '',
+      event_end: evt.event_end ? new Date(evt.event_end).toISOString().slice(0, 16) : '',
+      venue: evt.venue || '',
+      visibility: evt.visibility || 'PUBLIC',
+      ticket_price: evt.ticket_price ? String(evt.ticket_price) : '',
+      max_participants: evt.max_participants ? String(evt.max_participants) : '',
+      banner_url: evt.banner_url || '',
+    });
+    setMenuEvent(null);
+  };
+
+  const handleEditEvent = async () => {
+    if (!editingEvent) return;
+    try {
+      setSavingEdit(true);
+      await editEvent(editingEvent.id, {
+        title: editForm.title,
+        description: editForm.description || undefined,
+        event_start: editForm.event_start,
+        event_end: editForm.event_end || undefined,
+        location: editForm.venue || undefined,
+        visibility: editForm.visibility as 'PUBLIC' | 'MEMBERS_ONLY',
+        ticket_price: editForm.ticket_price ? Number(editForm.ticket_price) : undefined,
+        max_participants: editForm.max_participants ? Number(editForm.max_participants) : undefined,
+        banner_url: editForm.banner_url || undefined,
+        version: editingEvent.version || 1,
+      });
+      setToast('Event updated');
+      setEditingEvent(null);
+      load();
+    } catch (err) {
+      setToast(err instanceof SocietyApiError ? err.message : 'Failed to update event');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleCancelEvent = async () => {
+    if (!confirmCancel) return;
+    try {
+      setCancelling(true);
+      await cancelEvent(confirmCancel.id, cancelReason || undefined);
+      setToast('Event cancelled');
+      setConfirmCancel(null);
+      setCancelReason('');
+      load();
+    } catch (err) {
+      setToast(err instanceof SocietyApiError ? err.message : 'Failed to cancel event');
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  const handleDeleteEvent = async () => {
+    if (!confirmDelete) return;
+    try {
+      setDeleting(true);
+      await deleteEvent(societyId, confirmDelete.id);
+      setToast('Event deleted');
+      setConfirmDelete(null);
+      load();
+    } catch (err) {
+      setToast(err instanceof SocietyApiError ? err.message : 'Failed to delete — may have sold tickets');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleBannerUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setUploadingBanner(true);
+      const result = await uploadSocietyMedia(societyId, 'gallery', file);
+      setEditForm(prev => ({ ...prev, banner_url: result.url }));
+    } catch (err) {
+      setToast('Failed to upload banner');
+    } finally {
+      setUploadingBanner(false);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -179,6 +286,41 @@ export default function SocietyEventsPage() {
                 >
                   <Eye size={14} /> View
                 </button>
+                <div className="relative">
+                  <button
+                    onClick={() => setMenuEvent(menuEvent === event.id ? null : event.id)}
+                    className="btn-ghost text-xs p-1.5"
+                  >
+                    <MoreHorizontal size={14} />
+                  </button>
+                  {menuEvent === event.id && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setMenuEvent(null)} />
+                      <div className="absolute right-0 top-8 z-50 w-36 rounded-lg border border-themed bg-card shadow-xl py-1">
+                        <button
+                          onClick={() => openEdit(event)}
+                          className="w-full text-left px-3 py-2 text-xs text-secondary hover:bg-secondary flex items-center gap-2"
+                        >
+                          <Edit3 size={12} /> Edit
+                        </button>
+                        {event.status !== 'CANCELLED' && (
+                          <button
+                            onClick={() => { setConfirmCancel(event); setMenuEvent(null); }}
+                            className="w-full text-left px-3 py-2 text-xs text-amber-500 hover:bg-amber-500/5 flex items-center gap-2"
+                          >
+                            <XCircle size={12} /> Cancel
+                          </button>
+                        )}
+                        <button
+                          onClick={() => { setConfirmDelete(event); setMenuEvent(null); }}
+                          className="w-full text-left px-3 py-2 text-xs text-red-500 hover:bg-red-500/5 flex items-center gap-2"
+                        >
+                          <Trash2 size={12} /> Delete
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           ))}
@@ -243,6 +385,132 @@ export default function SocietyEventsPage() {
               </button>
               <button onClick={handleCreate} disabled={creating} className="btn-primary text-sm px-4 py-2">
                 {creating ? 'Creating...' : 'Create Event'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit event dialog */}
+      {editingEvent && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={() => setEditingEvent(null)}>
+          <div className="card w-full max-w-lg max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-primary">Edit Event</h3>
+              <button onClick={() => setEditingEvent(null)} className="text-muted hover:text-primary"><X size={20} /></button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium text-muted mb-1 block">Title *</label>
+                <input className="input-field" value={editForm.title} onChange={e => setEditForm({ ...editForm, title: e.target.value })} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted mb-1 block">Description</label>
+                <textarea className="input-field min-h-[80px]" value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-muted mb-1 block">Start *</label>
+                  <input type="datetime-local" className="input-field" value={editForm.event_start} onChange={e => setEditForm({ ...editForm, event_start: e.target.value })} />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted mb-1 block">End</label>
+                  <input type="datetime-local" className="input-field" value={editForm.event_end} onChange={e => setEditForm({ ...editForm, event_end: e.target.value })} />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted mb-1 block">Venue</label>
+                <input className="input-field" value={editForm.venue} onChange={e => setEditForm({ ...editForm, venue: e.target.value })} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted mb-1 block">Banner Image</label>
+                {editForm.banner_url ? (
+                  <div className="relative group rounded-lg overflow-hidden">
+                    <img src={editForm.banner_url} alt="" className="w-full h-32 object-cover" />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
+                      <label className="cursor-pointer px-3 py-1.5 rounded-lg bg-white/90 text-gray-800 text-xs font-medium hover:bg-white flex items-center gap-1.5">
+                        <Upload size={12} /> Replace
+                        <input type="file" accept="image/*" className="hidden" onChange={handleBannerUpload} disabled={uploadingBanner} />
+                      </label>
+                      <button onClick={() => setEditForm({ ...editForm, banner_url: '' })} className="px-3 py-1.5 rounded-lg bg-red-500/90 text-white text-xs font-medium hover:bg-red-600">
+                        Remove
+                      </button>
+                    </div>
+                    {uploadingBanner && (
+                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                        <Loader2 size={20} className="animate-spin text-white" />
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <label className="flex flex-col items-center justify-center h-24 rounded-lg border-2 border-dashed border-themed cursor-pointer hover:border-brand-500/50">
+                    {uploadingBanner ? <Loader2 size={20} className="animate-spin text-muted" /> : (
+                      <>
+                        <Upload size={18} className="text-muted mb-1" />
+                        <span className="text-xs text-muted">Upload banner</span>
+                      </>
+                    )}
+                    <input type="file" accept="image/*" className="hidden" onChange={handleBannerUpload} disabled={uploadingBanner} />
+                  </label>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-muted mb-1 block">Visibility</label>
+                  <select className="input-field" value={editForm.visibility} onChange={e => setEditForm({ ...editForm, visibility: e.target.value })}>
+                    <option value="PUBLIC">Public</option>
+                    <option value="MEMBERS_ONLY">Members Only</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted mb-1 block">Ticket Price</label>
+                  <input type="number" className="input-field" placeholder="0 = free" value={editForm.ticket_price} onChange={e => setEditForm({ ...editForm, ticket_price: e.target.value })} />
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end mt-6">
+              <button onClick={() => setEditingEvent(null)} className="btn-ghost text-sm px-4 py-2" disabled={savingEdit}>Cancel</button>
+              <button onClick={handleEditEvent} disabled={savingEdit} className="btn-primary text-sm px-4 py-2 flex items-center gap-1.5">
+                {savingEdit ? <Loader2 size={14} className="animate-spin" /> : null}
+                {savingEdit ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel event dialog */}
+      {confirmCancel && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={() => setConfirmCancel(null)}>
+          <div className="card w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-primary mb-2">Cancel Event?</h3>
+            <p className="text-sm text-muted mb-3">"{confirmCancel.title}" will be cancelled. Ticket holders will be notified.</p>
+            <textarea
+              value={cancelReason}
+              onChange={e => setCancelReason(e.target.value)}
+              placeholder="Reason for cancellation (optional)"
+              className="input-field text-sm w-full min-h-[60px] mb-4"
+            />
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setConfirmCancel(null)} className="btn-ghost text-sm px-4 py-2" disabled={cancelling}>No, Keep</button>
+              <button onClick={handleCancelEvent} disabled={cancelling} className="bg-amber-500 hover:bg-amber-600 text-white text-sm px-4 py-2 rounded-lg font-medium">
+                {cancelling ? 'Cancelling...' : 'Yes, Cancel Event'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete event dialog */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={() => setConfirmDelete(null)}>
+          <div className="card w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-primary mb-2">Delete Event?</h3>
+            <p className="text-sm text-muted mb-4">"{confirmDelete.title}" will be permanently deleted. This cannot be undone. Events with sold tickets cannot be deleted.</p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setConfirmDelete(null)} className="btn-ghost text-sm px-4 py-2" disabled={deleting}>Cancel</button>
+              <button onClick={handleDeleteEvent} disabled={deleting} className="bg-red-500 hover:bg-red-600 text-white text-sm px-4 py-2 rounded-lg font-medium">
+                {deleting ? 'Deleting...' : 'Delete'}
               </button>
             </div>
           </div>

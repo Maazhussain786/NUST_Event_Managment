@@ -18,6 +18,8 @@ import {
   Loader2,
   Check,
   AlertCircle,
+  Upload,
+  X,
 } from 'lucide-react';
 import { PageLoader, ErrorState } from '../../../_components/Shared';
 import {
@@ -25,6 +27,7 @@ import {
   updateSettings,
   fetchSocietyProfile,
   updateSocietyProfile,
+  uploadSocietyMedia,
   SocietyApiError,
 } from '../../../api';
 import type { SocietySettings, SocietyProfile } from '../../../types';
@@ -426,18 +429,22 @@ export default function SettingsPage() {
 
           <div className="card p-5 space-y-4">
             <h3 className="text-sm font-semibold text-primary flex items-center gap-2"><ImageIcon size={16} className="text-brand-500" /> Cover Image</h3>
-            <div>
-              <label className="block text-sm text-secondary mb-1">Cover Image URL</label>
-              <input
-                value={profile.cover_url || ''}
-                onChange={e => setProfile({ ...profile, cover_url: e.target.value || null })}
-                placeholder="https://..."
-                className="input-field text-sm w-full"
-              />
-            </div>
-            {profile.cover_url && (
-              <img src={profile.cover_url} alt="Cover preview" className="w-full h-32 object-cover rounded-lg" />
-            )}
+            <CoverUploader
+              societyId={societyId}
+              currentUrl={profile.cover_url}
+              onUploaded={(url) => setProfile({ ...profile, cover_url: url })}
+              onRemoved={() => setProfile({ ...profile, cover_url: null })}
+            />
+          </div>
+
+          <div className="card p-5 space-y-4">
+            <h3 className="text-sm font-semibold text-primary flex items-center gap-2"><ImageIcon size={16} className="text-brand-500" /> Society Logo</h3>
+            <LogoUploader
+              societyId={societyId}
+              currentUrl={profile.logo_url}
+              onUploaded={(url) => setProfile({ ...profile, logo_url: url })}
+              onRemoved={() => setProfile({ ...profile, logo_url: null })}
+            />
           </div>
 
           <div className="card p-5 space-y-4">
@@ -464,6 +471,157 @@ export default function SettingsPage() {
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Cover Image Uploader ───────────────────────────────────────────────────
+
+function CoverUploader({
+  societyId,
+  currentUrl,
+  onUploaded,
+  onRemoved,
+}: {
+  societyId: string;
+  currentUrl: string | null | undefined;
+  onUploaded: (url: string) => void;
+  onRemoved: () => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { setError('Must be an image'); return; }
+    if (file.size > 8 * 1024 * 1024) { setError('Max 8MB'); return; }
+    try {
+      setUploading(true);
+      setError(null);
+      const result = await uploadSocietyMedia(societyId, 'cover', file);
+      onUploaded(result.url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div>
+      {currentUrl ? (
+        <div className="relative group rounded-lg overflow-hidden">
+          <img src={currentUrl} alt="Cover" className="w-full h-40 object-cover" />
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
+            <label className="cursor-pointer px-3 py-1.5 rounded-lg bg-white/90 text-gray-800 text-xs font-medium hover:bg-white flex items-center gap-1.5">
+              <Upload size={12} /> Replace
+              <input type="file" accept="image/*" className="hidden" onChange={handleUpload} disabled={uploading} />
+            </label>
+            <button
+              onClick={onRemoved}
+              className="px-3 py-1.5 rounded-lg bg-red-500/90 text-white text-xs font-medium hover:bg-red-600 flex items-center gap-1.5"
+            >
+              <X size={12} /> Remove
+            </button>
+          </div>
+          {uploading && (
+            <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+              <Loader2 size={24} className="animate-spin text-white" />
+            </div>
+          )}
+        </div>
+      ) : (
+        <label className="flex flex-col items-center justify-center h-40 rounded-lg border-2 border-dashed border-themed cursor-pointer hover:border-brand-500/50 transition-colors">
+          {uploading ? (
+            <Loader2 size={24} className="animate-spin text-muted" />
+          ) : (
+            <>
+              <Upload size={24} className="text-muted mb-2" />
+              <span className="text-sm text-muted">Click to upload cover image</span>
+              <span className="text-xs text-muted mt-1">Recommended: 1200x400, max 8MB</span>
+            </>
+          )}
+          <input type="file" accept="image/*" className="hidden" onChange={handleUpload} disabled={uploading} />
+        </label>
+      )}
+      {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
+    </div>
+  );
+}
+
+// ─── Logo Uploader ──────────────────────────────────────────────────────────
+
+function LogoUploader({
+  societyId,
+  currentUrl,
+  onUploaded,
+  onRemoved,
+}: {
+  societyId: string;
+  currentUrl: string | null | undefined;
+  onUploaded: (url: string) => void;
+  onRemoved: () => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { setError('Must be an image'); return; }
+    if (file.size > 8 * 1024 * 1024) { setError('Max 8MB'); return; }
+    try {
+      setUploading(true);
+      setError(null);
+      const result = await uploadSocietyMedia(societyId, 'logo', file);
+      onUploaded(result.url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-4">
+      <div className="relative group">
+        {currentUrl ? (
+          <div className="relative w-20 h-20 rounded-xl overflow-hidden">
+            <img src={currentUrl} alt="Logo" className="w-full h-full object-cover" />
+            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+              <label className="cursor-pointer w-8 h-8 rounded-full bg-white/90 flex items-center justify-center">
+                <Upload size={12} className="text-gray-800" />
+                <input type="file" accept="image/*" className="hidden" onChange={handleUpload} disabled={uploading} />
+              </label>
+            </div>
+            {uploading && (
+              <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                <Loader2 size={16} className="animate-spin text-white" />
+              </div>
+            )}
+          </div>
+        ) : (
+          <label className="w-20 h-20 rounded-xl border-2 border-dashed border-themed flex items-center justify-center cursor-pointer hover:border-brand-500/50 transition-colors">
+            {uploading ? (
+              <Loader2 size={16} className="animate-spin text-muted" />
+            ) : (
+              <Upload size={20} className="text-muted" />
+            )}
+            <input type="file" accept="image/*" className="hidden" onChange={handleUpload} disabled={uploading} />
+          </label>
+        )}
+      </div>
+      <div className="flex-1">
+        <p className="text-sm text-secondary">Society Logo</p>
+        <p className="text-xs text-muted">Square image, recommended 200x200, max 8MB</p>
+        {currentUrl && (
+          <button onClick={onRemoved} className="text-xs text-red-500 hover:text-red-600 mt-1">
+            Remove logo
+          </button>
+        )}
+        {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
+      </div>
     </div>
   );
 }

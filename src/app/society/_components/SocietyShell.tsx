@@ -23,6 +23,8 @@ import {
   Shield,
   MessageSquare,
   Globe,
+  FileText,
+  Camera,
 } from 'lucide-react';
 
 interface SocietyShellProps {
@@ -61,7 +63,9 @@ export default function SocietyShell({
   const navItems: NavItem[] = [
     // ── Core
     { label: 'Dashboard', href: `${base}/dashboard`, icon: <LayoutDashboard size={20} />, section: 'Core' },
+    { label: 'Posts', href: `${base}/posts`, icon: <FileText size={20} />, section: 'Core' },
     { label: 'Events', href: `${base}/events`, icon: <Calendar size={20} />, section: 'Core' },
+    { label: 'Photos', href: `${base}/photos`, icon: <Camera size={20} />, section: 'Core' },
     { label: 'Members', href: `${base}/members`, icon: <Users size={20} />, section: 'Core' },
 
     // ── Operations
