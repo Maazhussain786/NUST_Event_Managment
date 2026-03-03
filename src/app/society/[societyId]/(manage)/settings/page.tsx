@@ -20,6 +20,8 @@ import {
   AlertCircle,
   Upload,
   X,
+  ArrowRightLeft,
+  Search,
 } from 'lucide-react';
 import { PageLoader, ErrorState } from '../../../_components/Shared';
 import {
@@ -28,6 +30,7 @@ import {
   fetchSocietyProfile,
   updateSocietyProfile,
   uploadSocietyMedia,
+  transferPresidency,
   SocietyApiError,
 } from '../../../api';
 import type { SocietySettings, SocietyProfile } from '../../../types';
@@ -195,6 +198,8 @@ export default function SettingsPage() {
               />
             </div>
           </div>
+
+          <TransferPresidencySection societyId={societyId} />
 
           <button
             onClick={handleSaveOperations}
@@ -623,5 +628,215 @@ function LogoUploader({
         {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
       </div>
     </div>
+  );
+}
+
+// ─── Transfer Presidency ────────────────────────────────────────────────────
+
+function TransferPresidencySection({ societyId }: { societyId: string }) {
+  const [showModal, setShowModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [members, setMembers] = useState<{ id: string; user_id: string; full_name: string; email: string; role_name: string }[]>([]);
+  const [loadingMembers, setLoadingMembers] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [transferring, setTransferring] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  const loadMembers = async () => {
+    setLoadingMembers(true);
+    try {
+      const res = await fetch(`/api/societies/${societyId}/governance/members`);
+      if (res.ok) {
+        const data = await res.json();
+        // Filter out current president and suspended members
+        const eligible = (data.members || data || []).filter(
+          (m: { role_name: string; is_active: boolean; suspended_at?: string | null }) =>
+            m.role_name !== 'President' && m.is_active && !m.suspended_at
+        );
+        setMembers(eligible);
+      }
+    } catch {
+      setError('Failed to load members');
+    } finally {
+      setLoadingMembers(false);
+    }
+  };
+
+  const handleOpenModal = async () => {
+    setShowModal(true);
+    setError(null);
+    setSuccess(false);
+    setSelectedUser(null);
+    setConfirming(false);
+    setSearchQuery('');
+    await loadMembers();
+  };
+
+  const handleTransfer = async () => {
+    if (!selectedUser) return;
+    setTransferring(true);
+    setError(null);
+    try {
+      await transferPresidency(societyId, { targetUserId: selectedUser });
+      setSuccess(true);
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Transfer failed');
+    } finally {
+      setTransferring(false);
+    }
+  };
+
+  const filteredMembers = members.filter(m =>
+    m.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    m.email.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  return (
+    <>
+      <div className="card p-5 space-y-3 border-red-500/20" style={{ borderColor: 'rgba(239,68,68,0.2)' }}>
+        <h3 className="text-sm font-semibold text-primary flex items-center gap-2">
+          <ArrowRightLeft size={16} className="text-red-500" /> Transfer Presidency
+        </h3>
+        <p className="text-xs text-muted">
+          Transfer the President role to another active society member. This action is irreversible and
+          you will be demoted to a regular member.
+        </p>
+        <button
+          onClick={handleOpenModal}
+          className="px-4 py-2 rounded-lg border text-sm font-medium text-red-500 hover:bg-red-500/10 transition-colors"
+          style={{ borderColor: 'rgba(239,68,68,0.3)' }}
+        >
+          Transfer Presidency
+        </button>
+      </div>
+
+      {/* Transfer Modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50">
+          <div className="card p-6 w-full max-w-md max-h-[80vh] overflow-hidden flex flex-col">
+            {success ? (
+              <div className="text-center py-8">
+                <div className="w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-4">
+                  <Check size={32} className="text-green-500" />
+                </div>
+                <h3 className="text-lg font-bold text-primary mb-2">Presidency Transferred</h3>
+                <p className="text-sm text-muted">The page will reload shortly.</p>
+              </div>
+            ) : confirming && selectedUser ? (
+              <div>
+                <h3 className="text-lg font-bold text-primary mb-2">Confirm Transfer</h3>
+                <div className="rounded-xl p-4 mb-4" style={{ background: 'var(--bg-input)' }}>
+                  <p className="text-sm text-secondary">
+                    You are about to transfer presidency to{' '}
+                    <strong>{members.find(m => m.user_id === selectedUser)?.full_name}</strong>.
+                  </p>
+                  <p className="text-xs text-red-500 mt-2">
+                    This action cannot be undone. You will be demoted to a Member role.
+                  </p>
+                </div>
+                {error && (
+                  <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 text-red-500 text-sm mb-4">
+                    <AlertCircle size={14} /> {error}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setConfirming(false); setError(null); }}
+                    className="btn-secondary flex-1 text-sm"
+                    disabled={transferring}
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={handleTransfer}
+                    disabled={transferring}
+                    className="flex-1 px-4 py-2.5 rounded-lg bg-red-500 text-white text-sm font-medium hover:bg-red-600 disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {transferring ? <Loader2 size={14} className="animate-spin" /> : null}
+                    {transferring ? 'Transferring...' : 'Confirm Transfer'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-primary">Select New President</h3>
+                  <button onClick={() => setShowModal(false)} className="p-1 text-muted hover:text-primary">
+                    <X size={20} />
+                  </button>
+                </div>
+
+                {/* Search */}
+                <div className="relative mb-3">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+                  <input
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    placeholder="Search members..."
+                    className="input-field pl-9 text-sm w-full"
+                  />
+                </div>
+
+                {/* Members List */}
+                <div className="flex-1 overflow-y-auto space-y-1 max-h-60">
+                  {loadingMembers ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 size={20} className="animate-spin text-brand-500" />
+                    </div>
+                  ) : filteredMembers.length === 0 ? (
+                    <p className="text-sm text-muted text-center py-8">No eligible members found</p>
+                  ) : (
+                    filteredMembers.map(m => (
+                      <button
+                        key={m.user_id}
+                        onClick={() => setSelectedUser(m.user_id)}
+                        className={`w-full flex items-center gap-3 p-3 rounded-xl text-left transition-colors ${
+                          selectedUser === m.user_id
+                            ? 'bg-brand-500/10 border border-brand-500/30'
+                            : 'hover:bg-secondary'
+                        }`}
+                      >
+                        <div className="w-9 h-9 rounded-xl bg-brand-500/20 flex items-center justify-center text-xs font-bold text-brand-500">
+                          {m.full_name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-primary truncate">{m.full_name}</p>
+                          <p className="text-xs text-muted truncate">{m.email} &middot; {m.role_name}</p>
+                        </div>
+                        {selectedUser === m.user_id && (
+                          <Check size={16} className="text-brand-500 flex-shrink-0" />
+                        )}
+                      </button>
+                    ))
+                  )}
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-2 mt-4 pt-4 border-t border-themed">
+                  <button
+                    onClick={() => setShowModal(false)}
+                    className="btn-secondary flex-1 text-sm"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    disabled={!selectedUser}
+                    onClick={() => setConfirming(true)}
+                    className="flex-1 px-4 py-2.5 rounded-lg bg-red-500 text-white text-sm font-medium hover:bg-red-600 disabled:opacity-50"
+                  >
+                    Continue
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </>
   );
 }

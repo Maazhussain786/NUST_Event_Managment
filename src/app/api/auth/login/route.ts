@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     }
 
     const result = await query(
-      'SELECT id, email, password_hash, full_name, user_type, status FROM users WHERE email = $1',
+      'SELECT id, email, password_hash, full_name, user_type, status, avatar_url FROM users WHERE email = $1',
       [email]
     );
 
@@ -57,6 +57,7 @@ export async function POST(req: NextRequest) {
         email: user.email,
         fullName: user.full_name,
         userType: user.user_type,
+        avatarUrl: user.avatar_url || null,
       },
     });
 

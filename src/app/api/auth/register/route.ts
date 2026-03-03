@@ -55,6 +55,7 @@ export async function POST(req: NextRequest) {
         email: user.email,
         fullName: user.full_name,
         userType: user.user_type,
+        avatarUrl: null,
       },
     }, { status: 201 });
 

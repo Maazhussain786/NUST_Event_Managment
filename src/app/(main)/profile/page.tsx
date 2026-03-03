@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   User, Mail, School, LogOut, Settings, ChevronRight,
   Moon, Sun, Bell, Shield, Heart, HelpCircle, Loader2,
-  ShieldCheck, LogIn, Building2, Crown, Plus, Clock
+  ShieldCheck, LogIn, Building2, Crown, Plus, Clock, Camera
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -17,6 +17,7 @@ interface UserProfile {
   email: string;
   fullName: string;
   userType: string;
+  avatarUrl?: string | null;
 }
 
 interface MySociety {
@@ -40,6 +41,8 @@ export default function ProfilePage() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [mySocieties, setMySocieties] = useState<MySociety[]>([]);
   const [loadingSocieties, setLoadingSocieties] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const stored = localStorage.getItem('user');
@@ -59,6 +62,48 @@ export default function ProfilePage() {
     localStorage.removeItem('user');
     document.cookie = 'auth_token=; path=/; max-age=0';
     window.location.href = '/login';
+  };
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    // Client-side validation
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file');
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      alert('Image must be under 8MB');
+      return;
+    }
+
+    setUploadingAvatar(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch('/api/upload/profile-picture', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Upload failed');
+      }
+
+      const data = await res.json();
+      const updatedUser = { ...user, avatarUrl: data.data.url };
+      setUser(updatedUser);
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to upload photo');
+    } finally {
+      setUploadingAvatar(false);
+      // Reset file input
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   const authGuard = (action: () => void, msg: string) => {
@@ -96,9 +141,40 @@ export default function ProfilePage() {
         >
           {user ? (
             <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-2xl bg-brand-500/20 flex items-center justify-center text-xl font-bold text-brand-500">
-                {initials}
-              </div>
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={handleAvatarUpload}
+                className="hidden"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingAvatar}
+                className="relative w-16 h-16 rounded-2xl shrink-0 overflow-hidden group"
+              >
+                {user.avatarUrl ? (
+                  <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full bg-brand-500/20 flex items-center justify-center text-xl font-bold text-brand-500">
+                    {initials}
+                  </div>
+                )}
+                {/* Camera overlay */}
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  {uploadingAvatar ? (
+                    <Loader2 className="w-5 h-5 text-white animate-spin" />
+                  ) : (
+                    <Camera className="w-5 h-5 text-white" />
+                  )}
+                </div>
+                {uploadingAvatar && (
+                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                    <Loader2 className="w-5 h-5 text-white animate-spin" />
+                  </div>
+                )}
+              </button>
               <div className="flex-1 min-w-0">
                 <h2 className="text-primary font-semibold text-lg truncate">{user.fullName}</h2>
                 <p className="text-muted text-sm truncate flex items-center gap-1">

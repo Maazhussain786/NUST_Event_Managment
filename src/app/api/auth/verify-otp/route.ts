@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
 
     // Get user data and generate token
     const userResult = await query(
-      'SELECT id, email, full_name, user_type FROM users WHERE id = $1',
+      'SELECT id, email, full_name, user_type, avatar_url FROM users WHERE id = $1',
       [userId]
     );
     const user = userResult.rows[0];
@@ -68,6 +68,7 @@ export async function POST(req: NextRequest) {
         email: user.email,
         fullName: user.full_name,
         userType: user.user_type,
+        avatarUrl: user.avatar_url || null,
       },
     });
 

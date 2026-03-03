@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Building2, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Building2, Loader2, CheckCircle2, AlertCircle, Upload, X, ImageIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 interface School {
@@ -11,6 +11,19 @@ interface School {
   abbreviation: string;
 }
 
+const CATEGORIES = [
+  'Technology & Engineering',
+  'Arts & Culture',
+  'Sports & Fitness',
+  'Community Service',
+  'Academic & Research',
+  'Media & Communication',
+  'Business & Entrepreneurship',
+  'Environment & Sustainability',
+  'Health & Wellness',
+  'Other',
+];
+
 export default function RegisterSocietyPage() {
   const router = useRouter();
   const [schools, setSchools] = useState<School[]>([]);
@@ -18,12 +31,17 @@ export default function RegisterSocietyPage() {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
 
+  // Form fields
   const [name, setName] = useState('');
   const [schoolId, setSchoolId] = useState('');
   const [description, setDescription] = useState('');
+  const [category, setCategory] = useState('');
+  const [missionStatement, setMissionStatement] = useState('');
   const [contactNumber, setContactNumber] = useState('');
   const [presidentName, setPresidentName] = useState('');
   const [email, setEmail] = useState('');
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/schools').then(r => r.json()).then(d => setSchools(d.schools || []));
@@ -38,10 +56,34 @@ export default function RegisterSocietyPage() {
     } catch {}
   }, []);
 
+  const handleLogoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 8 * 1024 * 1024) {
+      setError('Logo must be under 8MB');
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      setError('Logo must be an image file');
+      return;
+    }
+
+    setLogoFile(file);
+    const reader = new FileReader();
+    reader.onload = () => setLogoPreview(reader.result as string);
+    reader.readAsDataURL(file);
+    setError('');
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !description.trim() || !presidentName.trim() || !email.trim()) {
       setError('Please fill in all required fields');
+      return;
+    }
+    if (!category) {
+      setError('Please select a category');
       return;
     }
 
@@ -49,10 +91,41 @@ export default function RegisterSocietyPage() {
     setError('');
 
     try {
+      // Step 1: Upload logo if provided
+      let logoUrl: string | undefined;
+      if (logoFile) {
+        const formData = new FormData();
+        formData.append('file', logoFile);
+        formData.append('type', 'logo');
+        formData.append('context', 'society-registration');
+
+        const uploadRes = await fetch('/api/upload/society-media', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (uploadRes.ok) {
+          const uploadData = await uploadRes.json();
+          logoUrl = uploadData.data?.url;
+        }
+        // Non-fatal if logo upload fails
+      }
+
+      // Step 2: Submit registration
       const res = await fetch('/api/societies/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, schoolId: schoolId || undefined, description, contactNumber, presidentName, email }),
+        body: JSON.stringify({
+          name,
+          schoolId: schoolId || undefined,
+          description,
+          category,
+          missionStatement: missionStatement || undefined,
+          contactNumber,
+          presidentName,
+          email,
+          logoUrl,
+        }),
       });
       const data = await res.json();
 
@@ -122,6 +195,53 @@ export default function RegisterSocietyPage() {
           </motion.div>
         )}
 
+        {/* Society Logo */}
+        <div>
+          <label className="block text-sm font-medium text-primary mb-1.5">Society Logo</label>
+          <div className="flex items-center gap-4">
+            <div
+              className="w-20 h-20 rounded-2xl flex items-center justify-center overflow-hidden cursor-pointer relative group"
+              style={{ background: 'var(--bg-input)', border: '2px dashed var(--border-card)' }}
+              onClick={() => document.getElementById('logo-input')?.click()}
+            >
+              {logoPreview ? (
+                <>
+                  <img src={logoPreview} alt="Logo preview" className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <Upload className="w-5 h-5 text-white" />
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-col items-center gap-1">
+                  <ImageIcon className="w-6 h-6 text-muted" />
+                  <span className="text-[10px] text-muted">Upload</span>
+                </div>
+              )}
+            </div>
+            {logoFile && (
+              <div className="flex-1">
+                <p className="text-sm text-primary truncate">{logoFile.name}</p>
+                <p className="text-xs text-muted">{(logoFile.size / 1024).toFixed(0)} KB</p>
+                <button
+                  type="button"
+                  onClick={() => { setLogoFile(null); setLogoPreview(null); }}
+                  className="text-xs text-red-500 flex items-center gap-1 mt-1"
+                >
+                  <X className="w-3 h-3" /> Remove
+                </button>
+              </div>
+            )}
+          </div>
+          <input
+            id="logo-input"
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleLogoSelect}
+          />
+          <p className="text-muted text-xs mt-1">Optional. Max 8MB (JPEG, PNG, WebP)</p>
+        </div>
+
         {/* Society Name */}
         <div>
           <label className="block text-sm font-medium text-primary mb-1.5">Society Name *</label>
@@ -131,8 +251,25 @@ export default function RegisterSocietyPage() {
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g., NUST Developers Society"
             className="input-field w-full py-3 px-4 text-sm"
+            maxLength={200}
             required
           />
+        </div>
+
+        {/* Category */}
+        <div>
+          <label className="block text-sm font-medium text-primary mb-1.5">Category *</label>
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            className="input-field w-full py-3 px-4 text-sm appearance-none"
+            required
+          >
+            <option value="">Select a category...</option>
+            {CATEGORIES.map(c => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
         </div>
 
         {/* School */}
@@ -160,8 +297,24 @@ export default function RegisterSocietyPage() {
             placeholder="Describe your society's purpose, activities, and goals..."
             rows={4}
             className="input-field w-full py-3 px-4 text-sm resize-none"
+            maxLength={2000}
             required
           />
+          <p className="text-muted text-xs mt-1 text-right">{description.length}/2000</p>
+        </div>
+
+        {/* Mission Statement */}
+        <div>
+          <label className="block text-sm font-medium text-primary mb-1.5">Mission Statement</label>
+          <textarea
+            value={missionStatement}
+            onChange={(e) => setMissionStatement(e.target.value)}
+            placeholder="Why does this society need to exist? What unique value does it bring?"
+            rows={3}
+            className="input-field w-full py-3 px-4 text-sm resize-none"
+            maxLength={1000}
+          />
+          <p className="text-muted text-xs mt-1 text-right">{missionStatement.length}/1000</p>
         </div>
 
         {/* President Name */}

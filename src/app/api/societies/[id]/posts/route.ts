@@ -26,10 +26,10 @@ export async function GET(
               p.shared_event_id, p.is_pinned, p.like_count, p.comment_count,
               p.created_at, p.updated_at,
               u.full_name AS author_name,
-              u.profile_picture_url AS author_avatar,
+              u.avatar_url AS author_avatar,
               COALESCE(
-                (SELECT r.role FROM society_memberships sm
-                 JOIN membership_roles r ON sm.role_id = r.id
+                (SELECT r.name FROM society_memberships sm
+                 JOIN roles r ON sm.role_id = r.id
                  WHERE sm.user_id = p.author_id AND sm.society_id = p.society_id AND sm.is_active = TRUE
                  LIMIT 1),
                 'Member'
