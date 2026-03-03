@@ -335,7 +335,7 @@ export interface SocietySettings {
   chat_management_role: RoleName;
   content_upload_role: RoleName;
   ticketing_enabled: boolean;
-  transfer_policy: 'OPEN' | 'RESTRICTED';
+  transfer_policy: 'ALLOWED' | 'RESTRICTED' | 'DISABLED';
   transfer_deadline_hours: number;
 }
 

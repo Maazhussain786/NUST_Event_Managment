@@ -57,21 +57,21 @@ export async function GET(
         id: n.id,
         title: n.title,
         body: n.body,
-        link: n.link,
-        isRead: n.is_read,
-        createdAt: n.created_at,
-        type: 'personal' as const,
+        type: 'info',
+        is_read: n.is_read,
+        created_at: n.created_at,
+        metadata: null,
       })),
       ...auditNotifs.rows.map((n: any) => ({
         id: n.id,
         title: String(n.title).replace(/_/g, ' '),
         body: n.body,
-        link: null,
-        isRead: true,
-        createdAt: n.created_at,
-        type: 'system' as const,
+        type: 'info',
+        is_read: true,
+        created_at: n.created_at,
+        metadata: null,
       })),
-    ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, 100);
 
     return NextResponse.json(notifications);

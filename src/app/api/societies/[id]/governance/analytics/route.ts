@@ -136,7 +136,11 @@ export async function GET(
       eventsByMonth: eventsByMonth.rows,
       eventsByStatus: eventsByStatus.rows,
       topEvents: topEvents.rows,
-      registrationStats: registrationStats.rows[0] || { total: '0', active: '0', last_30_days: '0' },
+      registrationStats: {
+        total: (registrationStats.rows[0]?.total || '0'),
+        active: (registrationStats.rows[0]?.active || '0'),
+        last30Days: (registrationStats.rows[0]?.last_30_days || '0'),
+      },
       revenueByMonth: revenueByMonth.rows,
       checkInRate,
     });

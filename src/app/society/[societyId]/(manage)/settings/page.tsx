@@ -174,8 +174,9 @@ export default function SettingsPage() {
                 onChange={e => setSettings({ ...settings, transfer_policy: e.target.value as any })}
                 className="input-field text-sm w-full"
               >
-                <option value="OPEN">Open</option>
+                <option value="ALLOWED">Allowed</option>
                 <option value="RESTRICTED">Restricted</option>
+                <option value="DISABLED">Disabled</option>
               </select>
             </div>
 

@@ -69,11 +69,19 @@ export async function GET(
     );
 
     return NextResponse.json({
-      quotaBytes: quota,
-      usedBytes: used,
-      percentUsed: quota > 0 ? ((Number(used) / Number(quota)) * 100).toFixed(1) : '0',
-      media: allMedia,
-      totalFiles: allMedia.length,
+      used_bytes: Number(used),
+      quota_bytes: Number(quota),
+      percent_used: quota > 0 ? Number(((Number(used) / Number(quota)) * 100).toFixed(1)) : 0,
+      media_items: allMedia.map((m: any) => ({
+        id: m.id,
+        file_url: m.file_url,
+        file_name: m.file_name || '',
+        file_size: Number(m.file_size_bytes || 0),
+        media_type: m.mime_type || '',
+        uploaded_by_name: m.uploaded_by_name || 'Unknown',
+        uploaded_at: m.created_at,
+        category: m.category || 'gallery',
+      })),
     });
   } catch (error) {
     console.error('Storage error:', error);
