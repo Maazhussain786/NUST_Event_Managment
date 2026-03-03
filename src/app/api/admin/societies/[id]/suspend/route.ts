@@ -97,7 +97,7 @@ export async function POST(
           president.rows[0].user_id,
           'Society Suspended ⚠️',
           `${society.rows[0].name} has been suspended by administration. Reason: ${reason.trim()}`,
-          `/society-dashboard/${societyId}`,
+          `/society/${societyId}/dashboard`,
         ]
       );
     }

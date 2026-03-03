@@ -122,7 +122,7 @@ export async function PATCH(
             creatorId,
             'Society Approved! 🎉',
             'Your society has been approved. You are now the President.',
-            `/society-dashboard/${id}`,
+            `/society/${id}/dashboard`,
           ]
         );
       }

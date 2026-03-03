@@ -56,7 +56,7 @@ function InviteContent() {
 
       setSuccess(true);
       setTimeout(() => {
-        router.push(`/society-dashboard/${data.societyId}`);
+        router.push(`/society/${data.societyId}/dashboard`);
       }, 2000);
     } catch {
       setError('Network error. Please try again.');

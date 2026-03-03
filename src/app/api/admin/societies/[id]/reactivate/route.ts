@@ -99,7 +99,7 @@ export async function POST(
           president.rows[0].user_id,
           'Society Reactivated ✅',
           `${society.rows[0].name} has been reactivated by administration.`,
-          `/society-dashboard/${societyId}`,
+          `/society/${societyId}/dashboard`,
         ]
       );
     }

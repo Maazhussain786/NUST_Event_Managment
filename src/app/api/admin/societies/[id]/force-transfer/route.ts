@@ -146,7 +146,7 @@ export async function POST(
         targetUserId,
         'You have been appointed President',
         `A SuperAdmin has appointed you as President of ${society.rows[0].name}.`,
-        `/society-dashboard/${societyId}`,
+        `/society/${societyId}/dashboard`,
       ]
     );
 
@@ -158,7 +158,7 @@ export async function POST(
           oldPresidentUserId,
           'Presidency Transferred by Admin',
           `A SuperAdmin has transferred your presidency of ${society.rows[0].name}. Reason: ${reason.trim()}`,
-          `/society-dashboard/${societyId}`,
+          `/society/${societyId}/dashboard`,
         ]
       );
     }

@@ -441,7 +441,7 @@ export default function AdminDashboard() {
                         {soc.status === 'APPROVED' && (
                           <>
                             <button
-                              onClick={() => router.push(`/society-dashboard/${soc.id}`)}
+                              onClick={() => router.push(`/society/${soc.id}/dashboard`)}
                               className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-brand-500/10 text-brand-500 text-xs font-medium"
                             >
                               <Shield className="w-3.5 h-3.5" /> Manage

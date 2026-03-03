@@ -130,7 +130,7 @@ export async function POST(
           invite.invited_by,
           'Invite Accepted',
           `${user.fullName} accepted the ${invite.role_name} invite`,
-          `/society-dashboard/${invite.society_id}`,
+          `/society/${invite.society_id}/dashboard`,
         ]
       );
 

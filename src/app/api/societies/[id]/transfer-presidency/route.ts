@@ -175,7 +175,7 @@ export async function POST(
         targetUserId,
         'You are now the President! 🎉',
         `${user.fullName} has transferred the presidency of ${society.rows[0].name} to you.`,
-        `/society-dashboard/${societyId}`,
+        `/society/${societyId}/dashboard`,
       ]
     );
 
@@ -185,7 +185,7 @@ export async function POST(
         user.userId,
         'Presidency Transferred',
         `You have transferred presidency of ${society.rows[0].name} to ${targetUser.rows[0].full_name}. You are now a Member.`,
-        `/society-dashboard/${societyId}`,
+        `/society/${societyId}/dashboard`,
       ]
     );
 

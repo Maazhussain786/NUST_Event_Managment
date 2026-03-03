@@ -128,7 +128,7 @@ export async function POST(
         targetUserId,
         'Membership Reactivated ✅',
         `Your membership in ${society.rows[0].name} has been reactivated.`,
-        `/society-dashboard/${societyId}`,
+        `/society/${societyId}/dashboard`,
       ]
     );
 

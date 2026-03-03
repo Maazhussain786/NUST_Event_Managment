@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, Loader2, Users, Settings, Mail, Layers,
   Plus, Trash2, Crown, ChevronRight, Copy, CheckCircle2, AlertCircle,
-  Shield, UserMinus, Send, Eye, X
+  Shield, UserMinus, Send, Eye, X, ExternalLink
 } from 'lucide-react';
 import { useRouter, useParams } from 'next/navigation';
 
@@ -405,6 +405,23 @@ export default function SocietyDashboard() {
           {/* ===== OVERVIEW TAB ===== */}
           {tab === 'overview' && (
             <motion.div key="overview" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              {/* Full Management Console CTA for President */}
+              {isPresident && (
+                <button
+                  onClick={() => router.push(`/society/${societyId}/dashboard`)}
+                  className="w-full mb-4 p-4 rounded-2xl bg-gradient-to-r from-brand-500 to-brand-600 text-white flex items-center gap-3 shadow-lg shadow-brand-500/25 active:scale-[0.98] transition-transform"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
+                    <Crown className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1 text-left">
+                    <p className="text-sm font-bold">Full Management Console</p>
+                    <p className="text-[11px] opacity-80">Profile, branding, events, analytics & more</p>
+                  </div>
+                  <ExternalLink className="w-4 h-4 opacity-70 flex-shrink-0" />
+                </button>
+              )}
+
               <div className="card p-5 mb-4">
                 <h2 className="text-primary font-semibold mb-2">About</h2>
                 <p className="text-muted text-sm leading-relaxed">{society.description}</p>

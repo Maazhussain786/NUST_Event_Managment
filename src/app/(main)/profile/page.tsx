@@ -169,7 +169,7 @@ export default function ProfilePage() {
                     key={soc.id + soc.role_name}
                     onClick={() => {
                       if (soc.status === 'APPROVED') {
-                        router.push(`/society-dashboard/${soc.id}`);
+                        router.push(`/society/${soc.id}/dashboard`);
                       }
                     }}
                     className={`w-full card p-4 flex items-center gap-3 transition-colors ${
