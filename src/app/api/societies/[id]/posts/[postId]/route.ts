@@ -3,10 +3,17 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getClient } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import {
+  ApiErrors,
+  extractIpAddress,
+  writeAuditLog,
+  checkSocietyOperational,
+} from '@/lib/api-utils';
 
 /**
  * PATCH /api/societies/[id]/posts/[postId]
  * Edit a post (content, pin status).
+ * Uses FOR UPDATE lock and version increment.
  */
 export async function PATCH(
   req: NextRequest,
@@ -15,57 +22,76 @@ export async function PATCH(
   const client = await getClient();
   try {
     const user = await getCurrentUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!user) return ApiErrors.unauthorized();
 
     const { id: societyId, postId } = params;
     const body = await req.json();
+    const ip = extractIpAddress(req);
 
     await client.query('BEGIN');
+
+    // Society operational check
+    const societyCheck = await checkSocietyOperational(societyId, client);
+    if (societyCheck) { await client.query('ROLLBACK'); return societyCheck; }
 
     // Auth
     const privCheck = await client.query(
       `SELECT fn_has_privilege($1, $2, 'MANAGE_CONTENT') AS allowed`,
       [user.userId, societyId]
     );
-    if (!privCheck.rows[0].allowed) {
+    if (!privCheck.rows[0].allowed && user.userType !== 'SUPER_ADMIN') {
       await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      return ApiErrors.forbidden('You do not have MANAGE_CONTENT privilege');
     }
 
-    // Verify post exists
+    // Fetch post with FOR UPDATE
     const existing = await client.query(
-      `SELECT id, author_id FROM society_posts WHERE id = $1 AND society_id = $2 AND is_deleted = FALSE`,
+      `SELECT id, author_id, content, is_pinned, post_type, version
+       FROM society_posts
+       WHERE id = $1 AND society_id = $2 AND is_deleted = FALSE AND deleted_at IS NULL
+       FOR UPDATE`,
       [postId, societyId]
     );
     if (existing.rows.length === 0) {
       await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'Post not found' }, { status: 404 });
+      return ApiErrors.notFound('Post');
     }
+
+    const oldPost = existing.rows[0];
 
     // Build dynamic update
     const sets: string[] = [];
     const vals: any[] = [];
+    const oldValues: Record<string, unknown> = {};
+    const newValues: Record<string, unknown> = {};
     let idx = 1;
 
     if (body.content !== undefined) {
+      oldValues.content = oldPost.content;
+      newValues.content = body.content?.trim() || null;
       sets.push(`content = $${idx++}`);
       vals.push(body.content?.trim() || null);
     }
     if (body.is_pinned !== undefined) {
+      oldValues.is_pinned = oldPost.is_pinned;
+      newValues.is_pinned = body.is_pinned;
       sets.push(`is_pinned = $${idx++}`);
       vals.push(body.is_pinned);
     }
     if (body.post_type !== undefined) {
+      oldValues.post_type = oldPost.post_type;
+      newValues.post_type = body.post_type;
       sets.push(`post_type = $${idx++}`);
       vals.push(body.post_type);
     }
 
     if (sets.length === 0) {
       await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
+      return ApiErrors.validation('No fields to update');
     }
 
     sets.push(`updated_at = NOW()`);
+    sets.push(`version = COALESCE(version, 1) + 1`);
     vals.push(postId);
     vals.push(societyId);
 
@@ -74,19 +100,27 @@ export async function PATCH(
       vals
     );
 
-    // Audit
-    await client.query(
-      `INSERT INTO audit_logs (action, performed_by, society_id, target_type, target_id, new_value)
-       VALUES ('POST_UPDATED', $1, $2, 'post', $3, $4)`,
-      [user.userId, societyId, postId, JSON.stringify(body)]
+    // Audit with old/new + IP
+    await writeAuditLog(
+      {
+        action: 'POST_UPDATED',
+        performedBy: user.userId,
+        societyId,
+        targetType: 'post',
+        targetId: postId,
+        oldValue: oldValues,
+        newValue: newValues,
+        metadata: { updatedBy: user.fullName },
+        ipAddress: ip,
+      },
+      client
     );
 
     await client.query('COMMIT');
     return NextResponse.json({ success: true });
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('Update post error:', error);
-    return NextResponse.json({ error: 'Failed to update post' }, { status: 500 });
+    return ApiErrors.serverError('Update post error:', error);
   } finally {
     client.release();
   }
@@ -94,7 +128,8 @@ export async function PATCH(
 
 /**
  * DELETE /api/societies/[id]/posts/[postId]
- * Soft-delete a post.
+ * Soft-delete a post using deleted_at timestamp.
+ * Cascade soft-deletes post images.
  */
 export async function DELETE(
   req: NextRequest,
@@ -103,48 +138,78 @@ export async function DELETE(
   const client = await getClient();
   try {
     const user = await getCurrentUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!user) return ApiErrors.unauthorized();
 
     const { id: societyId, postId } = params;
+    const ip = extractIpAddress(req);
 
     await client.query('BEGIN');
+
+    // Society operational check
+    const societyCheck = await checkSocietyOperational(societyId, client);
+    if (societyCheck) { await client.query('ROLLBACK'); return societyCheck; }
 
     // Auth
     const privCheck = await client.query(
       `SELECT fn_has_privilege($1, $2, 'MANAGE_CONTENT') AS allowed`,
       [user.userId, societyId]
     );
-    if (!privCheck.rows[0].allowed) {
+    if (!privCheck.rows[0].allowed && user.userType !== 'SUPER_ADMIN') {
       await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      return ApiErrors.forbidden('You do not have MANAGE_CONTENT privilege');
     }
 
-    // Soft delete
-    const result = await client.query(
-      `UPDATE society_posts SET is_deleted = TRUE, updated_at = NOW()
-       WHERE id = $1 AND society_id = $2 AND is_deleted = FALSE
-       RETURNING id`,
+    // Fetch post for audit snapshot + lock
+    const existing = await client.query(
+      `SELECT id, content, post_type, is_pinned, author_id
+       FROM society_posts
+       WHERE id = $1 AND society_id = $2 AND is_deleted = FALSE AND deleted_at IS NULL
+       FOR UPDATE`,
       [postId, societyId]
     );
-
-    if (result.rows.length === 0) {
+    if (existing.rows.length === 0) {
       await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'Post not found' }, { status: 404 });
+      return ApiErrors.notFound('Post');
     }
 
-    // Audit
+    const oldPost = existing.rows[0];
+
+    // Soft delete with timestamp
     await client.query(
-      `INSERT INTO audit_logs (action, performed_by, society_id, target_type, target_id)
-       VALUES ('POST_DELETED', $1, $2, 'post', $3)`,
-      [user.userId, societyId, postId]
+      `UPDATE society_posts
+       SET is_deleted = TRUE, deleted_at = NOW(), deleted_by = $3, updated_at = NOW()
+       WHERE id = $1 AND society_id = $2`,
+      [postId, societyId, user.userId]
+    );
+
+    // Cascade soft-delete post images
+    await client.query(
+      `UPDATE society_post_images
+       SET deleted_at = NOW()
+       WHERE post_id = $1 AND deleted_at IS NULL`,
+      [postId]
+    );
+
+    // Audit with old value + IP
+    await writeAuditLog(
+      {
+        action: 'POST_DELETED',
+        performedBy: user.userId,
+        societyId,
+        targetType: 'post',
+        targetId: postId,
+        oldValue: { content: oldPost.content, post_type: oldPost.post_type, is_pinned: oldPost.is_pinned },
+        metadata: { deletedBy: user.fullName, authorId: oldPost.author_id },
+        ipAddress: ip,
+      },
+      client
     );
 
     await client.query('COMMIT');
     return NextResponse.json({ success: true });
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('Delete post error:', error);
-    return NextResponse.json({ error: 'Failed to delete post' }, { status: 500 });
+    return ApiErrors.serverError('Delete post error:', error);
   } finally {
     client.release();
   }

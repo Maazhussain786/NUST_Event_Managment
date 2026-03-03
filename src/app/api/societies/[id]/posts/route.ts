@@ -40,7 +40,7 @@ export async function GET(
        FROM society_posts p
        JOIN users u ON p.author_id = u.id
        LEFT JOIN events e ON p.shared_event_id = e.id
-       WHERE p.society_id = $1 AND p.is_deleted = FALSE
+       WHERE p.society_id = $1 AND p.is_deleted = FALSE AND p.deleted_at IS NULL
        ORDER BY p.is_pinned DESC, p.created_at DESC
        LIMIT $2 OFFSET $3`,
       [societyId, limit, offset]
@@ -66,7 +66,7 @@ export async function GET(
 
     // Get total count for pagination
     const countResult = await query(
-      `SELECT COUNT(*) AS total FROM society_posts WHERE society_id = $1 AND is_deleted = FALSE`,
+      `SELECT COUNT(*) AS total FROM society_posts WHERE society_id = $1 AND is_deleted = FALSE AND deleted_at IS NULL`,
       [societyId]
     );
 

@@ -3,6 +3,13 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { query, getClient } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import {
+  ApiErrors,
+  extractIpAddress,
+  writeAuditLog,
+  checkSocietyOperational,
+  decrementStorageUsed,
+} from '@/lib/api-utils';
 
 /**
  * GET /api/societies/[id]/albums/[albumId]
@@ -21,12 +28,12 @@ export async function GET(
               u.full_name AS created_by_name
        FROM society_albums a
        LEFT JOIN users u ON a.created_by = u.id
-       WHERE a.id = $1 AND a.society_id = $2 AND a.is_deleted = FALSE`,
+       WHERE a.id = $1 AND a.society_id = $2 AND a.is_deleted = FALSE AND a.deleted_at IS NULL`,
       [albumId, societyId]
     );
 
     if (albumResult.rows.length === 0) {
-      return NextResponse.json({ error: 'Album not found' }, { status: 404 });
+      return ApiErrors.notFound('Album');
     }
 
     const photosResult = await query(
@@ -35,7 +42,7 @@ export async function GET(
               u.full_name AS uploaded_by_name
        FROM society_album_photos p
        LEFT JOIN users u ON p.uploaded_by = u.id
-       WHERE p.album_id = $1 AND p.society_id = $2 AND p.is_deleted = FALSE
+       WHERE p.album_id = $1 AND p.society_id = $2 AND p.is_deleted = FALSE AND p.deleted_at IS NULL
        ORDER BY p.display_order, p.created_at DESC`,
       [albumId, societyId]
     );
@@ -45,14 +52,14 @@ export async function GET(
       photos: photosResult.rows,
     });
   } catch (error) {
-    console.error('Fetch album details error:', error);
-    return NextResponse.json({ error: 'Failed to fetch album' }, { status: 500 });
+    return ApiErrors.serverError('Fetch album details error:', error);
   }
 }
 
 /**
  * PATCH /api/societies/[id]/albums/[albumId]
  * Update album name, description, category.
+ * Uses FOR UPDATE lock and version increment.
  */
 export async function PATCH(
   req: NextRequest,
@@ -61,49 +68,80 @@ export async function PATCH(
   const client = await getClient();
   try {
     const user = await getCurrentUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!user) return ApiErrors.unauthorized();
 
     const { id: societyId, albumId } = params;
     const body = await req.json();
+    const ip = extractIpAddress(req);
 
     await client.query('BEGIN');
+
+    // Society operational check
+    const societyCheck = await checkSocietyOperational(societyId, client);
+    if (societyCheck) { await client.query('ROLLBACK'); return societyCheck; }
 
     const privCheck = await client.query(
       `SELECT fn_has_privilege($1, $2, 'MANAGE_CONTENT') AS allowed`,
       [user.userId, societyId]
     );
-    if (!privCheck.rows[0].allowed) {
+    if (!privCheck.rows[0].allowed && user.userType !== 'SUPER_ADMIN') {
       await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      return ApiErrors.forbidden('You do not have MANAGE_CONTENT privilege');
     }
+
+    // Fetch album with FOR UPDATE
+    const existing = await client.query(
+      `SELECT id, name, description, category, cover_photo_id, version
+       FROM society_albums
+       WHERE id = $1 AND society_id = $2 AND is_deleted = FALSE AND deleted_at IS NULL
+       FOR UPDATE`,
+      [albumId, societyId]
+    );
+    if (existing.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return ApiErrors.notFound('Album');
+    }
+
+    const oldAlbum = existing.rows[0];
 
     const sets: string[] = [];
     const vals: any[] = [];
+    const oldValues: Record<string, unknown> = {};
+    const newValues: Record<string, unknown> = {};
     let idx = 1;
 
     if (body.name !== undefined) {
+      oldValues.name = oldAlbum.name;
+      newValues.name = body.name.trim();
       sets.push(`name = $${idx++}`);
       vals.push(body.name.trim());
     }
     if (body.description !== undefined) {
+      oldValues.description = oldAlbum.description;
+      newValues.description = body.description?.trim() || null;
       sets.push(`description = $${idx++}`);
       vals.push(body.description?.trim() || null);
     }
     if (body.category !== undefined) {
+      oldValues.category = oldAlbum.category;
+      newValues.category = body.category;
       sets.push(`category = $${idx++}`);
       vals.push(body.category);
     }
     if (body.cover_photo_id !== undefined) {
+      oldValues.cover_photo_id = oldAlbum.cover_photo_id;
+      newValues.cover_photo_id = body.cover_photo_id;
       sets.push(`cover_photo_id = $${idx++}`);
       vals.push(body.cover_photo_id);
     }
 
     if (sets.length === 0) {
       await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
+      return ApiErrors.validation('No fields to update');
     }
 
     sets.push(`updated_at = NOW()`);
+    sets.push(`version = COALESCE(version, 1) + 1`);
     vals.push(albumId, societyId);
 
     const result = await client.query(
@@ -113,21 +151,29 @@ export async function PATCH(
 
     if (result.rows.length === 0) {
       await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'Album not found' }, { status: 404 });
+      return ApiErrors.notFound('Album');
     }
 
-    await client.query(
-      `INSERT INTO audit_logs (action, performed_by, society_id, target_type, target_id, new_value)
-       VALUES ('ALBUM_UPDATED', $1, $2, 'album', $3, $4)`,
-      [user.userId, societyId, albumId, JSON.stringify(body)]
+    await writeAuditLog(
+      {
+        action: 'ALBUM_UPDATED',
+        performedBy: user.userId,
+        societyId,
+        targetType: 'album',
+        targetId: albumId,
+        oldValue: oldValues,
+        newValue: newValues,
+        metadata: { updatedBy: user.fullName },
+        ipAddress: ip,
+      },
+      client
     );
 
     await client.query('COMMIT');
     return NextResponse.json({ success: true });
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('Update album error:', error);
-    return NextResponse.json({ error: 'Failed to update album' }, { status: 500 });
+    return ApiErrors.serverError('Update album error:', error);
   } finally {
     client.release();
   }
@@ -135,7 +181,8 @@ export async function PATCH(
 
 /**
  * DELETE /api/societies/[id]/albums/[albumId]
- * Soft-delete an album.
+ * Soft-delete an album with deleted_at timestamp.
+ * Cascade soft-deletes photos and decrements storage.
  */
 export async function DELETE(
   req: NextRequest,
@@ -144,50 +191,90 @@ export async function DELETE(
   const client = await getClient();
   try {
     const user = await getCurrentUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!user) return ApiErrors.unauthorized();
 
     const { id: societyId, albumId } = params;
+    const ip = extractIpAddress(req);
 
     await client.query('BEGIN');
+
+    // Society operational check
+    const societyCheck = await checkSocietyOperational(societyId, client);
+    if (societyCheck) { await client.query('ROLLBACK'); return societyCheck; }
 
     const privCheck = await client.query(
       `SELECT fn_has_privilege($1, $2, 'MANAGE_CONTENT') AS allowed`,
       [user.userId, societyId]
     );
-    if (!privCheck.rows[0].allowed) {
+    if (!privCheck.rows[0].allowed && user.userType !== 'SUPER_ADMIN') {
       await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      return ApiErrors.forbidden('You do not have MANAGE_CONTENT privilege');
     }
 
-    const result = await client.query(
-      `UPDATE society_albums SET is_deleted = TRUE, updated_at = NOW()
-       WHERE id = $1 AND society_id = $2 AND is_deleted = FALSE RETURNING id`,
+    // Fetch album for audit + lock
+    const existing = await client.query(
+      `SELECT id, name, description, category, photo_count
+       FROM society_albums
+       WHERE id = $1 AND society_id = $2 AND is_deleted = FALSE AND deleted_at IS NULL
+       FOR UPDATE`,
       [albumId, societyId]
     );
-
-    if (result.rows.length === 0) {
+    if (existing.rows.length === 0) {
       await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'Album not found' }, { status: 404 });
+      return ApiErrors.notFound('Album');
     }
 
-    // Also soft-delete all photos in the album
-    await client.query(
-      `UPDATE society_album_photos SET is_deleted = TRUE WHERE album_id = $1 AND society_id = $2`,
+    const oldAlbum = existing.rows[0];
+
+    // Calculate total storage from photos to decrement
+    const storageResult = await client.query(
+      `SELECT COALESCE(SUM(file_size_bytes), 0) AS total_bytes
+       FROM society_album_photos
+       WHERE album_id = $1 AND society_id = $2 AND is_deleted = FALSE AND deleted_at IS NULL`,
       [albumId, societyId]
     );
+    const freedBytes = parseInt(storageResult.rows[0].total_bytes);
 
+    // Soft delete album with timestamp
     await client.query(
-      `INSERT INTO audit_logs (action, performed_by, society_id, target_type, target_id)
-       VALUES ('ALBUM_DELETED', $1, $2, 'album', $3)`,
-      [user.userId, societyId, albumId]
+      `UPDATE society_albums
+       SET is_deleted = TRUE, deleted_at = NOW(), deleted_by = $3, updated_at = NOW()
+       WHERE id = $1 AND society_id = $2`,
+      [albumId, societyId, user.userId]
+    );
+
+    // Cascade soft-delete all photos with timestamp
+    await client.query(
+      `UPDATE society_album_photos
+       SET is_deleted = TRUE, deleted_at = NOW(), deleted_by = $3
+       WHERE album_id = $1 AND society_id = $2 AND is_deleted = FALSE`,
+      [albumId, societyId, user.userId]
+    );
+
+    // Decrement storage used
+    if (freedBytes > 0) {
+      await decrementStorageUsed(client, societyId, freedBytes);
+    }
+
+    await writeAuditLog(
+      {
+        action: 'ALBUM_DELETED',
+        performedBy: user.userId,
+        societyId,
+        targetType: 'album',
+        targetId: albumId,
+        oldValue: { name: oldAlbum.name, photo_count: oldAlbum.photo_count },
+        metadata: { deletedBy: user.fullName, freedBytes },
+        ipAddress: ip,
+      },
+      client
     );
 
     await client.query('COMMIT');
     return NextResponse.json({ success: true });
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('Delete album error:', error);
-    return NextResponse.json({ error: 'Failed to delete album' }, { status: 500 });
+    return ApiErrors.serverError('Delete album error:', error);
   } finally {
     client.release();
   }

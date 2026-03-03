@@ -42,7 +42,7 @@ export default function SocietyPostsPage() {
       } else {
         setPosts(prev => [...prev, ...data.posts]);
       }
-      setHasMore(data.hasMore);
+      setHasMore(data.pagination.hasMore);
       setPage(p);
     } catch (err) {
       if (err instanceof SocietyApiError) {

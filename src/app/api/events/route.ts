@@ -20,7 +20,7 @@ export async function GET(req: Request) {
       LEFT JOIN event_categories ec ON e.category_id = ec.id
       JOIN societies s ON e.society_id = s.id
       LEFT JOIN tickets t ON e.id = t.event_id
-      WHERE e.is_cancelled = FALSE
+      WHERE e.is_cancelled = FALSE AND e.deleted_at IS NULL
     `;
     const params: (string | number)[] = [];
     let paramIndex = 1;

@@ -3,6 +3,16 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getClient } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import {
+  ApiErrors,
+  extractIpAddress,
+  writeAuditLog,
+  checkSocietyOperational,
+  checkBlackoutPeriod,
+  validateCapacityReduction,
+  validatePriceChange,
+  validateTimeChangeAfterCheckIn,
+} from '@/lib/api-utils';
 
 /**
  * PATCH /api/events/[id]
@@ -36,18 +46,19 @@ export async function PATCH(
   const client = await getClient();
   try {
     const user = await getCurrentUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!user) return ApiErrors.unauthorized();
 
     const { id: eventId } = params;
     const body = await req.json();
+    const ip = extractIpAddress(req);
 
     // ── Version required for optimistic locking ───────────────────────
     if (body.version === undefined || body.version === null) {
-      return NextResponse.json({ error: 'version is required for optimistic locking' }, { status: 400 });
+      return ApiErrors.validation('version is required for optimistic locking');
     }
     const clientVersion = Number(body.version);
     if (!Number.isInteger(clientVersion) || clientVersion < 1) {
-      return NextResponse.json({ error: 'version must be a positive integer' }, { status: 400 });
+      return ApiErrors.validation('version must be a positive integer');
     }
 
     await client.query('BEGIN');
@@ -63,7 +74,7 @@ export async function PATCH(
     );
     if (eventResult.rows.length === 0) {
       await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'Event not found' }, { status: 404 });
+      return ApiErrors.notFound('Event');
     }
 
     const event = eventResult.rows[0];
@@ -81,10 +92,29 @@ export async function PATCH(
       );
     }
 
-    // ── Cannot edit cancelled or completed events ─────────────────────
+    // ── Cannot edit deleted events ────────────────────────────────────
+    if (event.deleted_at) {
+      await client.query('ROLLBACK');
+      return ApiErrors.conflict('Cannot edit a deleted event');
+    }
+
+    // ── Cannot edit cancelled events ──────────────────────────────────
     if (event.is_cancelled) {
       await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'Cannot edit a cancelled event' }, { status: 409 });
+      return ApiErrors.conflict('Cannot edit a cancelled event');
+    }
+
+    // ── Cannot edit completed/archived events ─────────────────────────
+    if (event.status === 'COMPLETED' || event.status === 'ARCHIVED') {
+      await client.query('ROLLBACK');
+      return ApiErrors.conflict(`Cannot edit a ${event.status.toLowerCase()} event`);
+    }
+
+    // ── Check society operational state ────────────────────────────────
+    const societyCheck = await checkSocietyOperational(event.society_id, client);
+    if (societyCheck) {
+      await client.query('ROLLBACK');
+      return societyCheck;
     }
 
     // ── Authorization: fn_has_privilege ────────────────────────────────
@@ -92,12 +122,9 @@ export async function PATCH(
       `SELECT fn_has_privilege($1, $2, 'EDIT_EVENT', $3, $4) AS allowed`,
       [user.userId, event.society_id, event.wing_id, event.portfolio_id]
     );
-    if (!privCheck.rows[0].allowed) {
+    if (!privCheck.rows[0].allowed && user.userType !== 'SUPER_ADMIN') {
       await client.query('ROLLBACK');
-      return NextResponse.json(
-        { error: 'Forbidden — you do not have EDIT_EVENT privilege' },
-        { status: 403 }
-      );
+      return ApiErrors.forbidden('You do not have EDIT_EVENT privilege');
     }
 
     // ── Determine if any core fields are being modified ───────────────
@@ -134,21 +161,55 @@ export async function PATCH(
 
     if (newEnd < newStart) {
       await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'event_end must be >= event_start' }, { status: 400 });
+      return ApiErrors.validation('event_end must be >= event_start');
     }
 
     if (body.registration_end) {
       const regEnd = new Date(body.registration_end);
       if (regEnd > newStart) {
         await client.query('ROLLBACK');
-        return NextResponse.json({ error: 'registration_end must be <= event_start' }, { status: 400 });
+        return ApiErrors.validation('registration_end must be <= event_start');
       }
     }
 
     if (body.max_participants !== undefined && body.max_participants !== null) {
       if (!Number.isInteger(body.max_participants) || body.max_participants < 1) {
         await client.query('ROLLBACK');
-        return NextResponse.json({ error: 'max_participants must be an integer >= 1' }, { status: 400 });
+        return ApiErrors.validation('max_participants must be an integer >= 1');
+      }
+    }
+
+    // ── Capacity reduction guard ──────────────────────────────────────
+    if (body.max_participants !== undefined && body.max_participants < event.max_participants) {
+      const capError = await validateCapacityReduction(eventId, body.max_participants, client);
+      if (capError) {
+        await client.query('ROLLBACK');
+        return ApiErrors.conflict(capError);
+      }
+    }
+
+    // ── Price change guard (cannot change if approved payments exist) ─
+    if (body.ticket_price !== undefined && body.ticket_price !== event.ticket_price) {
+      const priceError = await validatePriceChange(eventId, client);
+      if (priceError) {
+        await client.query('ROLLBACK');
+        return ApiErrors.conflict(priceError);
+      }
+    }
+
+    // ── Time change guard (cannot change if check-ins exist) ──────────
+    if (body.event_start !== undefined || body.event_end !== undefined) {
+      const timeError = await validateTimeChangeAfterCheckIn(eventId, client);
+      if (timeError) {
+        await client.query('ROLLBACK');
+        return ApiErrors.conflict(timeError);
+      }
+
+      // Blackout period check
+      const blackoutError = await checkBlackoutPeriod(newStart, newEnd, client);
+      if (blackoutError) {
+        await client.query('ROLLBACK');
+        return ApiErrors.conflict(blackoutError);
       }
     }
 
@@ -193,7 +254,7 @@ export async function PATCH(
 
     if (setClauses.length === 0) {
       await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 });
+      return ApiErrors.validation('No valid fields to update');
     }
 
     // Always increment version and updated_at
@@ -214,31 +275,30 @@ export async function PATCH(
     if (updateResult.rows.length === 0) {
       // Race condition — version changed between SELECT and UPDATE
       await client.query('ROLLBACK');
-      return NextResponse.json(
-        { error: 'Version mismatch — event was modified concurrently' },
-        { status: 409 }
-      );
+      return ApiErrors.conflict('Version mismatch — event was modified concurrently');
     }
 
     const updated = updateResult.rows[0];
 
-    // ── Audit log ─────────────────────────────────────────────────────
-    await client.query(
-      `INSERT INTO audit_logs (action, performed_by, society_id, target_type, target_id, old_value, new_value, metadata)
-       VALUES ('EVENT_UPDATED', $1, $2, 'event', $3, $4, $5, $6)`,
-      [
-        user.userId,
-        event.society_id,
-        eventId,
-        JSON.stringify(oldValues),
-        JSON.stringify(newValues),
-        JSON.stringify({
+    // ── Audit log with IP ──────────────────────────────────────────────
+    await writeAuditLog(
+      {
+        action: 'EVENT_UPDATED',
+        performedBy: user.userId,
+        societyId: event.society_id,
+        targetType: 'event',
+        targetId: eventId,
+        oldValue: oldValues,
+        newValue: newValues,
+        metadata: {
           updatedBy: user.fullName,
           fieldsChanged: Object.keys(newValues),
           hasCoreFieldChanges,
           newVersion: updated.version,
-        }),
-      ]
+        },
+        ipAddress: ip,
+      },
+      client
     );
 
     await client.query('COMMIT');
@@ -253,8 +313,7 @@ export async function PATCH(
     });
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('Edit event error:', error);
-    return NextResponse.json({ error: 'Failed to update event' }, { status: 500 });
+    return ApiErrors.serverError('Edit event error:', error);
   } finally {
     client.release();
   }

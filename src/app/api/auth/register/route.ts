@@ -1,11 +1,16 @@
 export const dynamic = 'force-dynamic';
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { hashPassword, generateToken } from '@/lib/auth';
+import { extractIpAddress, checkApiRateLimit, ApiErrors } from '@/lib/api-utils';
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
+    const ip = extractIpAddress(req);
+    const rateLimited = checkApiRateLimit(ip || 'unknown', 'register', 5);
+    if (rateLimited) return rateLimited;
+
     const { email, password, fullName } = await req.json();
 
     if (!email || !password || !fullName) {

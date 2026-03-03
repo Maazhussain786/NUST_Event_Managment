@@ -3,6 +3,11 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getClient } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import {
+  ApiErrors,
+  extractIpAddress,
+  writeAuditLog,
+} from '@/lib/api-utils';
 
 /**
  * POST /api/events/[id]/cancel
@@ -26,9 +31,10 @@ export async function POST(
   const client = await getClient();
   try {
     const user = await getCurrentUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!user) return ApiErrors.unauthorized();
 
     const { id: eventId } = params;
+    const ip = extractIpAddress(req);
 
     let reason = '';
     try {
@@ -43,7 +49,7 @@ export async function POST(
     // ── Fetch event ───────────────────────────────────────────────────
     const eventResult = await client.query(
       `SELECT e.id, e.title, e.society_id, e.wing_id, e.portfolio_id,
-              e.is_cancelled, e.status, e.event_end,
+              e.is_cancelled, e.status, e.event_end, e.deleted_at,
               s.name as society_name
        FROM events e
        JOIN societies s ON e.society_id = s.id
@@ -53,21 +59,27 @@ export async function POST(
     );
     if (eventResult.rows.length === 0) {
       await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'Event not found' }, { status: 404 });
+      return ApiErrors.notFound('Event');
     }
 
     const event = eventResult.rows[0];
 
+    // ── Cannot cancel already deleted ─────────────────────────────────
+    if (event.deleted_at) {
+      await client.query('ROLLBACK');
+      return ApiErrors.conflict('Cannot cancel a deleted event');
+    }
+
     // ── Cannot cancel already cancelled ───────────────────────────────
     if (event.is_cancelled || event.status === 'CANCELLED') {
       await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'Event is already cancelled' }, { status: 409 });
+      return ApiErrors.conflict('Event is already cancelled');
     }
 
     // ── Cannot cancel completed events ────────────────────────────────
     if (event.status === 'COMPLETED' || event.status === 'ARCHIVED') {
       await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'Cannot cancel a completed or archived event' }, { status: 409 });
+      return ApiErrors.conflict('Cannot cancel a completed or archived event');
     }
 
     // ── Authorization: fn_has_privilege ────────────────────────────────
@@ -75,12 +87,9 @@ export async function POST(
       `SELECT fn_has_privilege($1, $2, 'CANCEL_EVENT', $3, $4) AS allowed`,
       [user.userId, event.society_id, event.wing_id, event.portfolio_id]
     );
-    if (!privCheck.rows[0].allowed) {
+    if (!privCheck.rows[0].allowed && user.userType !== 'SUPER_ADMIN') {
       await client.query('ROLLBACK');
-      return NextResponse.json(
-        { error: 'Forbidden — you do not have CANCEL_EVENT privilege' },
-        { status: 403 }
-      );
+      return ApiErrors.forbidden('You do not have CANCEL_EVENT privilege');
     }
 
     // ── Cancel the event ──────────────────────────────────────────────
@@ -133,23 +142,25 @@ export async function POST(
       }
     }
 
-    // ── Audit log ─────────────────────────────────────────────────────
-    await client.query(
-      `INSERT INTO audit_logs (action, performed_by, society_id, target_type, target_id, old_value, new_value, metadata)
-       VALUES ('EVENT_CANCELLED', $1, $2, 'event', $3, $4, $5, $6)`,
-      [
-        user.userId,
-        event.society_id,
-        eventId,
-        JSON.stringify({ status: event.status, is_cancelled: false }),
-        JSON.stringify({ status: 'CANCELLED', is_cancelled: true }),
-        JSON.stringify({
+    // ── Audit log with IP ─────────────────────────────────────────────
+    await writeAuditLog(
+      {
+        action: 'EVENT_CANCELLED',
+        performedBy: user.userId,
+        societyId: event.society_id,
+        targetType: 'event',
+        targetId: eventId,
+        oldValue: { status: event.status, is_cancelled: false },
+        newValue: { status: 'CANCELLED', is_cancelled: true },
+        metadata: {
           cancelledBy: user.fullName,
           reason: reason || null,
           notifiedRegistrations: registrations.rows.length,
           notifiedTicketHolders: ticketHolders.rows.length,
-        }),
-      ]
+        },
+        ipAddress: ip,
+      },
+      client
     );
 
     await client.query('COMMIT');
@@ -165,8 +176,7 @@ export async function POST(
     });
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('Cancel event error:', error);
-    return NextResponse.json({ error: 'Failed to cancel event' }, { status: 500 });
+    return ApiErrors.serverError('Cancel event error:', error);
   } finally {
     client.release();
   }

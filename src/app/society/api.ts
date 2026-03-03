@@ -408,7 +408,7 @@ export function sendChatMessage(
 export function fetchPosts(
   societyId: string,
   page?: number
-): Promise<{ posts: SocietyPost[]; total: number; hasMore: boolean }> {
+): Promise<{ posts: SocietyPost[]; pagination: { page: number; limit: number; total: number; hasMore: boolean } }> {
   const qs = page ? `?page=${page}` : '';
   return api(`${s(societyId)}/posts${qs}`);
 }

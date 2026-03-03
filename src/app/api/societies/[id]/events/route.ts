@@ -4,6 +4,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getClient } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import crypto from 'crypto';
+import {
+  ApiErrors,
+  extractIpAddress,
+  writeAuditLog,
+  checkApiRateLimit,
+  checkSocietyOperational,
+  checkBlackoutPeriod,
+} from '@/lib/api-utils';
 
 /**
  * POST /api/societies/[id]/events
@@ -36,9 +44,15 @@ export async function POST(
   const client = await getClient();
   try {
     const user = await getCurrentUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!user) return ApiErrors.unauthorized();
 
     const { id: societyId } = params;
+    const ip = extractIpAddress(req);
+
+    // Rate limit: max 5 event creations per minute per user
+    const rateLimited = checkApiRateLimit(user.userId, 'create-event', 5);
+    if (rateLimited) return rateLimited;
+
     const body = await req.json();
 
     // ── Required field validation ─────────────────────────────────────
@@ -87,17 +101,25 @@ export async function POST(
 
     await client.query('BEGIN');
 
+    // ── Society operational check ─────────────────────────────────────
+    const societyCheck = await checkSocietyOperational(societyId, client);
+    if (societyCheck) { await client.query('ROLLBACK'); return societyCheck; }
+
     // ── Authorization: fn_has_privilege ────────────────────────────────
     const privCheck = await client.query(
       `SELECT fn_has_privilege($1, $2, 'CREATE_EVENT', $3, $4) AS allowed`,
       [user.userId, societyId, body.wing_id || null, body.portfolio_id || null]
     );
-    if (!privCheck.rows[0].allowed) {
+    if (!privCheck.rows[0].allowed && user.userType !== 'SUPER_ADMIN') {
       await client.query('ROLLBACK');
-      return NextResponse.json(
-        { error: 'Forbidden — you do not have CREATE_EVENT privilege for this society' },
-        { status: 403 }
-      );
+      return ApiErrors.forbidden('You do not have CREATE_EVENT privilege for this society');
+    }
+
+    // ── Blackout period check ─────────────────────────────────────────
+    const blackoutError = await checkBlackoutPeriod(startDate, endDate, client);
+    if (blackoutError) {
+      await client.query('ROLLBACK');
+      return ApiErrors.conflict(blackoutError);
     }
 
     // ── Verify society exists & is APPROVED (double-check) ────────────
@@ -107,11 +129,11 @@ export async function POST(
     );
     if (society.rows.length === 0) {
       await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'Society not found' }, { status: 404 });
+      return ApiErrors.notFound('Society');
     }
     if (society.rows[0].status !== 'APPROVED' && user.userType !== 'SUPER_ADMIN') {
       await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'Society is not active' }, { status: 409 });
+      return ApiErrors.conflict('Society is not active');
     }
 
     // ── Auto-generate registration link ───────────────────────────────
@@ -162,17 +184,19 @@ export async function POST(
 
     const newEvent = insertResult.rows[0];
 
-    // ── Audit log ─────────────────────────────────────────────────────
-    await client.query(
-      `INSERT INTO audit_logs (action, performed_by, society_id, target_type, target_id, new_value, metadata)
-       VALUES ('EVENT_CREATED', $1, $2, 'event', $3, $4, $5)`,
-      [
-        user.userId,
+    // ── Audit log with IP ─────────────────────────────────────────────
+    await writeAuditLog(
+      {
+        action: 'EVENT_CREATED',
+        performedBy: user.userId,
         societyId,
-        newEvent.id,
-        JSON.stringify({ title: title.trim(), event_start, event_end, status: newEvent.status }),
-        JSON.stringify({ createdBy: user.fullName, registrationLink }),
-      ]
+        targetType: 'event',
+        targetId: newEvent.id,
+        newValue: { title: title.trim(), event_start, event_end, status: newEvent.status },
+        metadata: { createdBy: user.fullName, registrationLink },
+        ipAddress: ip,
+      },
+      client
     );
 
     await client.query('COMMIT');
@@ -188,8 +212,7 @@ export async function POST(
     }, { status: 201 });
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('Create event error:', error);
-    return NextResponse.json({ error: 'Failed to create event' }, { status: 500 });
+    return ApiErrors.serverError('Create event error:', error);
   } finally {
     client.release();
   }
