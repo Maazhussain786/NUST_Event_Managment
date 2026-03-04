@@ -18,7 +18,7 @@ export async function PATCH(
     const { id } = await params;
     const { action, reason } = await req.json();
 
-    if (!['APPROVED', 'REJECTED', 'SUSPENDED', 'PENDING'].includes(action)) {
+    if (!['APPROVED', 'REJECTED', 'SUSPENDED', 'PENDING', 'INFO_REQUESTED'].includes(action)) {
       return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
 
@@ -43,6 +43,11 @@ export async function PATCH(
         await client.query(
           'UPDATE societies SET status = $1, rejection_reason = $2, updated_at = NOW() WHERE id = $3',
           [action, reason, id]
+        );
+      } else if (action === 'INFO_REQUESTED') {
+        await client.query(
+          `UPDATE societies SET status = 'INFO_REQUESTED', admin_message = $1, updated_at = NOW() WHERE id = $2`,
+          [reason || 'Additional information required.', id]
         );
       } else {
         await client.query(
@@ -137,6 +142,20 @@ export async function PATCH(
             'Society Application Rejected',
             reason || 'Your society application was not approved.',
             '/societies',
+          ]
+        );
+      }
+
+      if (action === 'INFO_REQUESTED') {
+        // Notify creator that more info is needed
+        await client.query(
+          `INSERT INTO notifications (user_id, title, body, link)
+           VALUES ($1, $2, $3, $4)`,
+          [
+            creatorId,
+            'More Information Requested',
+            reason || 'The admin has requested additional information for your society application.',
+            '/register-society',
           ]
         );
       }

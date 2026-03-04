@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
     let q = `SELECT s.id, s.name, s.description, s.logo_url,
                     COALESCE(ns.abbreviation, CASE WHEN s.is_nust_wide THEN 'NUST-Wide' ELSE NULL END) AS category,
                     s.status, s.created_at, s.president_name, s.contact_number,
+                    s.faculty_advisor_name, s.justification, s.admin_message, s.contact_email,
                     u.full_name AS created_by_name, u.email AS created_by_email,
                     COUNT(DISTINCT sm.user_id) as member_count,
                     COUNT(DISTINCT e.id) as event_count,

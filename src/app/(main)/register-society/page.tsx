@@ -30,6 +30,7 @@ export default function RegisterSocietyPage() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
+  const [infoRequested, setInfoRequested] = useState<{ id: string; adminMessage: string } | null>(null);
 
   // Form fields
   const [name, setName] = useState('');
@@ -40,18 +41,42 @@ export default function RegisterSocietyPage() {
   const [contactNumber, setContactNumber] = useState('');
   const [presidentName, setPresidentName] = useState('');
   const [email, setEmail] = useState('');
+  const [facultyAdvisorName, setFacultyAdvisorName] = useState('');
+  const [justification, setJustification] = useState('');
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [bannerFile, setBannerFile] = useState<File | null>(null);
+  const [bannerPreview, setBannerPreview] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/schools').then(r => r.json()).then(d => setSchools(d.schools || []));
+    // Check for INFO_REQUESTED society
+    fetch('/api/societies/my-pending').then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.society) {
+        const s = d.society;
+        if (s.status === 'INFO_REQUESTED') {
+          setInfoRequested({ id: s.id, adminMessage: s.admin_message || '' });
+          // Pre-fill form with existing data
+          setName(s.name || '');
+          setDescription(s.description || '');
+          setCategory(s.category || '');
+          setMissionStatement(s.mission_statement || '');
+          setContactNumber(s.contact_number || '');
+          setPresidentName(s.president_name || '');
+          setFacultyAdvisorName(s.faculty_advisor_name || '');
+          setJustification(s.justification || '');
+          setEmail(s.contact_email || '');
+          if (s.school_id) setSchoolId(s.school_id);
+        }
+      }
+    }).catch(() => {});
     // Pre-fill email from localStorage
     try {
       const user = localStorage.getItem('user');
       if (user) {
         const parsed = JSON.parse(user);
-        setEmail(parsed.email || '');
-        setPresidentName(parsed.fullName || '');
+        if (!email) setEmail(parsed.email || '');
+        if (!presidentName) setPresidentName(parsed.fullName || '');
       }
     } catch {}
   }, []);
@@ -72,6 +97,26 @@ export default function RegisterSocietyPage() {
     setLogoFile(file);
     const reader = new FileReader();
     reader.onload = () => setLogoPreview(reader.result as string);
+    reader.readAsDataURL(file);
+    setError('');
+  };
+
+  const handleBannerSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 8 * 1024 * 1024) {
+      setError('Banner must be under 8MB');
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      setError('Banner must be an image file');
+      return;
+    }
+
+    setBannerFile(file);
+    const reader = new FileReader();
+    reader.onload = () => setBannerPreview(reader.result as string);
     reader.readAsDataURL(file);
     setError('');
   };
@@ -111,9 +156,31 @@ export default function RegisterSocietyPage() {
         // Non-fatal if logo upload fails
       }
 
-      // Step 2: Submit registration
-      const res = await fetch('/api/societies/register', {
-        method: 'POST',
+      // Step 1b: Upload banner if provided
+      let bannerUrl: string | undefined;
+      if (bannerFile) {
+        const formData = new FormData();
+        formData.append('file', bannerFile);
+        formData.append('type', 'banner');
+        formData.append('context', 'society-registration');
+
+        const uploadRes = await fetch('/api/upload/society-media', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (uploadRes.ok) {
+          const uploadData = await uploadRes.json();
+          bannerUrl = uploadData.data?.url;
+        }
+      }
+
+      // Step 2: Submit registration (or resubmit if INFO_REQUESTED)
+      const endpoint = infoRequested
+        ? `/api/societies/${infoRequested.id}/resubmit`
+        : '/api/societies/register';
+      const res = await fetch(endpoint, {
+        method: infoRequested ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name,
@@ -124,7 +191,10 @@ export default function RegisterSocietyPage() {
           contactNumber,
           presidentName,
           email,
+          facultyAdvisorName: facultyAdvisorName || undefined,
+          justification: justification || undefined,
           logoUrl,
+          bannerUrl,
         }),
       });
       const data = await res.json();
@@ -184,6 +254,18 @@ export default function RegisterSocietyPage() {
 
       {/* Form */}
       <form onSubmit={handleSubmit} className="px-5 py-6 space-y-5">
+        {infoRequested && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-4 rounded-xl bg-sky-500/10 border border-sky-500/20"
+          >
+            <p className="text-sm font-semibold text-sky-600 dark:text-sky-400 mb-1">Admin Feedback</p>
+            <p className="text-sm text-primary">{infoRequested.adminMessage}</p>
+            <p className="text-xs text-muted mt-2">Please update your application and resubmit.</p>
+          </motion.div>
+        )}
+
         {error && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
@@ -355,6 +437,81 @@ export default function RegisterSocietyPage() {
           />
         </div>
 
+        {/* Faculty Advisor */}
+        <div>
+          <label className="block text-sm font-medium text-primary mb-1.5">Faculty Advisor Name</label>
+          <input
+            type="text"
+            value={facultyAdvisorName}
+            onChange={(e) => setFacultyAdvisorName(e.target.value)}
+            placeholder="e.g., Dr. Ahmed Khan"
+            className="input-field w-full py-3 px-4 text-sm"
+            maxLength={200}
+          />
+          <p className="text-muted text-xs mt-1">Name of a faculty member who will advise this society</p>
+        </div>
+
+        {/* Justification */}
+        <div>
+          <label className="block text-sm font-medium text-primary mb-1.5">Justification</label>
+          <textarea
+            value={justification}
+            onChange={(e) => setJustification(e.target.value)}
+            placeholder="Why should this society be approved? How does it benefit the student body? What makes it unique from existing societies?"
+            rows={3}
+            className="input-field w-full py-3 px-4 text-sm resize-none"
+            maxLength={2000}
+          />
+          <p className="text-muted text-xs mt-1 text-right">{justification.length}/2000</p>
+        </div>
+
+        {/* Banner Image */}
+        <div>
+          <label className="block text-sm font-medium text-primary mb-1.5">Banner Image</label>
+          <div
+            className="w-full h-32 rounded-2xl flex items-center justify-center overflow-hidden cursor-pointer relative group"
+            style={{ background: 'var(--bg-input)', border: '2px dashed var(--border-card)' }}
+            onClick={() => document.getElementById('banner-input')?.click()}
+          >
+            {bannerPreview ? (
+              <>
+                <img src={bannerPreview} alt="Banner preview" className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <Upload className="w-5 h-5 text-white" />
+                </div>
+              </>
+            ) : (
+              <div className="flex flex-col items-center gap-1">
+                <ImageIcon className="w-6 h-6 text-muted" />
+                <span className="text-xs text-muted">Upload Banner</span>
+              </div>
+            )}
+          </div>
+          {bannerFile && (
+            <div className="flex items-center justify-between mt-2">
+              <div>
+                <p className="text-sm text-primary truncate">{bannerFile.name}</p>
+                <p className="text-xs text-muted">{(bannerFile.size / 1024).toFixed(0)} KB</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setBannerFile(null); setBannerPreview(null); }}
+                className="text-xs text-red-500 flex items-center gap-1"
+              >
+                <X className="w-3 h-3" /> Remove
+              </button>
+            </div>
+          )}
+          <input
+            id="banner-input"
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleBannerSelect}
+          />
+          <p className="text-muted text-xs mt-1">Optional. Max 8MB. Recommended: 1200x400px</p>
+        </div>
+
         <div className="pt-2">
           <button
             type="submit"
@@ -364,10 +521,10 @@ export default function RegisterSocietyPage() {
             {loading ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Submitting...
+                {infoRequested ? 'Resubmitting...' : 'Submitting...'}
               </>
             ) : (
-              'Submit Application'
+              infoRequested ? 'Resubmit Application' : 'Submit Application'
             )}
           </button>
           <p className="text-muted text-xs text-center mt-3">

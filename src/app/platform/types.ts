@@ -77,7 +77,7 @@ export interface Administrator {
 
 // ─── Societies ──────────────────────────────────────────────────────────────
 
-export type SocietyStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED' | 'DEACTIVATED';
+export type SocietyStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED' | 'DEACTIVATED' | 'INFO_REQUESTED';
 
 export interface AdminSociety {
   id: string;
@@ -95,6 +95,10 @@ export interface AdminSociety {
   event_count: string;
   storage_used_bytes: number | null;
   storage_quota_bytes: number | null;
+  faculty_advisor_name: string | null;
+  justification: string | null;
+  admin_message: string | null;
+  contact_email: string | null;
 }
 
 // ─── Events ─────────────────────────────────────────────────────────────────

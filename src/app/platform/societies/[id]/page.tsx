@@ -14,6 +14,7 @@ import {
   RotateCcw,
   ArrowRightLeft,
   Save,
+  MessageCircle,
 } from 'lucide-react';
 import { StatusBadge } from '../../_components/StatusBadge';
 import { PageLoader, ErrorState } from '../../_components/Shared';
@@ -42,6 +43,7 @@ export default function SocietyDetailPage() {
   const [showSuspendModal, setShowSuspendModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showStorageModal, setShowStorageModal] = useState(false);
+  const [showInfoRequestModal, setShowInfoRequestModal] = useState(false);
   const [reason, setReason] = useState('');
   const [targetUserId, setTargetUserId] = useState('');
   const [storageLimitMB, setStorageLimitMB] = useState('');
@@ -80,6 +82,18 @@ export default function SocietyDetailPage() {
     try {
       await patchSociety(id, 'REJECTED', reason);
       setShowRejectModal(false);
+      setReason('');
+      await load();
+    } catch (err: unknown) { alert(err instanceof Error ? err.message : 'Failed'); }
+    finally { setActionLoading(null); }
+  };
+
+  const handleRequestInfo = async () => {
+    if (!reason.trim()) return;
+    setActionLoading('info-request');
+    try {
+      await patchSociety(id, 'INFO_REQUESTED', reason);
+      setShowInfoRequestModal(false);
       setReason('');
       await load();
     } catch (err: unknown) { alert(err instanceof Error ? err.message : 'Failed'); }
@@ -172,7 +186,7 @@ export default function SocietyDetailPage() {
       <div className="card p-4">
         <h2 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>Actions</h2>
         <div className="flex flex-wrap gap-2">
-          {society.status === 'PENDING' && (
+          {(society.status === 'PENDING' || society.status === 'INFO_REQUESTED') && (
             <>
               <button onClick={handleApprove} disabled={!!actionLoading}
                 className="btn-primary text-sm py-2.5 px-4 flex items-center gap-2 disabled:opacity-50">
@@ -181,6 +195,10 @@ export default function SocietyDetailPage() {
               <button onClick={() => { setShowRejectModal(true); setReason(''); }} disabled={!!actionLoading}
                 className="bg-red-500 hover:bg-red-600 text-white text-sm py-2.5 px-4 rounded-xl font-semibold flex items-center gap-2 disabled:opacity-50 transition-colors">
                 <XCircle className="w-4 h-4" /> Reject
+              </button>
+              <button onClick={() => { setShowInfoRequestModal(true); setReason(''); }} disabled={!!actionLoading}
+                className="bg-sky-500 hover:bg-sky-600 text-white text-sm py-2.5 px-4 rounded-xl font-semibold flex items-center gap-2 disabled:opacity-50 transition-colors">
+                <MessageCircle className="w-4 h-4" /> Request More Info
               </button>
             </>
           )}
@@ -220,7 +238,24 @@ export default function SocietyDetailPage() {
             <InfoRow label="Created By" value={society.created_by_name || '—'} />
             <InfoRow label="Created" value={new Date(society.created_at).toLocaleDateString()} />
             {society.president_name && <InfoRow label="President" value={society.president_name} />}
+            {society.faculty_advisor_name && (
+              <InfoRow label="Faculty Advisor" value={society.faculty_advisor_name} />
+            )}
+            {society.justification && (
+              <InfoRow label="Justification" value={society.justification} />
+            )}
+            {society.contact_email && (
+              <InfoRow label="Contact Email" value={society.contact_email} />
+            )}
           </div>
+          {society.status === 'INFO_REQUESTED' && society.admin_message && (
+            <div className="p-3 rounded-xl bg-sky-500/10 border border-sky-500/20">
+              <p className="text-xs font-semibold text-sky-600 dark:text-sky-400 mb-1">Admin Message</p>
+              <p className="text-sm" style={{ color: 'var(--text-primary)' }}>
+                {society.admin_message}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Stats */}
@@ -280,6 +315,25 @@ export default function SocietyDetailPage() {
             <button disabled={!reason.trim() || actionLoading === 'reject'} onClick={handleReject}
               className="bg-red-500 hover:bg-red-600 text-white text-sm py-2.5 px-4 rounded-xl font-semibold disabled:opacity-50 transition-colors">
               {actionLoading === 'reject' ? 'Rejecting...' : 'Reject'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* Request Info Modal */}
+      {showInfoRequestModal && (
+        <Modal title="Request More Information" onClose={() => setShowInfoRequestModal(false)}>
+          <p className="text-xs mb-3" style={{ color: 'var(--text-secondary)' }}>
+            Ask the applicant to provide additional information before you can approve their society.
+          </p>
+          <textarea value={reason} onChange={(e) => setReason(e.target.value)}
+            placeholder="What additional information do you need? e.g., 'Please provide a faculty advisor letter and a detailed budget plan.'"
+            rows={4} className="input-field mb-4 resize-none" />
+          <div className="flex justify-end gap-2">
+            <button onClick={() => setShowInfoRequestModal(false)} className="btn-secondary text-sm py-2.5 px-4">Cancel</button>
+            <button disabled={!reason.trim() || actionLoading === 'info-request'} onClick={handleRequestInfo}
+              className="bg-sky-500 hover:bg-sky-600 text-white text-sm py-2.5 px-4 rounded-xl font-semibold disabled:opacity-50 transition-colors">
+              {actionLoading === 'info-request' ? 'Sending...' : 'Send Request'}
             </button>
           </div>
         </Modal>

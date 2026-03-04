@@ -21,6 +21,7 @@ import type { AdminSociety, SocietyStatus } from '../types';
 const STATUS_TABS: { label: string; value: SocietyStatus | 'ALL' }[] = [
   { label: 'All', value: 'ALL' },
   { label: 'Pending', value: 'PENDING' },
+  { label: 'Info Requested', value: 'INFO_REQUESTED' },
   { label: 'Approved', value: 'APPROVED' },
   { label: 'Rejected', value: 'REJECTED' },
   { label: 'Suspended', value: 'SUSPENDED' },
@@ -169,7 +170,7 @@ export default function SocietiesPage() {
 
                 {/* Actions */}
                 <div className="flex items-center gap-1.5 shrink-0">
-                  {soc.status === 'PENDING' && (
+                  {(soc.status === 'PENDING' || soc.status === 'INFO_REQUESTED') && (
                     <>
                       <button
                         disabled={actionLoading === soc.id}
