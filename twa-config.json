@@ -1,0 +1,39 @@
+{
+  "_doc": "TWA (Trusted Web Activity) configuration for Google Play Store distribution",
+
+  "android_app": {
+    "package_name": "com.nust.events",
+    "app_name": "NUST Events",
+    "display_name": "NUST Events",
+    "version_name": "1.0.0",
+    "version_code": 1
+  },
+
+  "pwa_config": {
+    "host": "REPLACE_WITH_YOUR_DOMAIN",
+    "start_url": "/home",
+    "theme_color": "#f97316",
+    "navigation_color": "#0a0a0a",
+    "background_color": "#0a0a0a",
+    "display_mode": "standalone",
+    "orientation": "portrait",
+    "icon_512": "/icons/icon-512.png",
+    "maskable_icon_512": "/icons/icon-maskable-512.png",
+    "splash_fade_duration_ms": 300
+  },
+
+  "setup_steps": [
+    "1. Deploy the web app to production with HTTPS enabled",
+    "2. Verify manifest.json is accessible at https://YOUR_DOMAIN/manifest.json",
+    "3. Generate Android signing key: keytool -genkey -v -keystore nust-events.keystore -alias nust-events -keyalg RSA -keysize 2048 -validity 10000",
+    "4. Get SHA-256 fingerprint: keytool -list -v -keystore nust-events.keystore | grep SHA256",
+    "5. Update public/.well-known/assetlinks.json with the SHA-256 fingerprint",
+    "6. Option A (Recommended): Use https://www.pwabuilder.com/ — paste your URL, generate Android package",
+    "7. Option B: Use Bubblewrap CLI — npm i -g @nicedoc/nicedoc-cli then bubblewrap init --manifest=https://YOUR_DOMAIN/manifest.json",
+    "8. Build the Android App Bundle (AAB)",
+    "9. Upload to Google Play Console → Create new app → Upload AAB",
+    "10. Complete store listing, content rating, pricing → Submit for review"
+  ],
+
+  "digital_asset_links_note": "The file at public/.well-known/assetlinks.json must be served at https://YOUR_DOMAIN/.well-known/assetlinks.json with Content-Type: application/json and no redirects."
+}

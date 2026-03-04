@@ -154,4 +154,22 @@
     width: 24px !important;
     border-radius: 4px !important;
   }
+
+  /* QR scanner scanning line animation */
+  @keyframes scan-line {
+    0%, 100% { top: 0; }
+    50% { top: calc(100% - 2px); }
+  }
+  .animate-scan-line {
+    animation: scan-line 2s ease-in-out infinite;
+    position: absolute;
+  }
+
+  /* Safe area top padding for notched devices */
+  .safe-top {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
 }

@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Ticket, QrCode, Calendar, MapPin, Clock, Loader2, ChevronRight, CheckCircle2, XCircle } from 'lucide-react';
+import { Ticket, QrCode, Calendar, MapPin, Clock, Loader2, ChevronRight, CheckCircle2, XCircle, WifiOff, Download } from 'lucide-react';
 import Link from 'next/link';
+import { getCachedTickets, type CachedTicket } from '@/lib/ticket-cache';
 
 interface TicketData {
   id: string;
@@ -29,17 +30,121 @@ export default function TicketsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'upcoming' | 'past'>('upcoming');
+  const [isOffline, setIsOffline] = useState(false);
+  const [cachedTickets, setCachedTickets] = useState<CachedTicket[]>([]);
 
+  // Track online/offline state
   useEffect(() => {
-    fetch('/api/tickets')
-      .then(r => {
-        if (!r.ok) throw new Error('Failed to load tickets');
-        return r.json();
-      })
-      .then(data => setTickets(Array.isArray(data) ? data : []))
-      .catch(err => setError(err.message))
-      .finally(() => setLoading(false));
+    const update = () => setIsOffline(!navigator.onLine);
+    update();
+    window.addEventListener('online', update);
+    window.addEventListener('offline', update);
+    return () => {
+      window.removeEventListener('online', update);
+      window.removeEventListener('offline', update);
+    };
   }, []);
+
+  // Fetch tickets online, use cached offline
+  useEffect(() => {
+    const loadTickets = async () => {
+      if (!navigator.onLine) {
+        // Load from IndexedDB when offline
+        try {
+          const cached = await getCachedTickets();
+          setCachedTickets(cached);
+        } catch {}
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const r = await fetch('/api/tickets');
+        if (!r.ok) throw new Error('Failed to load tickets');
+        const data = await r.json();
+        setTickets(Array.isArray(data) ? data : []);
+      } catch (err: any) {
+        // Try cached tickets as fallback
+        try {
+          const cached = await getCachedTickets();
+          if (cached.length > 0) {
+            setCachedTickets(cached);
+            setIsOffline(true);
+          } else {
+            setError(err.message);
+          }
+        } catch {
+          setError(err.message);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadTickets();
+  }, []);
+
+  // If we're showing cached offline tickets
+  if (isOffline && cachedTickets.length > 0 && tickets.length === 0) {
+    return (
+      <div className="min-h-screen" style={{ background: 'var(--bg-primary)' }}>
+        {/* Header */}
+        <div className="sticky top-0 z-30 backdrop-blur-xl" style={{ background: 'var(--bg-nav)', borderBottom: '1px solid var(--border-card)' }}>
+          <div className="px-5 pt-12 pb-4">
+            <div className="flex items-center gap-2 mb-4">
+              <h1 className="text-xl font-bold text-primary">My Tickets</h1>
+              <span className="bg-amber-500/10 text-amber-500 text-[10px] px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
+                <WifiOff size={10} />
+                Offline
+              </span>
+            </div>
+            <p className="text-xs text-muted">Showing {cachedTickets.length} cached ticket{cachedTickets.length !== 1 ? 's' : ''}</p>
+          </div>
+        </div>
+
+        <div className="px-5 py-4 space-y-3">
+          {cachedTickets.map((ticket, i) => (
+            <motion.div
+              key={ticket.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.05 }}
+            >
+              <Link href={`/tickets/${ticket.id}`}>
+                <div className="card p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="w-16 h-16 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'var(--bg-input)' }}>
+                      <Ticket className="w-6 h-6 text-brand-500" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-primary font-semibold text-sm truncate">{ticket.event_title}</h3>
+                      <p className="text-muted text-xs mt-0.5">{ticket.society_name}</p>
+                      <div className="flex items-center gap-3 mt-2 text-muted text-xs">
+                        <span className="flex items-center gap-1">
+                          <Calendar className="w-3 h-3" />
+                          {new Date(ticket.event_date).toLocaleDateString('en-PK', { month: 'short', day: 'numeric' })}
+                        </span>
+                        {ticket.event_venue && (
+                          <span className="flex items-center gap-1">
+                            <MapPin className="w-3 h-3" />
+                            {ticket.event_venue}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {ticket.qr_data && <QrCode className="w-5 h-5 text-brand-500" />}
+                      <WifiOff className="w-4 h-4 text-amber-500" />
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   const now = new Date();
   const upcomingTickets = tickets.filter(t =>

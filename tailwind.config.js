@@ -49,6 +49,22 @@ module.exports = {
         'nav-light': '0 -4px 30px rgba(0, 0, 0, 0.08)',
         'nav-dark': '0 -4px 30px rgba(0, 0, 0, 0.5)',
       },
+      borderWidth: {
+        '3': '3px',
+      },
+      keyframes: {
+        'slide-in-from-bottom-2': {
+          '0%': { transform: 'translateY(8px)', opacity: '0' },
+          '100%': { transform: 'translateY(0)', opacity: '1' },
+        },
+        'slide-in-from-top-4': {
+          '0%': { transform: 'translateY(-16px)', opacity: '0' },
+          '100%': { transform: 'translateY(0)', opacity: '1' },
+        },
+      },
+      animation: {
+        'in': 'slide-in-from-bottom-2 0.3s ease-out',
+      },
     },
   },
   plugins: [],

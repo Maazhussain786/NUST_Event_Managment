@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Calendar, MapPin, Clock, Download, Loader2, AlertTriangle, XCircle } from 'lucide-react';
+import { ArrowLeft, Calendar, MapPin, Clock, Download, Loader2, AlertTriangle, XCircle, WifiOff } from 'lucide-react';
 import { useRouter, useParams } from 'next/navigation';
 import QRCode from 'qrcode';
+import { cacheTicket, getCachedTicket, type CachedTicket } from '@/lib/ticket-cache';
 
 interface TicketDetail {
   id: string;
@@ -47,16 +48,75 @@ export default function TicketDetailPage() {
         setTicket(data.ticket);
 
         // Generate QR code image if qr_data exists
+        let qrUrl: string | null = null;
         if (data.ticket.qr_data) {
-          const url = await QRCode.toDataURL(data.ticket.qr_data, {
+          qrUrl = await QRCode.toDataURL(data.ticket.qr_data, {
             width: 300,
             margin: 2,
             color: { dark: '#000000', light: '#ffffff' },
             errorCorrectionLevel: 'M',
           });
-          setQrImageUrl(url);
+          setQrImageUrl(qrUrl);
+        }
+
+        // Cache ticket for offline access (only approved tickets with QR)
+        if (data.ticket.status === 'APPROVED' && data.ticket.qr_data) {
+          cacheTicket({
+            id: data.ticket.id,
+            event_id: data.ticket.event_id || '',
+            event_title: data.ticket.event_title,
+            event_date: data.ticket.event_start,
+            event_venue: data.ticket.event_venue || '',
+            event_banner_url: data.ticket.event_banner || undefined,
+            society_name: data.ticket.society_name,
+            ticket_number: data.ticket.ticket_number,
+            status: data.ticket.status,
+            qr_data: data.ticket.qr_data,
+            qr_image_data_url: qrUrl || undefined,
+            attendee_name: data.ticket.attendee_name,
+            attendee_email: '',
+            cached_at: Date.now(),
+          }).catch(() => {});
         }
       } catch (err) {
+        // Try offline cache as fallback
+        if (!navigator.onLine) {
+          try {
+            const cached = await getCachedTicket(params.id as string);
+            if (cached) {
+              setTicket({
+                id: cached.id,
+                ticket_number: cached.ticket_number,
+                status: cached.status,
+                purchased_at: '',
+                event_title: cached.event_title,
+                event_venue: cached.event_venue,
+                event_start: cached.event_date,
+                event_end: cached.event_date,
+                event_banner: cached.event_banner_url || null,
+                society_name: cached.society_name,
+                attendee_name: cached.attendee_name,
+                qr_data: cached.qr_data,
+                is_paid: false,
+                is_cancelled: false,
+                source_type: 'ticket',
+                scanned_at: null,
+              });
+              if (cached.qr_image_data_url) {
+                setQrImageUrl(cached.qr_image_data_url);
+              } else if (cached.qr_data) {
+                const url = await QRCode.toDataURL(cached.qr_data, {
+                  width: 300, margin: 2,
+                  color: { dark: '#000000', light: '#ffffff' },
+                  errorCorrectionLevel: 'M',
+                });
+                setQrImageUrl(url);
+              }
+              setLoading(false);
+              return;
+            }
+          } catch {}
+        }
         setError(err instanceof Error ? err.message : 'Failed to load ticket');
       } finally {
         setLoading(false);

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import {
   ScanLine, UserCheck, Users, Search, QrCode,
   Clock, Check, AlertTriangle,
@@ -176,14 +177,17 @@ export default function EntryControlPage() {
             </div>
           </div>
 
-          {/* QR scanner placeholder */}
-          <div className="card p-4 text-center">
-            <QrCode size={48} className="mx-auto text-muted mb-2" />
-            <p className="text-sm text-secondary font-medium">QR Scanner</p>
-            <p className="text-xs text-muted">
-              Use the event check-in API endpoint for QR-based scanning via the mobile app
+          {/* QR scanner link */}
+          <Link
+            href={`/scan`}
+            className="card p-4 text-center block hover:opacity-80 transition-opacity"
+          >
+            <QrCode size={48} className="mx-auto text-brand-500 mb-2" />
+            <p className="text-sm text-primary font-medium">QR Scanner</p>
+            <p className="text-xs text-muted mt-1">
+              Open camera scanner to check in attendees via QR code
             </p>
-          </div>
+          </Link>
 
           {/* Recent check-ins */}
           <div className="card p-4">
