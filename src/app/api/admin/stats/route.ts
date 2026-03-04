@@ -39,13 +39,13 @@ export async function GET() {
                AND t.purchased_at >= CURRENT_DATE`),
       query(`SELECT COALESCE(SUM(storage_used_bytes), 0) as used,
                     COALESCE(SUM(storage_quota_bytes), 0) as quota
-             FROM v_society_storage_usage`),
+             FROM v_society_storage_usage`).catch(() => ({ rows: [{ used: '0', quota: '0' }] })),
       query(`SELECT COUNT(*) as count FROM audit_logs
              WHERE action = 'QR_SCANNED'
-               AND created_at >= CURRENT_DATE`),
+               AND created_at >= CURRENT_DATE`).catch(() => ({ rows: [{ count: '0' }] })),
       query(`SELECT COUNT(*) as count FROM audit_logs
              WHERE action IN ('SOCIETY_SUSPENDED', 'MEMBER_SUSPENDED')
-               AND created_at >= CURRENT_DATE`),
+               AND created_at >= CURRENT_DATE`).catch(() => ({ rows: [{ count: '0' }] })),
     ]);
 
     return NextResponse.json({

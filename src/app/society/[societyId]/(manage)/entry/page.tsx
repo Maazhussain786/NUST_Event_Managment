@@ -1,252 +1,108 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
-  ScanLine, UserCheck, Users, Search, QrCode,
-  Clock, Check, AlertTriangle,
+  ScanLine, Clock, ChevronRight, MapPin, Users,
 } from 'lucide-react';
-import { fetchEntryStats, manualCheckIn, fetchSocietyEvents, SocietyApiError } from '../../../api';
-import { PageLoader, ErrorState, EmptyState, StatCard } from '../../../_components/Shared';
-import type { EntryStats, AttendanceRecord, SocietyEvent } from '../../../types';
+import { fetchSocietyEvents, SocietyApiError } from '../../../api';
+import { PageLoader, ErrorState, EmptyState } from '../../../_components/Shared';
+import type { SocietyEvent } from '../../../types';
 
+/**
+ * Entry Control — Event Picker
+ *
+ * Lists events that support entry control (Upcoming + Ongoing).
+ * Each event links to its own entry management page at:
+ *   /society/[id]/events/[eventId]/entry
+ */
 export default function EntryControlPage() {
   const { societyId } = useParams<{ societyId: string }>();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [events, setEvents] = useState<SocietyEvent[]>([]);
-  const [selectedEvent, setSelectedEvent] = useState(searchParams.get('eventId') || '');
-  const [stats, setStats] = useState<EntryStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [manualEmail, setManualEmail] = useState('');
-  const [checking, setChecking] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
 
-  // Load events for dropdown
   useEffect(() => {
-    fetchSocietyEvents(societyId, 'UPCOMING')
-      .then(evts => {
-        // Also fetch ongoing
-        return fetchSocietyEvents(societyId, 'ONGOING').then(ongoing => [...ongoing, ...evts]);
-      })
-      .then(allEvents => {
-        setEvents(allEvents);
-        if (!selectedEvent && allEvents.length > 0) {
-          setSelectedEvent(allEvents[0].id);
-        }
-      })
-      .catch(() => {});
-  }, [societyId, selectedEvent]);
-
-  const loadStats = useCallback(async () => {
-    if (!selectedEvent) { setLoading(false); return; }
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await fetchEntryStats(societyId, selectedEvent);
-      setStats(data);
-    } catch (err) {
-      if (err instanceof SocietyApiError) {
-        if (err.status === 401) { router.push('/login'); return; }
-        if (err.status === 403) { setError('Access denied'); return; }
-        setError(err.message);
-      } else {
-        setError('Failed to load entry data');
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [societyId, selectedEvent, router]);
-
-  useEffect(() => { loadStats(); }, [loadStats]);
-
-  const handleManualCheckIn = async () => {
-    if (!manualEmail.trim() || !selectedEvent) return;
-    try {
-      setChecking(true);
-      await manualCheckIn(societyId, { eventId: selectedEvent, userEmail: manualEmail.trim() });
-      setToast('Check-in successful!');
-      setManualEmail('');
-      loadStats();
-    } catch (err) {
-      if (err instanceof SocietyApiError) {
-        if (err.status === 409) {
-          setToast('Already checked in');
+    async function load() {
+      try {
+        setLoading(true);
+        setError(null);
+        const [upcoming, ongoing] = await Promise.all([
+          fetchSocietyEvents(societyId, 'UPCOMING'),
+          fetchSocietyEvents(societyId, 'ONGOING'),
+        ]);
+        setEvents([...ongoing, ...upcoming]);
+      } catch (err) {
+        if (err instanceof SocietyApiError) {
+          if (err.status === 401) { router.push('/login'); return; }
+          if (err.status === 403) { setError('Access denied'); return; }
+          setError(err.message);
         } else {
-          setToast(err.message);
+          setError('Failed to load events');
         }
-      } else {
-        setToast('Check-in failed');
+      } finally {
+        setLoading(false);
       }
-    } finally {
-      setChecking(false);
     }
-  };
+    load();
+  }, [societyId, router]);
 
-  const filteredScans = stats?.recentScans.filter(r =>
-    !searchQuery || r.user_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    r.user_email.toLowerCase().includes(searchQuery.toLowerCase())
-  ) || [];
-
-  useEffect(() => {
-    if (toast) { const t = setTimeout(() => setToast(null), 3000); return () => clearTimeout(t); }
-  }, [toast]);
+  if (loading) return <PageLoader />;
+  if (error) return <ErrorState message={error} onRetry={() => window.location.reload()} />;
 
   return (
     <div className="space-y-4">
-      {/* Event selector */}
-      <div className="card p-4">
-        <label className="text-xs font-medium text-muted mb-2 block">Select Event</label>
-        <select
-          className="input-field"
-          value={selectedEvent}
-          onChange={e => setSelectedEvent(e.target.value)}
-        >
-          <option value="">Choose an event...</option>
-          {events.map(evt => (
-            <option key={evt.id} value={evt.id}>
-              {evt.title} ({evt.status})
-            </option>
-          ))}
-        </select>
+      <div>
+        <h2 className="text-sm font-semibold text-primary mb-1">Entry Control</h2>
+        <p className="text-xs text-muted">Select an event to manage check-ins and QR scanning</p>
       </div>
 
-      {!selectedEvent ? (
-        <EmptyState message="Select an event to manage entry" />
-      ) : loading ? (
-        <PageLoader />
-      ) : error ? (
-        <ErrorState message={error} onRetry={loadStats} />
-      ) : stats ? (
-        <>
-          {/* Stats */}
-          <div className="grid grid-cols-3 gap-4">
-            <StatCard label="Registered" value={stats.totalRegistered} icon={Users} accent="blue" />
-            <StatCard label="Checked In" value={stats.totalCheckedIn} icon={UserCheck} accent="green" />
-            <StatCard label="Ticketed" value={stats.totalTicketed} icon={ScanLine} accent="purple" />
-          </div>
-
-          {/* Check-in progress */}
-          <div className="card p-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-primary">Check-in Progress</span>
-              <span className="text-xs text-muted">
-                {stats.totalCheckedIn} / {stats.totalRegistered + stats.totalTicketed}
-              </span>
-            </div>
-            <div className="h-3 rounded-full bg-secondary overflow-hidden">
-              <div
-                className="h-full rounded-full bg-green-500 transition-all"
-                style={{
-                  width: `${(stats.totalRegistered + stats.totalTicketed) > 0
-                    ? (stats.totalCheckedIn / (stats.totalRegistered + stats.totalTicketed) * 100)
-                    : 0}%`
-                }}
-              />
-            </div>
-          </div>
-
-          {/* Manual check-in */}
-          <div className="card p-4">
-            <h3 className="text-sm font-semibold text-primary mb-3 flex items-center gap-2">
-              <UserCheck size={16} /> Manual Check-in
-            </h3>
-            <div className="flex gap-2">
-              <input
-                className="input-field flex-1"
-                placeholder="Enter attendee email..."
-                value={manualEmail}
-                onChange={e => setManualEmail(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleManualCheckIn()}
-              />
-              <button
-                onClick={handleManualCheckIn}
-                disabled={checking || !manualEmail.trim()}
-                className="btn-primary text-sm px-4 py-2 flex items-center gap-1.5"
-              >
-                {checking ? (
-                  <Clock size={16} className="animate-spin" />
-                ) : (
-                  <Check size={16} />
-                )}
-                Check In
-              </button>
-            </div>
-          </div>
-
-          {/* QR scanner link */}
-          <Link
-            href={`/scan`}
-            className="card p-4 text-center block hover:opacity-80 transition-opacity"
-          >
-            <QrCode size={48} className="mx-auto text-brand-500 mb-2" />
-            <p className="text-sm text-primary font-medium">QR Scanner</p>
-            <p className="text-xs text-muted mt-1">
-              Open camera scanner to check in attendees via QR code
-            </p>
-          </Link>
-
-          {/* Recent check-ins */}
-          <div className="card p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-primary">Recent Check-ins</h3>
-              <div className="relative">
-                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
-                <input
-                  className="input-field pl-8 text-xs w-48"
-                  placeholder="Search..."
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                />
+      {events.length === 0 ? (
+        <EmptyState message="No upcoming or ongoing events to manage entry for" />
+      ) : (
+        <div className="space-y-3">
+          {events.map(evt => (
+            <Link
+              key={evt.id}
+              href={`/society/${societyId}/events/${evt.id}/entry`}
+              className="card p-4 flex items-center gap-4 hover:border-brand-500/30 transition-colors border border-transparent"
+            >
+              <div className="w-12 h-12 rounded-xl bg-brand-500/10 flex items-center justify-center flex-shrink-0">
+                <ScanLine size={24} className="text-brand-500" />
               </div>
-            </div>
-
-            {filteredScans.length === 0 ? (
-              <EmptyState message="No check-ins yet" />
-            ) : (
-              <div className="space-y-2">
-                {filteredScans.map(record => (
-                  <div key={record.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-secondary/50">
-                    {record.user_avatar ? (
-                      <img src={record.user_avatar} alt="" className="h-8 w-8 rounded-full object-cover" />
-                    ) : (
-                      <div className="h-8 w-8 rounded-full bg-brand-500/10 text-brand-500 flex items-center justify-center text-xs font-bold">
-                        {record.user_name[0]}
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-primary truncate">{record.user_name}</p>
-                      <p className="text-xs text-muted">{record.user_email}</p>
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium
-                        ${record.check_in_method === 'QR'
-                          ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400'
-                          : 'bg-blue-500/10 text-blue-600 dark:text-blue-400'}`}
-                      >
-                        {record.check_in_method}
-                      </span>
-                      <p className="text-xs text-muted mt-0.5">
-                        {new Date(record.check_in_time).toLocaleTimeString('en-US', {
-                          hour: 'numeric', minute: '2-digit',
-                        })}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-primary truncate">{evt.title}</p>
+                <div className="flex items-center gap-3 mt-1">
+                  <span className="text-xs text-muted flex items-center gap-1">
+                    <Clock size={12} />
+                    {new Date(evt.event_start).toLocaleDateString('en-US', {
+                      month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+                    })}
+                  </span>
+                  {evt.venue && (
+                    <span className="text-xs text-muted flex items-center gap-1">
+                      <MapPin size={12} /> {evt.venue}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 mt-1.5">
+                  <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
+                    evt.status === 'ONGOING'
+                      ? 'bg-green-500/10 text-green-600 dark:text-green-400'
+                      : 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                  }`}>
+                    {evt.status}
+                  </span>
+                  <span className="text-xs text-muted flex items-center gap-1">
+                    <Users size={12} /> {evt.participants_count} registered
+                  </span>
+                </div>
               </div>
-            )}
-          </div>
-        </>
-      ) : null}
-
-      {/* Toast */}
-      {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[70] bg-surface-900 dark:bg-surface-100 text-white dark:text-surface-900 text-sm px-4 py-2 rounded-lg shadow-lg">
-          {toast}
+              <ChevronRight size={18} className="text-muted flex-shrink-0" />
+            </Link>
+          ))}
         </div>
       )}
     </div>

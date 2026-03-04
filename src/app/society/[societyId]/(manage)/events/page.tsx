@@ -6,6 +6,7 @@ import {
   Calendar, Plus, Eye, Users as UsersIcon,
   Clock, MapPin, Ticket, Filter, Edit3, Trash2,
   XCircle, MoreHorizontal, Loader2, X, Upload,
+  ScanLine,
 } from 'lucide-react';
 import {
   fetchSocietyEvents, createSocietyEvent, editEvent, cancelEvent,
@@ -280,6 +281,14 @@ export default function SocietyEventsPage() {
                     )}
                   </div>
                 </div>
+                {(event.status === 'ONGOING' || event.status === 'UPCOMING') && (
+                  <button
+                    onClick={() => router.push(`/society/${societyId}/events/${event.id}/entry`)}
+                    className="btn-ghost text-xs px-2 py-1 flex items-center gap-1 text-brand-500"
+                  >
+                    <ScanLine size={14} /> Entry
+                  </button>
+                )}
                 <button
                   onClick={() => router.push(`/society/${societyId}/participants?eventId=${event.id}`)}
                   className="btn-ghost text-xs px-2 py-1 flex items-center gap-1"
