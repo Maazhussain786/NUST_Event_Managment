@@ -2,12 +2,12 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Mail, Lock, User, Eye, EyeOff, UserPlus, Loader2 } from 'lucide-react';
+import { Mail, Lock, User, Eye, EyeOff, UserPlus } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 export default function RegisterPage() {
-  const router = useRouter();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -31,7 +31,6 @@ export default function RegisterPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      // Store user info and go straight to home (OTP disabled for testing)
       if (data.user) {
         localStorage.setItem('user', JSON.stringify(data.user));
       }
@@ -44,70 +43,103 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 relative overflow-hidden"
-         style={{ background: 'var(--bg-primary)' }}>
+    <div className="min-h-screen flex flex-col items-center justify-center px-6 relative overflow-hidden bg-background">
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-80 h-80 bg-brand-500/8 rounded-full blur-[100px] pointer-events-none" />
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
+        transition={{ duration: 0.5, ease: [0.25, 0.1, 0.25, 1] }}
         className="w-full max-w-sm relative z-10"
       >
         <div className="text-center mb-10">
           <div className="w-16 h-16 bg-brand-500 rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-lg shadow-brand-500/25">
             <span className="text-2xl font-extrabold text-white">N</span>
           </div>
-          <h1 className="text-2xl font-extrabold text-primary">Create Account</h1>
-          <p className="text-secondary mt-1.5 text-sm">Join the NUST Events community</p>
+          <h1 className="text-display text-foreground">Create Account</h1>
+          <p className="text-body-sm text-muted-foreground mt-1.5">Join the NUST Events community</p>
         </div>
 
-        <form onSubmit={handleRegister} className="space-y-4">
+        <form onSubmit={handleRegister} className="space-y-4" noValidate>
           {error && (
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/50 text-red-600 dark:text-red-400 px-4 py-3 rounded-2xl text-sm"
+              className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-xl text-sm"
+              role="alert"
+              aria-live="polite"
             >
               {error}
             </motion.div>
           )}
 
-          <div className="relative">
-            <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted" />
-            <input type="text" placeholder="Full Name" value={fullName} onChange={(e) => setFullName(e.target.value)} className="input-field pl-12" required />
-          </div>
+          <Input
+            icon={User}
+            type="text"
+            label="Full Name"
+            placeholder="Your full name"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            required
+            autoComplete="name"
+          />
 
-          <div className="relative">
-            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted" />
-            <input type="email" placeholder="your.email@seecs.edu.pk" value={email} onChange={(e) => setEmail(e.target.value)} className="input-field pl-12" required />
-          </div>
+          <Input
+            icon={Mail}
+            type="email"
+            label="Email"
+            placeholder="your.email@seecs.edu.pk"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            autoComplete="email"
+          />
 
-          <div className="relative">
-            <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted" />
-            <input
-              type={showPassword ? 'text' : 'password'} placeholder="Password (min 8 chars)" value={password}
-              onChange={(e) => setPassword(e.target.value)} className="input-field pl-12 pr-12" required minLength={8}
-            />
-            <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-muted hover:text-primary transition-colors">
-              {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-            </button>
-          </div>
+          <Input
+            icon={Lock}
+            type={showPassword ? 'text' : 'password'}
+            label="Password"
+            placeholder="Min 8 characters"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            minLength={8}
+            autoComplete="new-password"
+            endIcon={
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff className="w-[18px] h-[18px]" /> : <Eye className="w-[18px] h-[18px]" />}
+              </button>
+            }
+          />
 
-          <div className="relative">
-            <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted" />
-            <input type={showPassword ? 'text' : 'password'} placeholder="Confirm Password" value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)} className="input-field pl-12" required />
-          </div>
+          <Input
+            icon={Lock}
+            type={showPassword ? 'text' : 'password'}
+            label="Confirm Password"
+            placeholder="Re-enter your password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            required
+            autoComplete="new-password"
+            error={confirmPassword && password !== confirmPassword ? 'Passwords do not match' : undefined}
+          />
 
-          <button type="submit" disabled={loading} className="btn-primary w-full flex items-center justify-center gap-2 disabled:opacity-50">
-            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><UserPlus className="w-5 h-5" /> Create Account</>}
-          </button>
+          <Button type="submit" loading={loading} className="w-full" size="lg">
+            <UserPlus className="w-5 h-5" />
+            Create Account
+          </Button>
         </form>
 
-        <p className="text-center text-secondary mt-8 text-sm">
+        <p className="text-center text-muted-foreground mt-8 text-sm">
           Already have an account?{' '}
-          <Link href="/login" className="text-brand-500 hover:text-brand-600 font-semibold transition-colors">Sign In</Link>
+          <Link href="/login" className="text-brand-600 dark:text-brand-400 hover:text-brand-700 font-semibold transition-colors">
+            Sign In
+          </Link>
         </p>
       </motion.div>
     </div>

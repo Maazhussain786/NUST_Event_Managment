@@ -119,8 +119,12 @@ export async function POST(
 
     // Verify event belongs to society
     const eventCheck = await client.query(
-      `SELECT id, title, society_id, is_paid FROM events
-       WHERE id = $1 AND society_id = $2`,
+      `SELECT e.id, e.title, e.society_id, e.is_paid, e.status, e.is_cancelled, e.event_end,
+              s.status AS society_status
+       FROM events e
+       JOIN societies s ON s.id = e.society_id
+       WHERE e.id = $1 AND e.society_id = $2
+       FOR UPDATE OF e`,
       [eventId, societyId]
     );
     if (eventCheck.rows.length === 0) {
@@ -128,9 +132,23 @@ export async function POST(
       return NextResponse.json({ error: 'Event not found' }, { status: 404 });
     }
 
+    const event = eventCheck.rows[0];
+    if (event.society_status !== 'APPROVED') {
+      await client.query('ROLLBACK');
+      return NextResponse.json({ error: 'Society is deactivated' }, { status: 409 });
+    }
+    if (event.is_cancelled || event.status === 'CANCELLED') {
+      await client.query('ROLLBACK');
+      return NextResponse.json({ error: 'Event is cancelled' }, { status: 409 });
+    }
+    if (event.event_end && new Date(event.event_end) < new Date()) {
+      await client.query('ROLLBACK');
+      return NextResponse.json({ error: 'Event has ended — check-in is closed' }, { status: 409 });
+    }
+
     // Find user by email
     const userResult = await client.query(
-      `SELECT id, full_name, email FROM users WHERE LOWER(email) = LOWER($1)`,
+      `SELECT id, full_name, email, status FROM users WHERE LOWER(email) = LOWER($1)`,
       [userEmail.trim()]
     );
     if (userResult.rows.length === 0) {
@@ -139,24 +157,21 @@ export async function POST(
     }
 
     const targetUser = userResult.rows[0];
-
-    // Check not already checked in
-    const existing = await client.query(
-      `SELECT id FROM event_attendance WHERE event_id = $1 AND user_id = $2`,
-      [eventId, targetUser.id]
-    );
-    if (existing.rows.length > 0) {
+    if (targetUser.status !== 'ACTIVE') {
       await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'User already checked in' }, { status: 409 });
+      return NextResponse.json({ error: 'Attendee account is not active' }, { status: 403 });
     }
 
     // Check they have a registration or approved ticket
     let ticketId = null;
     let registrationId = null;
 
-    if (eventCheck.rows[0].is_paid) {
+    if (event.is_paid) {
       const ticket = await client.query(
-        `SELECT id FROM tickets WHERE event_id = $1 AND user_id = $2 AND status = 'APPROVED'`,
+        `SELECT id, checked_in_at
+         FROM tickets
+         WHERE event_id = $1 AND user_id = $2 AND status = 'APPROVED'
+         FOR UPDATE`,
         [eventId, targetUser.id]
       );
       if (ticket.rows.length === 0) {
@@ -164,22 +179,58 @@ export async function POST(
         return NextResponse.json({ error: 'No approved ticket found for this user' }, { status: 400 });
       }
       ticketId = ticket.rows[0].id;
+      if (ticket.rows[0].checked_in_at) {
+        await client.query('ROLLBACK');
+        return NextResponse.json({ error: 'Ticket already used for check-in' }, { status: 409 });
+      }
+
+      const existing = await client.query(
+        `SELECT id FROM event_attendance WHERE event_id = $1 AND user_id = $2`,
+        [eventId, targetUser.id]
+      );
+      if (existing.rows.length > 0) {
+        await client.query('ROLLBACK');
+        return NextResponse.json({ error: 'User already checked in' }, { status: 409 });
+      }
 
       // Mark ticket checked in
-      await client.query(
-        `UPDATE tickets SET checked_in_at = NOW(), updated_at = NOW() WHERE id = $1`,
+      const ticketUpdate = await client.query(
+        `UPDATE tickets
+         SET checked_in_at = NOW(), updated_at = NOW()
+         WHERE id = $1 AND checked_in_at IS NULL
+         RETURNING id`,
         [ticketId]
       );
+      if (ticketUpdate.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return NextResponse.json({ error: 'Ticket already used for check-in' }, { status: 409 });
+      }
     } else {
       const reg = await client.query(
-        `SELECT id FROM event_registrations WHERE event_id = $1 AND user_id = $2 AND cancelled_at IS NULL`,
+        `SELECT id, cancelled_at
+         FROM event_registrations
+         WHERE event_id = $1 AND user_id = $2
+         FOR UPDATE`,
         [eventId, targetUser.id]
       );
       if (reg.rows.length === 0) {
         await client.query('ROLLBACK');
         return NextResponse.json({ error: 'User is not registered for this event' }, { status: 400 });
       }
+      if (reg.rows[0].cancelled_at) {
+        await client.query('ROLLBACK');
+        return NextResponse.json({ error: 'Registration has been cancelled' }, { status: 409 });
+      }
       registrationId = reg.rows[0].id;
+
+      const existing = await client.query(
+        `SELECT id FROM event_attendance WHERE event_id = $1 AND user_id = $2`,
+        [eventId, targetUser.id]
+      );
+      if (existing.rows.length > 0) {
+        await client.query('ROLLBACK');
+        return NextResponse.json({ error: 'User already checked in' }, { status: 409 });
+      }
     }
 
     // Insert attendance
@@ -205,6 +256,9 @@ export async function POST(
     });
   } catch (error) {
     await client.query('ROLLBACK');
+    if ((error as { code?: string })?.code === '23505') {
+      return NextResponse.json({ error: 'User already checked in' }, { status: 409 });
+    }
     console.error('Manual check-in error:', error);
     return NextResponse.json({ error: 'Failed to check in' }, { status: 500 });
   } finally {

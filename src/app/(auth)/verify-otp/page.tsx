@@ -2,8 +2,11 @@
 
 import { useState, useRef, useEffect, Suspense } from 'react';
 import { motion } from 'framer-motion';
-import { ShieldCheck, Loader2, RotateCcw } from 'lucide-react';
+import { ShieldCheck, RotateCcw } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
 
 function VerifyOTPContent() {
   const router = useRouter();
@@ -25,7 +28,6 @@ function VerifyOTPContent() {
     const newOtp = [...otp];
     newOtp[index] = value.slice(-1);
     setOtp(newOtp);
-
     if (value && index < 5) {
       inputs.current[index + 1]?.focus();
     }
@@ -55,7 +57,6 @@ function VerifyOTPContent() {
       setError('Please enter the complete 6-digit code');
       return;
     }
-
     setLoading(true);
     setError('');
 
@@ -65,10 +66,8 @@ function VerifyOTPContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, otpCode }),
       });
-
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-
       localStorage.setItem('user', JSON.stringify(data.user));
       router.push('/home');
     } catch (err: unknown) {
@@ -82,38 +81,49 @@ function VerifyOTPContent() {
     setResending(true);
     setError('');
     try {
-      // Resend OTP endpoint would go here  
-      await new Promise((r) => setTimeout(r, 1000));
+      const res = await fetch('/api/auth/resend-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to resend code');
+      }
       setOtp(['', '', '', '', '', '']);
       inputs.current[0]?.focus();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to resend code');
     } finally {
       setResending(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 relative overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96 bg-brand-500/10 rounded-full blur-[120px]" />
+    <div className="min-h-screen flex flex-col items-center justify-center px-6 relative overflow-hidden bg-background">
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96 bg-brand-500/10 rounded-full blur-[120px] pointer-events-none" />
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
+        transition={{ duration: 0.5, ease: [0.25, 0.1, 0.25, 1] }}
         className="w-full max-w-sm relative z-10"
       >
         <div className="text-center mb-8">
           <div className="w-16 h-16 bg-brand-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
             <ShieldCheck className="w-8 h-8 text-brand-500" />
           </div>
-          <h1 className="text-2xl font-bold text-primary">Verify Email</h1>
-          <p className="text-muted mt-1">Enter the 6-digit code sent to your email</p>
+          <h1 className="text-display text-foreground">Verify Email</h1>
+          <p className="text-body-sm text-muted-foreground mt-1">Enter the 6-digit code sent to your email</p>
         </div>
 
         {error && (
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-500/20 text-red-600 dark:text-red-400 px-4 py-3 rounded-xl text-sm mb-4"
+            className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-xl text-sm mb-4"
+            role="alert"
+            aria-live="polite"
           >
             {error}
           </motion.div>
@@ -127,35 +137,42 @@ function VerifyOTPContent() {
               ref={(el) => { inputs.current[i] = el; }}
               type="text"
               inputMode="numeric"
+              pattern="[0-9]*"
               maxLength={1}
               value={digit}
               onChange={(e) => handleChange(i, e.target.value)}
               onKeyDown={(e) => handleKeyDown(i, e)}
-              className="input-field w-12 h-14 text-center text-xl font-bold"
+              aria-label={`Digit ${i + 1} of 6`}
+              className={cn(
+                'w-12 h-14 text-center text-xl font-bold rounded-xl',
+                'bg-input border-[1.5px] border-border text-foreground',
+                'focus:border-brand-500 focus:ring-[3px] focus:ring-brand-500/12 focus:outline-none',
+                'transition-all duration-200',
+                digit && 'border-brand-500/50',
+              )}
             />
           ))}
         </div>
 
-        <button
+        <Button
           onClick={handleVerify}
-          disabled={loading || otp.join('').length < 6}
-          className="btn-primary w-full flex items-center justify-center gap-2 disabled:opacity-50"
+          loading={loading}
+          disabled={otp.join('').length < 6}
+          className="w-full"
+          size="lg"
         >
-          {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Verify'}
-        </button>
+          Verify
+        </Button>
 
-        <button
+        <Button
+          variant="ghost"
           onClick={handleResend}
-          disabled={resending}
-          className="w-full flex items-center justify-center gap-2 text-muted hover:text-primary mt-4 transition-colors"
+          loading={resending}
+          className="w-full mt-3"
         >
-          {resending ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <RotateCcw className="w-4 h-4" />
-          )}
+          <RotateCcw className="w-4 h-4" />
           Resend Code
-        </button>
+        </Button>
       </motion.div>
     </div>
   );
@@ -164,8 +181,20 @@ function VerifyOTPContent() {
 export default function VerifyOTPPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg-primary)' }}>
-        <Loader2 className="w-8 h-8 animate-spin text-brand-500" />
+      <div className="min-h-screen flex flex-col items-center justify-center px-6 bg-background">
+        <div className="w-full max-w-sm space-y-6">
+          <div className="flex flex-col items-center gap-4">
+            <Skeleton className="w-16 h-16 rounded-2xl" />
+            <Skeleton className="h-8 w-40" />
+            <Skeleton className="h-4 w-56" />
+          </div>
+          <div className="flex gap-3 justify-center">
+            {[...Array(6)].map((_, i) => (
+              <Skeleton key={i} className="w-12 h-14 rounded-xl" />
+            ))}
+          </div>
+          <Skeleton className="h-[3.25rem] w-full rounded-2xl" />
+        </div>
       </div>
     }>
       <VerifyOTPContent />

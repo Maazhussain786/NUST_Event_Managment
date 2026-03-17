@@ -6,7 +6,7 @@ import { InstallPrompt } from '@/components/InstallPrompt';
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="max-w-lg mx-auto relative min-h-screen pb-28">
+    <div className="max-w-lg mx-auto relative min-h-[100dvh] pb-24">
       <OfflineIndicator />
       <InstallPrompt />
       {children}

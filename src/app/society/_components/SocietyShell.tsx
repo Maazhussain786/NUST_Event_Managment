@@ -233,6 +233,15 @@ export default function SocietyShell({
 }
 
 function getPageTitle(pathname: string, base: string): string {
+  const sub = pathname.replace(base, '') || '';
+
+  if (sub.startsWith('/events/') && sub.includes('/entry/scan')) {
+    return 'QR Scanner';
+  }
+  if (sub.startsWith('/events/') && sub.includes('/entry')) {
+    return 'Entry Control';
+  }
+
   const map: Record<string, string> = {
     '': 'Dashboard',
     '/dashboard': 'Dashboard',
@@ -250,6 +259,5 @@ function getPageTitle(pathname: string, base: string): string {
     '/chat': 'Team Chat',
     '/settings': 'Settings',
   };
-  const sub = pathname.replace(base, '') || '';
   return map[sub] || 'Society Management';
 }

@@ -2,10 +2,15 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Calendar, MapPin, Clock, Users, Star, Ticket, Loader2, Heart, Share2 } from 'lucide-react';
+import { ArrowLeft, Calendar, MapPin, Clock, Users, Star, Ticket, Heart, Share2 } from 'lucide-react';
 import { useRouter, useParams } from 'next/navigation';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useAuth } from '@/components/AuthProvider';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
 
 interface EventDetail {
   id: string;
@@ -29,6 +34,28 @@ interface EventDetail {
   is_cancelled: boolean;
 }
 
+function EventDetailSkeleton() {
+  return (
+    <div className="min-h-screen bg-background">
+      <Skeleton className="h-[55vh] min-h-[340px] w-full" />
+      <div className="relative -mt-5 rounded-t-4xl bg-background pt-6 pb-32 px-6 space-y-6">
+        <div className="flex flex-wrap gap-4">
+          <Skeleton className="h-5 w-24" />
+          <Skeleton className="h-5 w-32" />
+          <Skeleton className="h-5 w-20" />
+        </div>
+        <Skeleton className="h-6 w-48" />
+        <div className="space-y-2">
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-3/4" />
+        </div>
+        <Skeleton className="h-16 w-full rounded-xl" />
+      </div>
+    </div>
+  );
+}
+
 export default function EventDetailPage() {
   const router = useRouter();
   const params = useParams();
@@ -39,24 +66,19 @@ export default function EventDetailPage() {
 
   useEffect(() => {
     fetch(`/api/events/${params.id}`)
-      .then(r => r.json())
-      .then(data => setEvent(data.event))
+      .then((r) => r.json())
+      .then((data) => setEvent(data.event))
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [params.id]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-brand-500" />
-      </div>
-    );
-  }
+  if (loading) return <EventDetailSkeleton />;
 
   if (!event) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-muted">
-        Event not found
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background text-muted-foreground gap-4">
+        <p className="text-h3">Event not found</p>
+        <Button variant="secondary" onClick={() => router.back()}>Go back</Button>
       </div>
     );
   }
@@ -65,43 +87,63 @@ export default function EventDetailPage() {
   const endDate = new Date(event.event_end);
   const spotsLeft = event.max_tickets - parseInt(String(event.tickets_sold));
   const isFree = !event.is_paid;
-  const isUpcoming = new Date(event.event_start) > new Date();
+  const isUpcoming = startDate > new Date();
 
-  const formatDate = (d: Date) => d.toLocaleDateString('en-PK', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-  const formatTime = (d: Date) => d.toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit', hour12: true });
+  const formatDate = (d: Date) =>
+    d.toLocaleDateString('en-PK', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  const formatTime = (d: Date) =>
+    d.toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit', hour12: true });
 
   return (
-    <div className="min-h-screen" style={{ background: 'var(--bg-primary)' }}>
+    <div className="min-h-screen bg-background">
       {/* Full banner */}
       <div className="relative h-[55vh] min-h-[340px]">
         {event.banner_url ? (
-          <img src={event.banner_url} alt={event.title} className="w-full h-full object-cover" />
+          <Image
+            src={event.banner_url}
+            alt={event.title}
+            fill
+            priority
+            className="object-cover"
+            sizes="100vw"
+          />
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-brand-500 via-brand-600 to-surface-900" />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/30" />
 
         {/* Top controls */}
-        <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-5 pt-12 z-10">
-          <button
+        <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 pt-12 z-10 safe-top">
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() => router.back()}
-            className="w-10 h-10 rounded-2xl bg-black/30 backdrop-blur-md flex items-center justify-center text-white"
+            aria-label="Go back"
+            className="bg-black/30 backdrop-blur-md text-white hover:bg-black/50"
           >
             <ArrowLeft className="w-5 h-5" />
-          </button>
+          </Button>
           <div className="flex gap-2">
-            <button
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={() => {
                 if (!requireAuth('Sign in to save events to your favorites')) return;
                 setIsFavorite(!isFavorite);
               }}
-              className="w-10 h-10 rounded-2xl bg-black/30 backdrop-blur-md flex items-center justify-center"
+              aria-label={isFavorite ? 'Remove from favorites' : 'Save to favorites'}
+              className="bg-black/30 backdrop-blur-md text-white hover:bg-black/50"
             >
-              <Heart className={`w-5 h-5 ${isFavorite ? 'fill-red-500 text-red-500' : 'text-white'}`} />
-            </button>
-            <button className="w-10 h-10 rounded-2xl bg-black/30 backdrop-blur-md flex items-center justify-center text-white">
+              <Heart className={cn('w-5 h-5', isFavorite && 'fill-red-500 text-red-500')} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Share event"
+              className="bg-black/30 backdrop-blur-md text-white hover:bg-black/50"
+            >
               <Share2 className="w-5 h-5" />
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -112,54 +154,56 @@ export default function EventDetailPage() {
               By {event.society_name}
             </span>
           </Link>
-          <h1 className="text-3xl font-extrabold text-white leading-tight">{event.title}</h1>
+          <h1 className="text-display text-white leading-tight">{event.title}</h1>
         </div>
       </div>
 
-      {/* Content - overlaps banner with rounded top */}
-      <div className="relative -mt-5 rounded-t-[2rem] z-20 pt-6 pb-32" style={{ background: 'var(--bg-primary)' }}>
-        {/* Quick info row */}
-        <div className="px-6 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm mb-6">
-          <div className="flex items-center gap-1.5 text-secondary">
+      {/* Content */}
+      <div className="relative -mt-5 rounded-t-4xl bg-background z-20 pt-6 pb-32">
+        {/* Quick info */}
+        <div className="px-6 flex flex-wrap items-center gap-x-5 gap-y-2 text-body-sm mb-6">
+          <div className="flex items-center gap-1.5 text-muted-foreground">
             <Clock className="w-4 h-4 text-brand-500" />
             <span>{formatTime(startDate)}</span>
           </div>
-          <div className="flex items-center gap-1.5 text-secondary">
+          <div className="flex items-center gap-1.5 text-muted-foreground">
             <Calendar className="w-4 h-4 text-brand-500" />
             <span>{formatDate(startDate)}</span>
           </div>
-          <div className="flex items-center gap-1.5 text-secondary">
+          <div className="flex items-center gap-1.5 text-muted-foreground">
             <MapPin className="w-4 h-4 text-brand-500" />
             <span>{event.location || 'TBA'}</span>
           </div>
         </div>
 
-        {/* Interested count */}
+        {/* Attendees indicator */}
         <div className="px-6 flex items-center gap-3 mb-6">
           <div className="flex -space-x-2">
-            {[0, 1, 2].map(i => (
-              <div key={i} className="w-8 h-8 rounded-full border-2 bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-[10px] font-bold text-brand-600 dark:text-brand-400"
-                   style={{ borderColor: 'var(--bg-primary)' }}>
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className="w-8 h-8 rounded-full border-2 border-background bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-[10px] font-bold text-brand-600 dark:text-brand-400"
+              >
                 {String.fromCharCode(65 + i)}
               </div>
             ))}
           </div>
-          <span className="text-sm text-secondary">{event.tickets_sold}+ Interested</span>
+          <span className="text-body-sm text-muted-foreground">{event.tickets_sold}+ Interested</span>
         </div>
 
         {/* Rating */}
         {event.rating_count > 0 && (
           <div className="px-6 flex items-center gap-2 mb-6">
             <Star className="w-5 h-5 text-amber-500 fill-amber-500" />
-            <span className="font-bold text-primary">{event.avg_rating}</span>
-            <span className="text-sm text-muted">({event.rating_count} ratings)</span>
+            <span className="font-bold text-foreground">{event.avg_rating}</span>
+            <span className="text-body-sm text-muted-foreground">({event.rating_count} ratings)</span>
           </div>
         )}
 
         {/* About */}
         <div className="px-6 mb-6">
-          <h2 className="text-lg font-bold text-primary mb-3">About Event</h2>
-          <p className="text-secondary leading-relaxed whitespace-pre-wrap text-[0.9375rem]">
+          <h2 className="text-h2 text-foreground mb-3">About Event</h2>
+          <p className="text-body text-muted-foreground whitespace-pre-wrap">
             {event.description || 'No description available.'}
           </p>
         </div>
@@ -167,12 +211,19 @@ export default function EventDetailPage() {
         {/* Spots info */}
         {event.max_tickets > 0 && (
           <div className="px-6 mb-6">
-            <div className="card p-4 flex items-center justify-between">
+            <div className="rounded-xl border border-border bg-card p-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Users className="w-5 h-5 text-brand-500" />
-                <span className="text-sm font-medium text-primary">Available Spots</span>
+                <span className="text-body-sm font-medium text-foreground">Available Spots</span>
               </div>
-              <span className={`font-bold text-sm ${spotsLeft > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}`}>
+              <span
+                className={cn(
+                  'font-bold text-sm',
+                  spotsLeft > 0
+                    ? 'text-emerald-600 dark:text-emerald-400'
+                    : 'text-destructive',
+                )}
+              >
                 {spotsLeft > 0 ? `${spotsLeft} / ${event.max_tickets}` : 'Sold Out'}
               </span>
             </div>
@@ -182,43 +233,37 @@ export default function EventDetailPage() {
         {/* Category */}
         {event.category_name && (
           <div className="px-6 mb-6">
-            <span className="chip active">{event.category_name}</span>
+            <Badge variant="default" size="lg">{event.category_name}</Badge>
           </div>
         )}
       </div>
 
-      {/* Fixed bottom buy bar */}
+      {/* Fixed bottom CTA */}
       {isUpcoming && spotsLeft > 0 && (
-        <motion.div
+        <motion.footer
           initial={{ y: 100 }}
           animate={{ y: 0 }}
-          className="fixed bottom-0 left-0 right-0 z-[60] px-5 py-4"
-          style={{
-            background: 'var(--bg-nav)',
-            backdropFilter: 'blur(24px)',
-            WebkitBackdropFilter: 'blur(24px)',
-            borderTop: '1px solid var(--border-card)',
-          }}
+          transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+          className="fixed bottom-0 left-0 right-0 z-modal px-4 py-4 bg-background/80 backdrop-blur-2xl border-t border-border/50"
         >
           <div className="max-w-lg mx-auto flex items-center justify-between gap-4">
             <div>
-              <p className="text-muted text-xs font-medium">Price</p>
-              <p className="text-primary text-2xl font-extrabold">
+              <p className="text-caption text-muted-foreground font-medium">Price</p>
+              <p className="text-h1 text-foreground">
                 {isFree ? 'Free' : `Rs. ${event.ticket_price}`}
               </p>
             </div>
-            <button
+            <Button
+              size="lg"
               onClick={() => {
                 if (!requireAuth('Sign in to buy tickets or register for events')) return;
-                // TODO: ticket purchase flow
               }}
-              className="btn-primary flex items-center gap-2 px-8"
             >
               <Ticket className="w-5 h-5" />
               {isFree ? 'Register Now' : 'Buy Ticket'}
-            </button>
+            </Button>
           </div>
-        </motion.div>
+        </motion.footer>
       )}
     </div>
   );

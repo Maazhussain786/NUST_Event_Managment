@@ -177,7 +177,7 @@ export default function SocietyDetailPage() {
         {activeTab === 'events' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3 pb-6">
             {events.length > 0 ? (
-              events.map(event => <EventCard key={event.id} event={event} compact />)
+              events.map(event => <EventCard key={event.id} event={event} variant="compact" />)
             ) : (
               <p className="text-center text-muted py-8">No upcoming events</p>
             )}

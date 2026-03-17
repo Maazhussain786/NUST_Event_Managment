@@ -1,8 +1,16 @@
 import type { Metadata, Viewport } from 'next';
+import localFont from 'next/font/local';
 import './globals.css';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { AuthProvider } from '@/components/AuthProvider';
 import { ServiceWorkerRegistrar } from '@/components/ServiceWorkerRegistrar';
+import { Toaster } from 'sonner';
+
+const geist = localFont({
+  src: [{ path: '../../public/fonts/GeistVF.woff2', style: 'normal' }],
+  variable: '--font-geist',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   title: 'NUST Events - University Society & Event Management',
@@ -22,10 +30,10 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#f97316',
+  themeColor: '#FF9F43',
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
+  maximumScale: 5,
 };
 
 export default function RootLayout({
@@ -34,11 +42,22 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className="min-h-screen">
+    <html lang="en" className={geist.variable} suppressHydrationWarning>
+      <body className="min-h-screen font-sans antialiased">
         <ThemeProvider>
           <AuthProvider>
             {children}
+            <Toaster
+              position="top-center"
+              toastOptions={{
+                className: 'font-sans',
+                style: {
+                  background: 'hsl(var(--card))',
+                  color: 'hsl(var(--card-foreground))',
+                  border: '1px solid hsl(var(--border))',
+                },
+              }}
+            />
             <ServiceWorkerRegistrar />
           </AuthProvider>
         </ThemeProvider>

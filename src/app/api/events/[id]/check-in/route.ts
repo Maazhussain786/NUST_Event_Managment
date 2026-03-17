@@ -66,7 +66,8 @@ export async function POST(
               s.status AS society_status, s.name AS society_name
        FROM events e
        JOIN societies s ON e.society_id = s.id
-       WHERE e.id = $1`,
+       WHERE e.id = $1
+       FOR UPDATE OF e`,
       [eventId]
     );
     if (eventResult.rows.length === 0) {
@@ -125,17 +126,7 @@ export async function POST(
       return NextResponse.json({ error: 'Attendee is suspended from this society' }, { status: 403 });
     }
 
-    // ── 9. Prevent double check-in ────────────────────────────────────
-    const existingAttendance = await client.query(
-      `SELECT id FROM event_attendance WHERE event_id = $1 AND user_id = $2`,
-      [eventId, qrData.userId]
-    );
-    if (existingAttendance.rows.length > 0) {
-      await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'User already checked in for this event' }, { status: 409 });
-    }
-
-    // ── 10. Validate ticket or registration ───────────────────────────
+    // ── 9. Validate ticket or registration with row-level lock ────────
     let ticketId: string | null = null;
     let registrationId: string | null = null;
     let qrCodeId: string | null = null;
@@ -145,7 +136,8 @@ export async function POST(
       const ticketResult = await client.query(
         `SELECT t.id, t.status, t.checked_in_at
          FROM tickets t
-         WHERE t.id = $1 AND t.event_id = $2 AND t.user_id = $3`,
+         WHERE t.id = $1 AND t.event_id = $2 AND t.user_id = $3
+         FOR UPDATE`,
         [qrData.id, eventId, qrData.userId]
       );
       if (ticketResult.rows.length === 0) {
@@ -168,17 +160,33 @@ export async function POST(
 
       ticketId = ticket.id;
 
+      const existingAttendance = await client.query(
+        `SELECT id FROM event_attendance WHERE event_id = $1 AND user_id = $2`,
+        [eventId, qrData.userId]
+      );
+      if (existingAttendance.rows.length > 0) {
+        await client.query('ROLLBACK');
+        return NextResponse.json({ error: 'User already checked in for this event' }, { status: 409 });
+      }
+
       // Mark ticket as checked in
-      await client.query(
-        `UPDATE tickets SET checked_in_at = NOW(), updated_at = NOW() WHERE id = $1`,
+      const ticketUpdate = await client.query(
+        `UPDATE tickets
+         SET checked_in_at = NOW(), updated_at = NOW()
+         WHERE id = $1 AND checked_in_at IS NULL
+         RETURNING id`,
         [ticketId]
       );
+      if (ticketUpdate.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return NextResponse.json({ error: 'Ticket already used for check-in' }, { status: 409 });
+      }
 
       // Mark QR as scanned
       const qrUpdate = await client.query(
         `UPDATE ticket_qr_codes
          SET is_scanned = TRUE, scanned_at = NOW(), scanned_by = $1
-         WHERE ticket_id = $2 AND is_active = TRUE
+         WHERE ticket_id = $2 AND is_active = TRUE AND is_scanned = FALSE
          RETURNING id`,
         [user.userId, ticketId]
       );
@@ -191,7 +199,8 @@ export async function POST(
       const regResult = await client.query(
         `SELECT er.id, er.cancelled_at
          FROM event_registrations er
-         WHERE er.id = $1 AND er.event_id = $2 AND er.user_id = $3`,
+         WHERE er.id = $1 AND er.event_id = $2 AND er.user_id = $3
+         FOR UPDATE`,
         [qrData.id, eventId, qrData.userId]
       );
       if (regResult.rows.length === 0) {
@@ -205,11 +214,20 @@ export async function POST(
 
       registrationId = regResult.rows[0].id;
 
+      const existingAttendance = await client.query(
+        `SELECT id FROM event_attendance WHERE event_id = $1 AND user_id = $2`,
+        [eventId, qrData.userId]
+      );
+      if (existingAttendance.rows.length > 0) {
+        await client.query('ROLLBACK');
+        return NextResponse.json({ error: 'User already checked in for this event' }, { status: 409 });
+      }
+
       // Mark QR as scanned
       const qrUpdate = await client.query(
         `UPDATE ticket_qr_codes
          SET is_scanned = TRUE, scanned_at = NOW(), scanned_by = $1
-         WHERE registration_id = $2 AND is_active = TRUE
+         WHERE registration_id = $2 AND is_active = TRUE AND is_scanned = FALSE
          RETURNING id`,
         [user.userId, registrationId]
       );
@@ -265,7 +283,7 @@ export async function POST(
   } catch (error) {
     await client.query('ROLLBACK');
 
-    if (error instanceof Error && error.message.includes('uq_attendance_event_user')) {
+    if ((error as { code?: string })?.code === '23505' || (error instanceof Error && error.message.includes('uq_attendance_event_user'))) {
       return NextResponse.json({ error: 'User already checked in for this event' }, { status: 409 });
     }
 

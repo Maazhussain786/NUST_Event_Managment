@@ -67,7 +67,7 @@ export default function SocietyPhotosPage() {
       setLoading(true);
       setError(null);
       const data = await fetchAlbums(societyId);
-      setAlbums(data);
+      setAlbums(Array.isArray(data) ? data : []);
     } catch (err) {
       if (err instanceof SocietyApiError) {
         if (err.status === 401) { router.push('/login'); return; }
@@ -85,7 +85,7 @@ export default function SocietyPhotosPage() {
     try {
       setLoadingPhotos(true);
       const data = await fetchAlbumPhotos(societyId, albumId);
-      setPhotos(data);
+      setPhotos(Array.isArray(data) ? data : []);
     } catch (err) {
       setToast('Failed to load photos');
     } finally {

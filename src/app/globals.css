@@ -2,10 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+/* ═══════════════════════════════════════════════════
+   Design Tokens
+   ═══════════════════════════════════════════════════ */
 
 @layer base {
   :root {
+    /* ── Legacy tokens (kept for backward compat during migration) ── */
     --bg-primary: #ffffff;
     --bg-secondary: #f5f5f5;
     --bg-card: #ffffff;
@@ -21,9 +24,32 @@
     --brand-dark: #E8852D;
     --shadow-card: 0 2px 20px rgba(0, 0, 0, 0.06);
     --shadow-nav: 0 -4px 30px rgba(0, 0, 0, 0.08);
+
+    /* ── shadcn semantic tokens (HSL) ── */
+    --background: 0 0% 100%;
+    --foreground: 0 0% 9%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 9%;
+    --primary: 28 100% 63%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 32%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 45%;
+    --accent: 0 0% 96%;
+    --accent-foreground: 0 0% 32%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
+    --ring: 28 100% 63%;
+    --radius: 1rem;
   }
 
   .dark {
+    /* ── Legacy dark tokens ── */
     --bg-primary: #0a0a0a;
     --bg-secondary: #171717;
     --bg-card: #1a1a1a;
@@ -36,18 +62,73 @@
     --text-muted: #525252;
     --shadow-card: 0 2px 20px rgba(0, 0, 0, 0.4);
     --shadow-nav: 0 -4px 30px rgba(0, 0, 0, 0.5);
+
+    /* ── shadcn dark tokens ── */
+    --background: 0 0% 4%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 7%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 7%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 28 100% 63%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 15%;
+    --secondary-foreground: 0 0% 64%;
+    --muted: 0 0% 15%;
+    --muted-foreground: 0 0% 45%;
+    --accent: 0 0% 15%;
+    --accent-foreground: 0 0% 64%;
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 15%;
+    --input: 0 0% 15%;
+    --ring: 28 100% 50%;
   }
 
   body {
-    @apply font-sans antialiased;
-    background-color: var(--bg-primary);
-    color: var(--text-primary);
+    @apply font-sans antialiased bg-background text-foreground;
     transition: background-color 0.3s ease, color 0.3s ease;
   }
 }
 
+/* ═══════════════════════════════════════════════════
+   Typography Scale (8px-aligned line heights)
+   ═══════════════════════════════════════════════════ */
+
+@layer base {
+  .text-display {
+    @apply text-3xl font-extrabold leading-tight tracking-tight;
+  }
+  .text-h1 {
+    @apply text-2xl font-bold leading-tight;
+  }
+  .text-h2 {
+    @apply text-xl font-bold leading-snug;
+  }
+  .text-h3 {
+    @apply text-lg font-semibold leading-snug;
+  }
+  .text-body {
+    font-size: 0.9375rem;
+    @apply leading-relaxed;
+  }
+  .text-body-sm {
+    @apply text-sm leading-normal;
+  }
+  .text-caption {
+    @apply text-xs leading-normal;
+  }
+  .text-overline {
+    font-size: 0.6875rem;
+    @apply font-semibold uppercase tracking-wider leading-none;
+  }
+}
+
+/* ═══════════════════════════════════════════════════
+   Legacy Component Classes (preserved during migration)
+   ═══════════════════════════════════════════════════ */
+
 @layer components {
-  /* --- CARD SYSTEM --- */
   .card {
     background: var(--bg-card);
     border: 1px solid var(--border-card);
@@ -64,7 +145,6 @@
     border-radius: 1.25rem;
   }
 
-  /* --- BUTTONS --- */
   .btn-primary {
     @apply bg-brand-500 hover:bg-brand-600 text-white font-semibold py-3.5 px-6 rounded-2xl
            transition-all duration-200 active:scale-[0.97] shadow-lg shadow-brand-500/25;
@@ -85,7 +165,6 @@
     background: var(--bg-secondary);
   }
 
-  /* --- INPUTS --- */
   .input-field {
     width: 100%;
     background: var(--bg-input);
@@ -105,7 +184,6 @@
     box-shadow: 0 0 0 3px rgba(255, 159, 67, 0.12);
   }
 
-  /* --- CHIPS --- */
   .chip {
     @apply px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap cursor-pointer transition-all duration-200;
     background: var(--bg-secondary);
@@ -116,18 +194,22 @@
     @apply bg-brand-500 text-white border-brand-500;
   }
 
-  /* --- SECTION HEADER --- */
   .section-title {
     @apply text-lg font-bold;
     color: var(--text-primary);
   }
 }
 
+/* ═══════════════════════════════════════════════════
+   Utilities
+   ═══════════════════════════════════════════════════ */
+
 @layer utilities {
   .text-gradient {
     @apply bg-gradient-to-r from-brand-400 to-brand-600 bg-clip-text text-transparent;
   }
 
+  /* Legacy semantic color utils (keep during migration) */
   .text-primary { color: var(--text-primary); }
   .text-secondary { color: var(--text-secondary); }
   .text-muted { color: var(--text-muted); }
@@ -155,7 +237,7 @@
     border-radius: 4px !important;
   }
 
-  /* QR scanner scanning line animation */
+  /* QR scanner */
   @keyframes scan-line {
     0%, 100% { top: 0; }
     50% { top: calc(100% - 2px); }
@@ -165,7 +247,7 @@
     position: absolute;
   }
 
-  /* Safe area top padding for notched devices */
+  /* Safe areas */
   .safe-top {
     padding-top: env(safe-area-inset-top, 0px);
   }

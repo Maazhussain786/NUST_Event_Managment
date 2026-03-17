@@ -2,9 +2,18 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Ticket, QrCode, Calendar, MapPin, Clock, Loader2, ChevronRight, CheckCircle2, XCircle, WifiOff, Download } from 'lucide-react';
+import { Ticket, QrCode, Calendar, MapPin, ChevronRight, CheckCircle2, WifiOff } from 'lucide-react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { getCachedTickets, type CachedTicket } from '@/lib/ticket-cache';
+import { PageHeader } from '@/components/page-header';
+import { EmptyState } from '@/components/empty-state';
+import { ErrorState } from '@/components/error-state';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { cn } from '@/lib/utils';
 
 interface TicketData {
   id: string;
@@ -25,15 +34,87 @@ interface TicketData {
   source_type: string;
 }
 
+type BadgeVariant = 'success' | 'warning' | 'destructive';
+
+function getStatusBadge(ticket: TicketData): { label: string; variant: BadgeVariant } | null {
+  if (ticket.is_cancelled) return { label: 'Cancelled', variant: 'destructive' };
+  if (ticket.status === 'APPROVED') return { label: 'Valid', variant: 'success' };
+  if (ticket.status === 'PENDING') return { label: 'Pending', variant: 'warning' };
+  if (ticket.status === 'REJECTED') return { label: 'Rejected', variant: 'destructive' };
+  return null;
+}
+
+function TicketListItem({ ticket }: { ticket: TicketData }) {
+  const badge = getStatusBadge(ticket);
+  return (
+    <Link href={`/tickets/${ticket.id}`}>
+      <div className="rounded-xl border border-border bg-card p-4 hover:shadow-elevation-2 hover:-translate-y-0.5 transition-all duration-200">
+        <div className="flex items-start gap-3">
+          <div className="w-16 h-16 rounded-xl flex items-center justify-center shrink-0 overflow-hidden bg-muted relative">
+            {ticket.event_banner ? (
+              <Image src={ticket.event_banner} alt="" fill className="object-cover" sizes="64px" />
+            ) : (
+              <Ticket className="w-6 h-6 text-brand-500" />
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <h3 className="text-body-sm font-semibold text-foreground truncate flex-1">{ticket.event_title}</h3>
+              {badge && <Badge variant={badge.variant} size="sm">{badge.label}</Badge>}
+            </div>
+            <p className="text-caption text-muted-foreground mt-0.5">{ticket.society_name}</p>
+            <div className="flex items-center gap-3 mt-2 text-caption text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <Calendar className="w-3 h-3" />
+                {new Date(ticket.event_start).toLocaleDateString('en-PK', { month: 'short', day: 'numeric' })}
+              </span>
+              {ticket.event_venue && (
+                <span className="flex items-center gap-1 truncate">
+                  <MapPin className="w-3 h-3" />
+                  {ticket.event_venue}
+                </span>
+              )}
+              <span className="font-mono text-[10px]">{ticket.ticket_number}</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            {ticket.has_qr ? (
+              <QrCode className="w-5 h-5 text-brand-500" />
+            ) : ticket.status === 'APPROVED' ? (
+              <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+            ) : null}
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          </div>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function TicketsSkeleton() {
+  return (
+    <div className="space-y-3">
+      {[1, 2, 3, 4].map((i) => (
+        <div key={i} className="flex gap-3 p-4 rounded-xl border border-border">
+          <Skeleton className="w-16 h-16 rounded-xl flex-shrink-0" />
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-4 w-3/4" />
+            <Skeleton className="h-3 w-1/2" />
+            <Skeleton className="h-3 w-2/3" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function TicketsPage() {
   const [tickets, setTickets] = useState<TicketData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'upcoming' | 'past'>('upcoming');
   const [isOffline, setIsOffline] = useState(false);
   const [cachedTickets, setCachedTickets] = useState<CachedTicket[]>([]);
 
-  // Track online/offline state
   useEffect(() => {
     const update = () => setIsOffline(!navigator.onLine);
     update();
@@ -45,11 +126,9 @@ export default function TicketsPage() {
     };
   }, []);
 
-  // Fetch tickets online, use cached offline
   useEffect(() => {
     const loadTickets = async () => {
       if (!navigator.onLine) {
-        // Load from IndexedDB when offline
         try {
           const cached = await getCachedTickets();
           setCachedTickets(cached);
@@ -63,229 +142,163 @@ export default function TicketsPage() {
         if (!r.ok) throw new Error('Failed to load tickets');
         const data = await r.json();
         setTickets(Array.isArray(data) ? data : []);
-      } catch (err: any) {
-        // Try cached tickets as fallback
+      } catch (err: unknown) {
         try {
           const cached = await getCachedTickets();
           if (cached.length > 0) {
             setCachedTickets(cached);
             setIsOffline(true);
           } else {
-            setError(err.message);
+            setError(err instanceof Error ? err.message : 'Failed to load tickets');
           }
         } catch {
-          setError(err.message);
+          setError(err instanceof Error ? err.message : 'Failed to load tickets');
         }
       } finally {
         setLoading(false);
       }
     };
-
     loadTickets();
   }, []);
 
-  // If we're showing cached offline tickets
+  // Offline cached view
   if (isOffline && cachedTickets.length > 0 && tickets.length === 0) {
     return (
-      <div className="min-h-screen" style={{ background: 'var(--bg-primary)' }}>
-        {/* Header */}
-        <div className="sticky top-0 z-30 backdrop-blur-xl" style={{ background: 'var(--bg-nav)', borderBottom: '1px solid var(--border-card)' }}>
-          <div className="px-5 pt-12 pb-4">
-            <div className="flex items-center gap-2 mb-4">
-              <h1 className="text-xl font-bold text-primary">My Tickets</h1>
-              <span className="bg-amber-500/10 text-amber-500 text-[10px] px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
-                <WifiOff size={10} />
-                Offline
-              </span>
-            </div>
-            <p className="text-xs text-muted">Showing {cachedTickets.length} cached ticket{cachedTickets.length !== 1 ? 's' : ''}</p>
-          </div>
-        </div>
-
-        <div className="px-5 py-4 space-y-3">
-          {cachedTickets.map((ticket, i) => (
-            <motion.div
-              key={ticket.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05 }}
-            >
-              <Link href={`/tickets/${ticket.id}`}>
-                <div className="card p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="w-16 h-16 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'var(--bg-input)' }}>
-                      <Ticket className="w-6 h-6 text-brand-500" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-primary font-semibold text-sm truncate">{ticket.event_title}</h3>
-                      <p className="text-muted text-xs mt-0.5">{ticket.society_name}</p>
-                      <div className="flex items-center gap-3 mt-2 text-muted text-xs">
-                        <span className="flex items-center gap-1">
-                          <Calendar className="w-3 h-3" />
-                          {new Date(ticket.event_date).toLocaleDateString('en-PK', { month: 'short', day: 'numeric' })}
-                        </span>
-                        {ticket.event_venue && (
+      <div className="min-h-screen bg-background">
+        <PageHeader
+          title="My Tickets"
+          action={
+            <Badge variant="warning" size="md" className="flex items-center gap-1">
+              <WifiOff className="w-3 h-3" /> Offline
+            </Badge>
+          }
+        />
+        <div className="px-4 py-1">
+          <p className="text-caption text-muted-foreground mb-3">
+            Showing {cachedTickets.length} cached ticket{cachedTickets.length !== 1 ? 's' : ''}
+          </p>
+          <div className="space-y-3">
+            {cachedTickets.map((ticket, i) => (
+              <motion.div
+                key={ticket.id}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.04 }}
+              >
+                <Link href={`/tickets/${ticket.id}`}>
+                  <div className="rounded-xl border border-border bg-card p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="w-16 h-16 rounded-xl flex items-center justify-center shrink-0 bg-muted">
+                        <Ticket className="w-6 h-6 text-brand-500" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-body-sm font-semibold text-foreground truncate">{ticket.event_title}</h3>
+                        <p className="text-caption text-muted-foreground mt-0.5">{ticket.society_name}</p>
+                        <div className="flex items-center gap-3 mt-2 text-caption text-muted-foreground">
                           <span className="flex items-center gap-1">
-                            <MapPin className="w-3 h-3" />
-                            {ticket.event_venue}
+                            <Calendar className="w-3 h-3" />
+                            {new Date(ticket.event_date).toLocaleDateString('en-PK', { month: 'short', day: 'numeric' })}
                           </span>
-                        )}
+                          {ticket.event_venue && (
+                            <span className="flex items-center gap-1 truncate">
+                              <MapPin className="w-3 h-3" />
+                              {ticket.event_venue}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {ticket.qr_data && <QrCode className="w-5 h-5 text-brand-500" />}
+                        <WifiOff className="w-4 h-4 text-amber-500" />
                       </div>
                     </div>
-                    <div className="flex items-center gap-1">
-                      {ticket.qr_data && <QrCode className="w-5 h-5 text-brand-500" />}
-                      <WifiOff className="w-4 h-4 text-amber-500" />
-                    </div>
                   </div>
-                </div>
-              </Link>
-            </motion.div>
-          ))}
+                </Link>
+              </motion.div>
+            ))}
+          </div>
         </div>
       </div>
     );
   }
 
   const now = new Date();
-  const upcomingTickets = tickets.filter(t =>
-    new Date(t.event_start) > now && t.status !== 'CANCELLED' && t.status !== 'REJECTED' && !t.is_cancelled
+  const upcomingTickets = tickets.filter(
+    (t) => new Date(t.event_start) > now && t.status !== 'CANCELLED' && t.status !== 'REJECTED' && !t.is_cancelled,
   );
-  const pastTickets = tickets.filter(t =>
-    new Date(t.event_start) <= now || t.status === 'CANCELLED' || t.status === 'REJECTED' || t.is_cancelled
+  const pastTickets = tickets.filter(
+    (t) => new Date(t.event_start) <= now || t.status === 'CANCELLED' || t.status === 'REJECTED' || t.is_cancelled,
   );
-
-  const getStatusBadge = (ticket: TicketData) => {
-    if (ticket.is_cancelled) return { label: 'Event Cancelled', color: 'text-red-500 bg-red-500/10' };
-    if (ticket.status === 'APPROVED') return { label: 'Valid', color: 'text-green-500 bg-green-500/10' };
-    if (ticket.status === 'PENDING') return { label: 'Pending', color: 'text-amber-500 bg-amber-500/10' };
-    if (ticket.status === 'REJECTED') return { label: 'Rejected', color: 'text-red-500 bg-red-500/10' };
-    return null;
-  };
-
-  const displayTickets = activeTab === 'upcoming' ? upcomingTickets : pastTickets;
 
   return (
-    <div className="min-h-screen" style={{ background: 'var(--bg-primary)' }}>
-      {/* Header */}
-      <div className="sticky top-0 z-30 backdrop-blur-xl" style={{ background: 'var(--bg-nav)', borderBottom: '1px solid var(--border-card)' }}>
-        <div className="px-5 pt-12 pb-4">
-          <h1 className="text-xl font-bold text-primary mb-4">My Tickets</h1>
-
-          {/* Tabs */}
-          <div className="flex rounded-xl p-1" style={{ background: 'var(--bg-input)' }}>
-            <button
-              onClick={() => setActiveTab('upcoming')}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
-                activeTab === 'upcoming'
-                  ? 'bg-brand-500 text-white shadow-md'
-                  : 'text-muted'
-              }`}
-            >
-              Upcoming
-            </button>
-            <button
-              onClick={() => setActiveTab('past')}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
-                activeTab === 'past'
-                  ? 'bg-brand-500 text-white shadow-md'
-                  : 'text-muted'
-              }`}
-            >
-              Past
-            </button>
-          </div>
+    <div className="min-h-screen bg-background">
+      <header className="sticky top-0 z-header bg-background/80 backdrop-blur-xl border-b border-border/50">
+        <div className="px-4 pt-14 pb-3 safe-top">
+          <h1 className="text-h1 text-foreground mb-4">My Tickets</h1>
+          <Tabs defaultValue="upcoming">
+            <TabsList>
+              <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
+              <TabsTrigger value="past">Past</TabsTrigger>
+            </TabsList>
+          </Tabs>
         </div>
-      </div>
+      </header>
 
-      {/* Content */}
-      <div className="px-5 py-4">
-        {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="w-8 h-8 animate-spin text-brand-500" />
-          </div>
-        ) : error ? (
-          <div className="text-center py-20 text-muted">
-            <Ticket className="w-16 h-16 mx-auto mb-4 opacity-30" />
-            <h3 className="text-primary font-semibold mb-1">Could not load tickets</h3>
-            <p className="text-sm mb-4">{error}</p>
-            <button onClick={() => window.location.reload()} className="btn-primary inline-flex items-center gap-2">
-              Try Again
-            </button>
-          </div>
-        ) : displayTickets.length > 0 ? (
-          <div className="space-y-3">
-            {displayTickets.map((ticket, i) => {
-              const badge = getStatusBadge(ticket);
-              return (
-                <motion.div
-                  key={ticket.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.05 }}
-                >
-                  <Link href={`/tickets/${ticket.id}`}>
-                    <div className="card p-4 transition-colors">
-                      <div className="flex items-start gap-3">
-                        {/* Event Image Thumbnail */}
-                        <div className="w-16 h-16 rounded-xl flex items-center justify-center shrink-0 overflow-hidden"
-                             style={{ background: 'var(--bg-input)' }}>
-                          {ticket.event_banner ? (
-                            <img src={ticket.event_banner} alt="" className="w-full h-full object-cover" />
-                          ) : (
-                            <Ticket className="w-6 h-6 text-brand-500" />
-                          )}
-                        </div>
+      <div className="px-4 pb-32">
+        <Tabs defaultValue="upcoming">
+          <TabsContent value="upcoming">
+            <div className="py-1">
+              {loading ? (
+                <TicketsSkeleton />
+              ) : error ? (
+                <ErrorState message={error} onRetry={() => window.location.reload()} />
+              ) : upcomingTickets.length > 0 ? (
+                <div className="space-y-3">
+                  {upcomingTickets.map((ticket, i) => (
+                    <motion.div
+                      key={ticket.id}
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.04 }}
+                    >
+                      <TicketListItem ticket={ticket} />
+                    </motion.div>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState
+                  icon={Ticket}
+                  title="No Tickets Yet"
+                  message="Browse events to get your first ticket"
+                  action={{ label: 'Explore Events', onClick: () => (window.location.href = '/home') }}
+                />
+              )}
+            </div>
+          </TabsContent>
 
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <h3 className="text-primary font-semibold text-sm truncate flex-1">{ticket.event_title}</h3>
-                            {badge && (
-                              <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${badge.color}`}>
-                                {badge.label}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-muted text-xs mt-0.5">{ticket.society_name}</p>
-                          <div className="flex items-center gap-3 mt-2 text-muted text-xs">
-                            <span className="flex items-center gap-1">
-                              <Calendar className="w-3 h-3" />
-                              {new Date(ticket.event_start).toLocaleDateString('en-PK', { month: 'short', day: 'numeric' })}
-                            </span>
-                            {ticket.event_venue && (
-                              <span className="flex items-center gap-1">
-                                <MapPin className="w-3 h-3" />
-                                {ticket.event_venue}
-                              </span>
-                            )}
-                            <span className="font-mono text-[10px]">{ticket.ticket_number}</span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-1">
-                          {ticket.has_qr ? (
-                            <QrCode className="w-5 h-5 text-brand-500" />
-                          ) : ticket.status === 'APPROVED' ? (
-                            <CheckCircle2 className="w-5 h-5 text-green-500" />
-                          ) : null}
-                          <ChevronRight className="w-4 h-4 text-muted" />
-                        </div>
-                      </div>
-                    </div>
-                  </Link>
-                </motion.div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="text-center py-20 text-muted">
-            <Ticket className="w-16 h-16 mx-auto mb-4 opacity-30" />
-            <h3 className="text-primary font-semibold mb-1">No Tickets Yet</h3>
-            <p className="text-sm mb-4">Browse events to get your first ticket</p>
-            <Link href="/home" className="btn-primary inline-flex items-center gap-2">
-              Explore Events
-            </Link>
-          </div>
-        )}
+          <TabsContent value="past">
+            <div className="py-1">
+              {loading ? (
+                <TicketsSkeleton />
+              ) : pastTickets.length > 0 ? (
+                <div className="space-y-3">
+                  {pastTickets.map((ticket, i) => (
+                    <motion.div
+                      key={ticket.id}
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.04 }}
+                    >
+                      <TicketListItem ticket={ticket} />
+                    </motion.div>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState icon={Ticket} message="No past tickets" />
+              )}
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );

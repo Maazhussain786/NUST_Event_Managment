@@ -2,8 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Loader2, Users, Plus } from 'lucide-react';
+import { Users, Plus } from 'lucide-react';
 import SocietyCard from '@/components/SocietyCard';
+import { PageHeader } from '@/components/page-header';
+import { EmptyState } from '@/components/empty-state';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 
 interface Society {
@@ -34,85 +38,71 @@ export default function SocietiesPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/societies').then(r => r.json()),
-      fetch('/api/schools').then(r => r.json()),
-    ]).then(([socData, schoolData]) => {
-      setSocieties(socData.societies || []);
-      setSchools(schoolData.schools || []);
-    }).catch(console.error)
+      fetch('/api/societies').then((r) => r.json()),
+      fetch('/api/schools').then((r) => r.json()),
+    ])
+      .then(([socData, schoolData]) => {
+        setSocieties(socData.societies || []);
+        setSchools(schoolData.schools || []);
+      })
+      .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
 
-  const filtered = societies.filter(s => {
-    const matchesSchool = activeSchool === 'all' 
-      || (activeSchool === 'nust-wide' && s.is_nust_wide)
-      || s.school_id === activeSchool;
-    const matchesSearch = !searchQuery 
-      || s.name.toLowerCase().includes(searchQuery.toLowerCase())
-      || s.description?.toLowerCase().includes(searchQuery.toLowerCase());
+  const filtered = societies.filter((s) => {
+    const matchesSchool =
+      activeSchool === 'all' ||
+      (activeSchool === 'nust-wide' && s.is_nust_wide) ||
+      s.school_id === activeSchool;
+    const matchesSearch =
+      !searchQuery ||
+      s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.description?.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesSchool && matchesSearch;
   });
 
   return (
-    <div className="min-h-screen" style={{ background: 'var(--bg-primary)' }}>
-      {/* Header */}
-      <div className="sticky top-0 z-30 backdrop-blur-xl" style={{ background: 'var(--bg-nav)', borderBottom: '1px solid var(--border-card)' }}>
-        <div className="px-5 pt-12 pb-4">
-          <h1 className="text-xl font-bold text-primary mb-4">Societies</h1>
+    <div className="min-h-screen bg-background">
+      <PageHeader
+        title="Societies"
+        search={{
+          value: searchQuery,
+          onChange: setSearchQuery,
+          placeholder: 'Search societies...',
+        }}
+        filters={{
+          items: [
+            { value: 'all', label: 'All' },
+            { value: 'nust-wide', label: 'NUST-Wide' },
+            ...schools.map((s) => ({ value: s.id, label: s.abbreviation })),
+          ],
+          active: activeSchool,
+          onChange: setActiveSchool,
+        }}
+      />
 
-          {/* Search */}
-          <div className="relative mb-3">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted" />
-            <input
-              type="text"
-              placeholder="Search societies..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="input-field w-full py-3 pl-12 pr-4 text-sm"
-            />
-          </div>
-
-          {/* School Filter Tabs */}
-          <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
-            <button
-              onClick={() => setActiveSchool('all')}
-              className={`chip whitespace-nowrap ${activeSchool === 'all' ? 'active' : ''}`}
-            >
-              All
-            </button>
-            <button
-              onClick={() => setActiveSchool('nust-wide')}
-              className={`chip whitespace-nowrap ${activeSchool === 'nust-wide' ? 'active' : ''}`}
-            >
-              NUST-Wide
-            </button>
-            {schools.map((school) => (
-              <button
-                key={school.id}
-                onClick={() => setActiveSchool(school.id)}
-                className={`chip whitespace-nowrap ${activeSchool === school.id ? 'active' : ''}`}
-              >
-                {school.abbreviation}
-              </button>
+      <div className="px-4 py-4">
+        {loading ? (
+          <div className="space-y-3">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="flex gap-4 p-4 rounded-xl border border-border">
+                <Skeleton className="w-14 h-14 rounded-2xl flex-shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-3 w-full" />
+                  <Skeleton className="h-3 w-1/3" />
+                </div>
+              </div>
             ))}
           </div>
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="px-5 py-4">
-        {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="w-8 h-8 animate-spin text-brand-500" />
-          </div>
         ) : filtered.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="space-y-3">
             {filtered.map((soc, i) => (
               <motion.div
                 key={soc.id}
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.05 }}
+                transition={{ delay: i * 0.04, ease: [0.25, 0.1, 0.25, 1] }}
               >
                 <SocietyCard
                   id={soc.id}
@@ -128,18 +118,19 @@ export default function SocietiesPage() {
             ))}
           </div>
         ) : (
-          <div className="text-center py-20 text-muted">
-            <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
-            <p>No societies found</p>
-          </div>
+          <EmptyState icon={Users} message="No societies found" />
         )}
       </div>
 
-      {/* Register Society FAB */}
-      <Link href="/register-society"
-        className="fixed bottom-24 right-5 z-20 w-14 h-14 bg-brand-500 rounded-2xl flex items-center justify-center shadow-lg shadow-brand-500/30 hover:bg-brand-600 transition-colors">
-        <Plus className="w-6 h-6 text-white" />
-      </Link>
+      <Button
+        asChild
+        size="icon"
+        className="fixed bottom-24 right-5 z-20 w-14 h-14 rounded-2xl shadow-lg shadow-brand-500/30"
+      >
+        <Link href="/register-society" aria-label="Register a society">
+          <Plus className="w-6 h-6" />
+        </Link>
+      </Button>
     </div>
   );
 }

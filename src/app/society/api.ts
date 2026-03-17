@@ -443,10 +443,11 @@ export function deletePost(
 
 // ─── Photo Albums ───────────────────────────────────────────────────────────
 
-export function fetchAlbums(
+export async function fetchAlbums(
   societyId: string
 ): Promise<SocietyAlbum[]> {
-  return api<SocietyAlbum[]>(`${s(societyId)}/albums`);
+  const res = await api<{ albums: SocietyAlbum[] }>(`${s(societyId)}/albums`);
+  return Array.isArray(res.albums) ? res.albums : [];
 }
 
 export function createAlbum(
@@ -477,11 +478,12 @@ export function deleteAlbum(
   return api(`${s(societyId)}/albums/${albumId}`, { method: 'DELETE' });
 }
 
-export function fetchAlbumPhotos(
+export async function fetchAlbumPhotos(
   societyId: string,
   albumId: string
 ): Promise<AlbumPhoto[]> {
-  return api<AlbumPhoto[]>(`${s(societyId)}/albums/${albumId}/photos`);
+  const res = await api<{ album: SocietyAlbum; photos: AlbumPhoto[] }>(`${s(societyId)}/albums/${albumId}`);
+  return Array.isArray(res.photos) ? res.photos : [];
 }
 
 export function deleteAlbumPhoto(
