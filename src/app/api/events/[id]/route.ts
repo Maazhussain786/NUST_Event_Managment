@@ -1,12 +1,14 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 
 export async function GET(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await params;
 
     const result = await query(
       `SELECT e.id, e.title, e.description, e.banner_url, e.location, e.venue_details,
@@ -22,7 +24,7 @@ export async function GET(
        JOIN societies s ON e.society_id = s.id
        LEFT JOIN tickets t ON e.id = t.event_id
        LEFT JOIN ratings r ON r.target_type = 'EVENT' AND r.target_id = e.id
-       WHERE e.id = $1
+       WHERE e.id = $1 AND e.deleted_at IS NULL
        GROUP BY e.id, ec.name, s.id`,
       [id]
     );

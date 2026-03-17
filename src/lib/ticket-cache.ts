@@ -70,7 +70,7 @@ export async function cacheTicket(ticket: CachedTicket): Promise<void> {
       cached_at: Date.now(),
     });
 
-    return new Promise((resolve, reject) => {
+    return await new Promise((resolve, reject) => {
       tx.oncomplete = () => {
         db.close();
         resolve();
@@ -95,7 +95,7 @@ export async function getCachedTicket(id: string): Promise<CachedTicket | null> 
     const store = tx.objectStore(TICKET_STORE);
     const request = store.get(id);
 
-    return new Promise((resolve, reject) => {
+    return await new Promise((resolve, reject) => {
       request.onsuccess = () => {
         db.close();
         resolve(request.result || null);
@@ -120,7 +120,7 @@ export async function getCachedTickets(): Promise<CachedTicket[]> {
     const store = tx.objectStore(TICKET_STORE);
     const request = store.getAll();
 
-    return new Promise((resolve, reject) => {
+    return await new Promise((resolve, reject) => {
       request.onsuccess = () => {
         db.close();
         const tickets = request.result || [];
@@ -160,7 +160,7 @@ export async function removeExpiredTickets(): Promise<void> {
       }
     };
 
-    return new Promise((resolve, reject) => {
+    return await new Promise((resolve, reject) => {
       tx.oncomplete = () => { db.close(); resolve(); };
       tx.onerror = () => { db.close(); reject(tx.error); };
     });
@@ -179,7 +179,7 @@ export async function getCachedTicketCount(): Promise<number> {
     const store = tx.objectStore(TICKET_STORE);
     const countRequest = store.count();
 
-    return new Promise((resolve, reject) => {
+    return await new Promise((resolve, reject) => {
       countRequest.onsuccess = () => { db.close(); resolve(countRequest.result); };
       countRequest.onerror = () => { db.close(); reject(countRequest.error); };
     });

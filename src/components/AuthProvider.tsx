@@ -78,30 +78,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               </button>
 
               <div className="flex flex-col items-center text-center">
-                <div className="w-16 h-16 rounded-2xl bg-brand-500/15 flex items-center justify-center mb-4">
+                <div className="flex items-center justify-center w-16 h-16 mb-4 rounded-2xl bg-brand-500/15">
                   <UserCircle className="w-9 h-9 text-brand-500" />
                 </div>
-                <h3 className="text-lg font-bold text-primary mb-1">Sign In Required</h3>
+                <h3 className="mb-1 text-lg font-bold text-primary">Sign In Required</h3>
                 <p className="text-secondary text-sm mb-6 leading-relaxed max-w-[260px]">
                   {promptMessage}
                 </p>
 
                 <button
                   onClick={() => { setShowPrompt(false); router.push('/login'); }}
-                  className="btn-primary w-full flex items-center justify-center gap-2 mb-3"
+                  className="flex items-center justify-center w-full gap-2 mb-3 btn-primary"
                 >
                   <LogIn className="w-5 h-5" />
                   Sign In
                 </button>
                 <button
                   onClick={() => { setShowPrompt(false); router.push('/register'); }}
-                  className="w-full py-3 rounded-2xl text-sm font-medium text-brand-500 transition-colors hover:bg-brand-500/5"
+                  className="w-full py-3 text-sm font-medium transition-colors rounded-2xl text-brand-500 hover:bg-brand-500/5"
                 >
                   Create Account
                 </button>
                 <button
                   onClick={() => setShowPrompt(false)}
-                  className="mt-1 text-muted text-xs hover:text-secondary transition-colors"
+                  className="mt-1 text-xs transition-colors text-muted hover:text-secondary"
                 >
                   Continue as Guest
                 </button>

@@ -138,6 +138,7 @@ export async function POST(request: NextRequest) {
     // 11. Transactional: quota check → upload → DB save → increment
     const client = await getClient();
     let blobUploaded: { url: string; blobName: string; sizeBytes: number } | null = null;
+    const oldBlobsToDelete: string[] = [];
 
     try {
       await client.query('BEGIN');
@@ -177,7 +178,7 @@ export async function POST(request: NextRequest) {
 
         for (const old of oldMedia.rows) {
           const oldBlob = extractBlobName(old.file_url, CONTAINERS.SOCIETY_MEDIA);
-          if (oldBlob) await deleteBlob(CONTAINERS.SOCIETY_MEDIA, oldBlob);
+          if (oldBlob) oldBlobsToDelete.push(oldBlob);
         }
 
         await client.query(
@@ -206,6 +207,11 @@ export async function POST(request: NextRequest) {
       await updateSocietyStorageUsedTx(client, societyId, result.sizeBytes);
 
       await client.query('COMMIT');
+
+      // Delete old blobs AFTER commit to avoid data loss on rollback
+      for (const oldBlob of oldBlobsToDelete) {
+        try { await deleteBlob(CONTAINERS.SOCIETY_MEDIA, oldBlob); } catch { /* best-effort */ }
+      }
 
       recordUpload(user.userId, result.sizeBytes);
 

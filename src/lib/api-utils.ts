@@ -84,7 +84,7 @@ export async function writeAuditLog(
 ): Promise<void> {
   const sql = `
     INSERT INTO audit_logs (action, performed_by, society_id, target_type, target_id, old_value, new_value, metadata, ip_address)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::inet)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
   `;
   const params = [
     entry.action,
@@ -118,7 +118,7 @@ export function buildAuditDiff(
   const newValue: Record<string, unknown> = {};
 
   for (const field of fields) {
-    if (field in newValues && newValues[field] !== oldRow[field]) {
+    if (field in newValues && JSON.stringify(newValues[field]) !== JSON.stringify(oldRow[field])) {
       oldValue[field] = oldRow[field];
       newValue[field] = newValues[field];
     }
@@ -320,6 +320,29 @@ export async function validateTimeChangeAfterCheckIn(
 // Soft Delete + Restore Helpers
 // ============================================================================
 
+// Allowlist of tables/columns that can be used with soft-delete/restore
+const ALLOWED_TABLES = new Set([
+  'events', 'societies', 'society_posts', 'society_albums',
+  'society_album_photos', 'society_media', 'society_memberships',
+  'event_registrations', 'tickets', 'notifications',
+]);
+
+const ALLOWED_COLUMNS = new Set([
+  'society_id', 'event_id', 'user_id', 'album_id', 'post_id',
+]);
+
+function assertValidTable(table: string): void {
+  if (!ALLOWED_TABLES.has(table)) {
+    throw new Error(`Invalid table name: ${table}`);
+  }
+}
+
+function assertValidColumn(column: string): void {
+  if (!ALLOWED_COLUMNS.has(column)) {
+    throw new Error(`Invalid column name: ${column}`);
+  }
+}
+
 /**
  * Soft-delete a record by setting deleted_at and deleted_by.
  * Works with tables that have both is_deleted and deleted_at columns.
@@ -331,6 +354,9 @@ export async function softDelete(
   deletedBy: string,
   extraWhere?: { column: string; value: string }
 ): Promise<boolean> {
+  assertValidTable(table);
+  if (extraWhere) assertValidColumn(extraWhere.column);
+
   const whereExtra = extraWhere ? ` AND ${extraWhere.column} = $4` : '';
   const params = extraWhere
     ? [id, deletedBy, deletedBy, extraWhere.value]
@@ -357,6 +383,9 @@ export async function softRestore(
   id: string,
   extraWhere?: { column: string; value: string }
 ): Promise<boolean> {
+  assertValidTable(table);
+  if (extraWhere) assertValidColumn(extraWhere.column);
+
   const whereExtra = extraWhere ? ` AND ${extraWhere.column} = $2` : '';
   const params = extraWhere ? [id, extraWhere.value] : [id];
 

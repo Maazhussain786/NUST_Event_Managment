@@ -258,7 +258,7 @@ export async function processImage(
   switch (originalMime) {
     case 'image/png':
       outputBuffer = await pipeline
-        .png({ compressionLevel: PNG_COMPRESSION_LEVEL, quality: 90 })
+        .png({ compressionLevel: PNG_COMPRESSION_LEVEL })
         .toBuffer();
       outputMime = 'image/png';
       break;
@@ -332,7 +332,7 @@ interface RateLimitEntry {
 const uploadRateMap = new Map<string, RateLimitEntry>();
 
 // Clean up stale entries every 5 minutes
-setInterval(() => {
+const cleanupTimer = setInterval(() => {
   const now = Date.now();
   uploadRateMap.forEach((entry, key) => {
     if (now - entry.windowStart > 3600000) {
@@ -340,6 +340,7 @@ setInterval(() => {
     }
   });
 }, 300000);
+if (typeof cleanupTimer === 'object' && cleanupTimer.unref) cleanupTimer.unref();
 
 /**
  * Check if a user has exceeded upload rate limits.
@@ -569,6 +570,16 @@ export async function logQuotaExceeded(
 // Count Enforcement
 // ============================================================================
 
+// Allowlist of valid tables and foreign keys for media count queries
+const ALLOWED_MEDIA_TABLES = new Set([
+  'society_media', 'society_album_photos', 'society_post_images',
+  'event_media', 'note_attachments',
+]);
+
+const ALLOWED_FOREIGN_KEYS = new Set([
+  'society_id', 'album_id', 'post_id', 'event_id', 'note_id',
+]);
+
 /**
  * Check if an entity has reached its media count limit.
  */
@@ -579,6 +590,13 @@ export async function checkEntityMediaCount(
   maxCount: number,
   mediaType?: string
 ): Promise<string | null> {
+  if (!ALLOWED_MEDIA_TABLES.has(table)) {
+    throw new Error(`Invalid table name: ${table}`);
+  }
+  if (!ALLOWED_FOREIGN_KEYS.has(foreignKey)) {
+    throw new Error(`Invalid foreign key: ${foreignKey}`);
+  }
+
   let sql = `SELECT COUNT(*) AS cnt FROM ${table} WHERE ${foreignKey} = $1 AND is_deleted = FALSE`;
   const params: unknown[] = [entityId];
 

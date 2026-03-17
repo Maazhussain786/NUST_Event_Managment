@@ -49,7 +49,7 @@ export async function POST(
     const eventResult = await client.query(
       `SELECT e.id, e.title, e.society_id, e.is_cancelled, e.status,
               e.event_start, e.event_end, e.registration_end, e.max_participants,
-              e.participants_count, e.visibility,
+              e.participants_count, e.visibility, e.is_paid,
               s.status as society_status, s.name as society_name
        FROM events e
        JOIN societies s ON e.society_id = s.id
@@ -78,6 +78,15 @@ export async function POST(
     if (event.status === 'COMPLETED' || event.status === 'ARCHIVED') {
       await client.query('ROLLBACK');
       return NextResponse.json({ error: 'Event has already ended' }, { status: 409 });
+    }
+
+    // ── Paid events must use purchase-ticket ────────────────────────────
+    if (event.is_paid) {
+      await client.query('ROLLBACK');
+      return NextResponse.json(
+        { error: 'This is a paid event. Use /purchase-ticket instead.' },
+        { status: 400 }
+      );
     }
 
     // ── Registration deadline ─────────────────────────────────────────

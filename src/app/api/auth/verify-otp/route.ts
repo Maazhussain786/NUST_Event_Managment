@@ -36,8 +36,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'OTP expired. Request a new one.' }, { status: 400 });
     }
 
-    // Check match
-    if (otp.otp_code !== otpCode) {
+    // Check match (coerce to string in case client sends a number)
+    if (otp.otp_code !== String(otpCode)) {
       return NextResponse.json({ error: 'Invalid OTP' }, { status: 400 });
     }
 
@@ -53,6 +53,10 @@ export async function POST(req: NextRequest) {
       [userId]
     );
     const user = userResult.rows[0];
+
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
 
     const token = generateToken({
       userId: user.id,

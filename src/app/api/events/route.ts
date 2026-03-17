@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 
@@ -7,8 +9,10 @@ export async function GET(req: Request) {
     const category = searchParams.get('category');
     const search = searchParams.get('q');
     const societyId = searchParams.get('society');
-    const limit = parseInt(searchParams.get('limit') || '20');
-    const offset = parseInt(searchParams.get('offset') || '0');
+    const rawLimit = parseInt(searchParams.get('limit') || '20');
+    const rawOffset = parseInt(searchParams.get('offset') || '0');
+    const limit = Number.isNaN(rawLimit) || rawLimit < 1 ? 20 : Math.min(rawLimit, 100);
+    const offset = Number.isNaN(rawOffset) || rawOffset < 0 ? 0 : rawOffset;
 
     let sql = `
       SELECT e.id, e.title, e.description, e.banner_url, e.location,

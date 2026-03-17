@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 
@@ -13,7 +15,7 @@ export async function GET() {
        LEFT JOIN event_categories ec ON e.category_id = ec.id
        JOIN societies s ON e.society_id = s.id
        LEFT JOIN tickets t ON e.id = t.event_id
-       WHERE e.is_cancelled = FALSE AND e.event_end >= NOW()
+       WHERE e.is_cancelled = FALSE AND e.deleted_at IS NULL AND e.event_end >= NOW()
        GROUP BY e.id, ec.name, s.id
        ORDER BY tickets_sold DESC, e.event_start ASC
        LIMIT 10`

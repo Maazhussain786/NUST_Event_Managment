@@ -166,7 +166,7 @@ export async function POST(
 
         await client.query(
           `INSERT INTO audit_logs (action, performed_by, society_id, target_type, target_id, new_value, metadata)
-           VALUES ('TICKET_APPROVED', $1, $2, 'ticket', $3, $4, $5)`,
+           VALUES ('TICKET_PURCHASED', $1, $2, 'ticket', $3, $4, $5)`,
           [
             user.userId,
             event.society_id,
@@ -209,7 +209,7 @@ export async function POST(
     // ── Audit log ─────────────────────────────────────────────────────
     await client.query(
       `INSERT INTO audit_logs (action, performed_by, society_id, target_type, target_id, new_value, metadata)
-       VALUES ('TICKET_APPROVED', $1, $2, 'ticket', $3, $4, $5)`,
+       VALUES ('TICKET_PURCHASED', $1, $2, 'ticket', $3, $4, $5)`,
       [
         user.userId,
         event.society_id,

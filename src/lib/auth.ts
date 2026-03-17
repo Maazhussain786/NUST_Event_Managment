@@ -1,16 +1,20 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { query } from './db';
 import { cookies } from 'next/headers';
 
+let _jwtSecret: string | null = null;
 function getJwtSecret(): string {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    throw new Error('JWT_SECRET environment variable is required. Set it in .env or .env.local');
+  if (!_jwtSecret) {
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+      throw new Error('JWT_SECRET environment variable is required. Set it in .env or .env.local');
+    }
+    _jwtSecret = secret;
   }
-  return secret;
+  return _jwtSecret;
 }
-const JWT_SECRET: string = getJwtSecret();
 const JWT_EXPIRES = '7d';
 
 export interface JWTPayload {
@@ -29,12 +33,12 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
 }
 
 export function generateToken(payload: JWTPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES });
+  return jwt.sign(payload, getJwtSecret(), { expiresIn: JWT_EXPIRES });
 }
 
 export function verifyToken(token: string): JWTPayload | null {
   try {
-    return jwt.verify(token, JWT_SECRET) as JWTPayload;
+    return jwt.verify(token, getJwtSecret()) as JWTPayload;
   } catch {
     return null;
   }
@@ -56,5 +60,5 @@ export async function getUserById(id: string) {
 }
 
 export function generateOTP(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return crypto.randomInt(100000, 1000000).toString();
 }
