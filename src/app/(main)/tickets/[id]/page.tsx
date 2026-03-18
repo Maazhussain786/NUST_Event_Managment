@@ -6,6 +6,8 @@ import { ArrowLeft, Calendar, MapPin, Clock, Download, Loader2, AlertTriangle, X
 import { useRouter, useParams } from 'next/navigation';
 import QRCode from 'qrcode';
 import { cacheTicket, getCachedTicket, type CachedTicket } from '@/lib/ticket-cache';
+import { StatusTimeline, StatusBadge } from '@/components/StatusTimeline';
+import { Button } from '@/components/ui/button';
 
 interface TicketDetail {
   id: string;
@@ -24,6 +26,7 @@ interface TicketDetail {
   is_cancelled: boolean;
   source_type: 'ticket' | 'registration';
   scanned_at: string | null;
+  rejection_reason?: string;
 }
 
 export default function TicketDetailPage() {
@@ -76,7 +79,7 @@ export default function TicketDetailPage() {
             attendee_name: data.ticket.attendee_name,
             attendee_email: '',
             cached_at: Date.now(),
-          }).catch(() => {});
+          }).catch((err) => console.error('Failed to cache ticket:', err));
         }
       } catch (err) {
         // Try offline cache as fallback
@@ -115,7 +118,9 @@ export default function TicketDetailPage() {
               setLoading(false);
               return;
             }
-          } catch {}
+          } catch (cacheErr) {
+            console.error('Failed to load cached ticket:', cacheErr);
+          }
         }
         setError(err instanceof Error ? err.message : 'Failed to load ticket');
       } finally {
@@ -248,8 +253,8 @@ export default function TicketDetailPage() {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
       }, 'image/png');
-    } catch {
-      // Silent fallback
+    } catch (downloadErr) {
+      console.error('Failed to download ticket:', downloadErr);
     } finally {
       setDownloading(false);
     }
@@ -265,13 +270,13 @@ export default function TicketDetailPage() {
 
   if (error || !ticket) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-6" style={{ background: 'var(--bg-primary)' }}>
+      <div className="min-h-screen flex flex-col items-center justify-center px-6 bg-background">
         <AlertTriangle className="w-16 h-16 text-amber-500 mb-4" />
-        <h2 className="text-primary text-lg font-semibold mb-1">Ticket Not Found</h2>
-        <p className="text-muted text-sm mb-6">{error || 'This ticket could not be loaded.'}</p>
-        <button onClick={() => router.push('/tickets')} className="btn-primary">
+        <h2 className="text-h2 text-foreground mb-1">Ticket Not Found</h2>
+        <p className="text-muted-foreground text-body-sm mb-6">{error || 'This ticket could not be loaded.'}</p>
+        <Button onClick={() => router.push('/tickets')}>
           Back to Tickets
-        </button>
+        </Button>
       </div>
     );
   }
@@ -280,40 +285,50 @@ export default function TicketDetailPage() {
   const isPending = ticket.status === 'PENDING';
   const isApproved = ticket.status === 'APPROVED';
   const isScanned = !!ticket.scanned_at;
+  const effectiveStatus = isScanned ? 'CHECKED_IN' : ticket.status;
 
   return (
-    <div className="min-h-screen" style={{ background: 'var(--bg-primary)' }}>
+    <div className="min-h-screen bg-background">
       {/* Hidden canvas for download */}
       <canvas ref={canvasRef} className="hidden" />
 
       {/* Header */}
-      <div className="px-4 pt-12 pb-4 flex items-center gap-3">
-        <button
-          onClick={() => router.back()}
-          className="w-10 h-10 rounded-2xl flex items-center justify-center text-primary"
-          style={{ background: 'var(--bg-input)', border: '1px solid var(--border-card)' }}
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </button>
-        <h1 className="text-lg font-bold text-primary">E-Ticket</h1>
-        {isCancelled && (
-          <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-red-500/10 text-red-500 font-medium">Cancelled</span>
-        )}
-        {isPending && (
-          <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 font-medium">Pending</span>
-        )}
-        {isScanned && isApproved && (
-          <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-green-500/10 text-green-600 font-medium">Checked In</span>
-        )}
-      </div>
+      <header className="sticky top-0 z-header bg-background/80 backdrop-blur-xl border-b border-border">
+        <div className="px-5 pt-14 pb-4 safe-top flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => router.back()}
+            className="-ml-2"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <h1 className="text-h2 text-foreground">E-Ticket</h1>
+        </div>
+      </header>
 
-      <div className="px-5 pb-8">
+      <div className="px-5 py-6 space-y-6">
+        {/* Status Timeline */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+        >
+          <StatusTimeline status={effectiveStatus} />
+        </motion.div>
+
+        {/* Status Badge with description */}
+        <StatusBadge
+          status={effectiveStatus}
+          reason={ticket.status === 'REJECTED' ? ticket.rejection_reason : undefined}
+        />
+
         {/* Ticket Card */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className={`rounded-3xl overflow-hidden ${isCancelled ? 'opacity-60' : ''}`}
-          style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}
+          transition={{ delay: 0.15 }}
+          className={`rounded-2xl overflow-hidden border border-border bg-card ${isCancelled ? 'opacity-60' : ''}`}
         >
           {/* Top Section - Event Banner */}
           <div className="h-40 bg-gradient-to-br from-brand-500 to-brand-700 relative overflow-hidden">
@@ -322,7 +337,7 @@ export default function TicketDetailPage() {
             )}
             <div className="absolute inset-0 bg-black/40" />
             <div className="absolute bottom-4 left-4 right-4">
-              <h2 className="text-xl font-bold text-white">
+              <h2 className="text-xl font-bold text-white line-clamp-2">
                 {ticket.event_title}
               </h2>
               <p className="text-white/80 text-sm">
@@ -333,17 +348,17 @@ export default function TicketDetailPage() {
 
           {/* Tear Line */}
           <div className="relative">
-            <div className="absolute left-0 -top-3 w-6 h-6 rounded-full" style={{ background: 'var(--bg-primary)' }} />
-            <div className="absolute right-0 -top-3 w-6 h-6 rounded-full" style={{ background: 'var(--bg-primary)' }} />
-            <div className="mx-8" style={{ borderTop: '2px dashed var(--border-primary)' }} />
+            <div className="absolute left-0 -top-3 w-6 h-6 rounded-full bg-background" />
+            <div className="absolute right-0 -top-3 w-6 h-6 rounded-full bg-background" />
+            <div className="mx-8 border-t-2 border-dashed border-border" />
           </div>
 
           {/* Details Section */}
           <div className="p-5 space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <p className="text-muted text-xs mb-1">Date</p>
-                <div className="flex items-center gap-1.5 text-primary text-sm">
+                <p className="text-caption text-muted-foreground mb-1">Date</p>
+                <div className="flex items-center gap-1.5 text-body-sm text-foreground">
                   <Calendar className="w-4 h-4 text-brand-500" />
                   {new Date(ticket.event_start).toLocaleDateString('en-PK', {
                     month: 'short', day: 'numeric', year: 'numeric'
@@ -351,8 +366,8 @@ export default function TicketDetailPage() {
                 </div>
               </div>
               <div>
-                <p className="text-muted text-xs mb-1">Time</p>
-                <div className="flex items-center gap-1.5 text-primary text-sm">
+                <p className="text-caption text-muted-foreground mb-1">Time</p>
+                <div className="flex items-center gap-1.5 text-body-sm text-foreground">
                   <Clock className="w-4 h-4 text-brand-500" />
                   {new Date(ticket.event_start).toLocaleTimeString('en-PK', {
                     hour: '2-digit', minute: '2-digit', hour12: true
@@ -360,15 +375,15 @@ export default function TicketDetailPage() {
                 </div>
               </div>
               <div>
-                <p className="text-muted text-xs mb-1">Venue</p>
-                <div className="flex items-center gap-1.5 text-primary text-sm">
+                <p className="text-caption text-muted-foreground mb-1">Venue</p>
+                <div className="flex items-center gap-1.5 text-body-sm text-foreground">
                   <MapPin className="w-4 h-4 text-brand-500" />
                   {ticket.event_venue || 'TBD'}
                 </div>
               </div>
               <div>
-                <p className="text-muted text-xs mb-1">Ticket #</p>
-                <p className="text-primary text-sm font-mono">
+                <p className="text-caption text-muted-foreground mb-1">Ticket #</p>
+                <p className="text-body-sm text-foreground font-mono">
                   {ticket.ticket_number || 'N/A'}
                 </p>
               </div>
@@ -376,8 +391,8 @@ export default function TicketDetailPage() {
 
             {/* Type badge */}
             <div className="flex items-center gap-2">
-              <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
-                ticket.is_paid ? 'bg-brand-500/10 text-brand-600' : 'bg-green-500/10 text-green-600'
+              <span className={`text-caption px-2.5 py-1 rounded-full font-medium ${
+                ticket.is_paid ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
               }`}>
                 {ticket.is_paid ? 'Paid Ticket' : 'Free Registration'}
               </span>
@@ -387,56 +402,57 @@ export default function TicketDetailPage() {
             {isCancelled ? (
               <div className="flex flex-col items-center py-8">
                 <XCircle className="w-16 h-16 text-red-400 mb-3" />
-                <p className="text-red-500 font-medium text-sm">This ticket has been cancelled</p>
-                <p className="text-muted text-xs mt-1">Contact event organizers for help</p>
+                <p className="text-red-500 font-medium text-body-sm">This ticket has been cancelled</p>
+                <p className="text-muted-foreground text-caption mt-1">Contact event organizers for help</p>
               </div>
             ) : isPending ? (
               <div className="flex flex-col items-center py-8">
-                <Loader2 className="w-12 h-12 text-amber-400 mb-3" />
-                <p className="text-amber-600 font-medium text-sm">Awaiting Approval</p>
-                <p className="text-muted text-xs mt-1">QR code will appear once approved</p>
+                <Loader2 className="w-12 h-12 text-amber-400 mb-3 animate-spin" />
+                <p className="text-amber-600 dark:text-amber-400 font-medium text-body-sm">Awaiting Approval</p>
+                <p className="text-muted-foreground text-caption mt-1">QR code will appear once approved</p>
               </div>
             ) : qrImageUrl ? (
               <div className="flex flex-col items-center py-4">
-                <div className="w-52 h-52 bg-white rounded-2xl flex items-center justify-center p-3 shadow-sm">
+                <div className="w-52 h-52 bg-white rounded-2xl flex items-center justify-center p-3 shadow-sm border border-border">
                   <img src={qrImageUrl} alt="QR Code" className="w-full h-full" />
                 </div>
-                <p className="text-muted text-xs mt-3">Show this QR code at the venue entrance</p>
+                <p className="text-muted-foreground text-caption mt-3">Show this QR code at the venue entrance</p>
                 {isScanned && (
-                  <p className="text-green-600 text-xs mt-1 font-medium">
-                    Scanned on {new Date(ticket.scanned_at!).toLocaleString('en-PK')}
+                  <p className="text-emerald-600 dark:text-emerald-400 text-caption mt-1 font-medium">
+                    Checked in on {new Date(ticket.scanned_at!).toLocaleString('en-PK')}
                   </p>
                 )}
               </div>
             ) : (
               <div className="flex flex-col items-center py-8">
-                <AlertTriangle className="w-12 h-12 text-muted mb-3 opacity-40" />
-                <p className="text-muted text-sm">QR code not available</p>
+                <AlertTriangle className="w-12 h-12 text-muted-foreground mb-3 opacity-40" />
+                <p className="text-muted-foreground text-body-sm">QR code not available</p>
               </div>
             )}
 
             {/* Attendee */}
-            <div className="rounded-xl p-3 text-center" style={{ background: 'var(--bg-input)' }}>
-              <p className="text-muted text-xs">Attendee</p>
-              <p className="text-primary font-semibold">{ticket.attendee_name}</p>
+            <div className="rounded-xl p-3 text-center bg-muted/50">
+              <p className="text-caption text-muted-foreground">Attendee</p>
+              <p className="text-foreground font-semibold">{ticket.attendee_name}</p>
             </div>
           </div>
         </motion.div>
 
         {/* Download Button - only show for approved tickets with QR */}
         {isApproved && qrImageUrl && !isCancelled && (
-          <button
+          <Button
             onClick={handleDownload}
             disabled={downloading}
-            className="btn-secondary w-full mt-4 flex items-center justify-center gap-2"
+            variant="secondary"
+            className="w-full"
           >
             {downloading ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
+              <Loader2 className="w-5 h-5 animate-spin mr-2" />
             ) : (
-              <Download className="w-5 h-5" />
+              <Download className="w-5 h-5 mr-2" />
             )}
             {downloading ? 'Generating...' : 'Save Ticket as Image'}
-          </button>
+          </Button>
         )}
       </div>
     </div>

@@ -49,12 +49,18 @@ export default function RootLayout({
             {children}
             <Toaster
               position="top-center"
+              expand={false}
+              richColors
+              closeButton
               toastOptions={{
-                className: 'font-sans',
+                className: 'font-sans text-body-sm',
+                duration: 4000,
                 style: {
                   background: 'hsl(var(--card))',
                   color: 'hsl(var(--card-foreground))',
                   border: '1px solid hsl(var(--border))',
+                  borderRadius: 'var(--radius-md)',
+                  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.08)',
                 },
               }}
             />

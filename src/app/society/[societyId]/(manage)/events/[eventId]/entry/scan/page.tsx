@@ -44,7 +44,7 @@ export default function EventQrScannerPage() {
         if (data?.title) setEventTitle(data.title);
         else if (data?.event?.title) setEventTitle(data.event.title);
       })
-      .catch(() => {});
+      .catch((err) => console.error('Failed to fetch event:', err));
   }, [eventId]);
 
   // Verify scanner permission (SCAN_QR privilege check)

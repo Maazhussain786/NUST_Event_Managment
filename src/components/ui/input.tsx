@@ -18,26 +18,26 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
     return (
       <div className="w-full">
         {label && (
-          <label htmlFor={id} className="text-caption font-medium text-muted-foreground mb-1.5 block">
+          <label htmlFor={id} className="text-body-sm font-medium text-foreground mb-2 block">
             {label}
           </label>
         )}
-        <div className="relative">
+        <div className="relative group">
           {Icon && (
-            <Icon className="absolute left-3.5 top-1/2 -translate-y-1/2 h-[18px] w-[18px] text-muted-foreground pointer-events-none" />
+            <Icon className="absolute left-3.5 top-1/2 -translate-y-1/2 h-[18px] w-[18px] text-muted-foreground group-focus-within:text-brand-500 transition-colors pointer-events-none" />
           )}
           <input
             type={type}
             id={id}
             className={cn(
-              'flex h-12 w-full rounded-xl bg-input border-[1.5px] border-border px-4 text-[0.9375rem] text-foreground',
-              'placeholder:text-muted-foreground',
-              'focus:border-brand-500 focus:ring-[3px] focus:ring-brand-500/12 focus:outline-none',
+              'flex h-12 w-full rounded-xl bg-background border border-border px-4 text-[15px] text-foreground',
+              'placeholder:text-muted-foreground/60',
+              'focus:border-brand-500 focus:ring-2 focus:ring-brand-500/10 focus:outline-none',
               'transition-all duration-200',
               'disabled:cursor-not-allowed disabled:opacity-50',
               Icon && 'pl-11',
               endIcon && 'pr-11',
-              error && 'border-destructive focus:border-destructive focus:ring-destructive/12',
+              error && 'border-destructive focus:border-destructive focus:ring-destructive/10',
               className,
             )}
             ref={ref}
@@ -52,7 +52,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           )}
         </div>
         {error && (
-          <p id={errorId} className="text-caption text-destructive mt-1.5" role="alert">
+          <p id={errorId} className="text-caption text-destructive mt-1.5 flex items-center gap-1" role="alert">
             {error}
           </p>
         )}

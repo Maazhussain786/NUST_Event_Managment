@@ -69,7 +69,7 @@ export default function RegisterSocietyPage() {
           if (s.school_id) setSchoolId(s.school_id);
         }
       }
-    }).catch(() => {});
+    }).catch((err) => console.error('Failed to fetch pending society:', err));
     // Pre-fill email from localStorage
     try {
       const user = localStorage.getItem('user');
@@ -78,7 +78,9 @@ export default function RegisterSocietyPage() {
         if (!email) setEmail(parsed.email || '');
         if (!presidentName) setPresidentName(parsed.fullName || '');
       }
-    } catch {}
+    } catch (localStorageErr) {
+      console.error('Failed to parse user from localStorage:', localStorageErr);
+    }
   }, []);
 
   const handleLogoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {

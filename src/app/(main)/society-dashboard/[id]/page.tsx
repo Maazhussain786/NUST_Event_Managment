@@ -126,7 +126,7 @@ export default function SocietyDashboard() {
     try {
       const r = await fetch(`/api/societies/${societyId}`);
       if (r.ok) { const d = await r.json(); setSociety(d); }
-    } catch {}
+    } catch (err) { console.error('Failed to fetch society:', err); }
   }, [societyId]);
 
   const fetchMyRole = useCallback(async () => {
@@ -144,7 +144,7 @@ export default function SocietyDashboard() {
           });
         }
       }
-    } catch {}
+    } catch (err) { console.error('Failed to fetch my role:', err); }
   }, [societyId]);
 
   const fetchWings = useCallback(async () => {
@@ -158,34 +158,34 @@ export default function SocietyDashboard() {
             try {
               const pr = await fetch(`/api/societies/${societyId}/wings/${w.id}/portfolios`);
               if (pr.ok) { w.portfolios = await pr.json(); }
-            } catch {}
+            } catch (err) { console.error('Failed to fetch portfolios for wing:', err); }
             return w;
           })
         );
         setWings(withPortfolios);
       }
-    } catch {}
+    } catch (err) { console.error('Failed to fetch wings:', err); }
   }, [societyId]);
 
   const fetchMembers = useCallback(async () => {
     try {
       const r = await fetch(`/api/societies/${societyId}/members`);
       if (r.ok) setMembers(await r.json());
-    } catch {}
+    } catch (err) { console.error('Failed to fetch members:', err); }
   }, [societyId]);
 
   const fetchInvites = useCallback(async () => {
     try {
       const r = await fetch(`/api/invites?societyId=${societyId}`);
       if (r.ok) { const d = await r.json(); setInvites(d.invites || d); }
-    } catch {}
+    } catch (err) { console.error('Failed to fetch invites:', err); }
   }, [societyId]);
 
   const fetchSettings = useCallback(async () => {
     try {
       const r = await fetch(`/api/societies/${societyId}/settings`);
       if (r.ok) setSettings(await r.json());
-    } catch {}
+    } catch (err) { console.error('Failed to fetch settings:', err); }
   }, [societyId]);
 
   useEffect(() => {

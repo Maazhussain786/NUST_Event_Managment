@@ -41,6 +41,8 @@ interface MySociety {
   rejection_reason?: string;
 }
 
+const ease = [0.25, 0.1, 0.25, 1] as const;
+
 export default function ProfilePage() {
   const router = useRouter();
   const { theme, toggleTheme } = useTheme();
@@ -60,7 +62,7 @@ export default function ProfilePage() {
       fetch('/api/my-societies')
         .then((r) => (r.ok ? r.json() : []))
         .then((data) => setMySocieties(Array.isArray(data) ? data : []))
-        .catch(() => {})
+        .catch((err) => console.error('Failed to fetch societies:', err))
         .finally(() => setLoadingSocieties(false));
 
       fetch('/api/me')
@@ -71,7 +73,7 @@ export default function ProfilePage() {
             localStorage.setItem('user', JSON.stringify(data.user));
           }
         })
-        .catch(() => {});
+        .catch((err) => console.error('Failed to fetch user:', err));
     }
   }, []);
 
@@ -129,24 +131,33 @@ export default function ProfilePage() {
     .toUpperCase()
     .slice(0, 2) || 'U';
 
-  const menuItems = [
-    { icon: Bell, label: 'Notifications', onClick: authGuard(() => router.push('/notifications'), 'Sign in to view notifications') },
-    { icon: Heart, label: 'Favorites', onClick: authGuard(() => router.push('/favorites'), 'Sign in to see favorites') },
-    { icon: Shield, label: 'Privacy & Security', onClick: () => router.push('/privacy') },
-    { icon: HelpCircle, label: 'Help & Support', onClick: () => router.push('/help') },
-    { icon: Settings, label: 'Settings', onClick: () => router.push('/settings') },
+  const menuSections = [
+    {
+      items: [
+        { icon: Bell, label: 'Notifications', onClick: authGuard(() => router.push('/notifications'), 'Sign in to view notifications') },
+        { icon: Heart, label: 'Favorites', onClick: authGuard(() => router.push('/favorites'), 'Sign in to see favorites') },
+      ],
+    },
+    {
+      items: [
+        { icon: Shield, label: 'Privacy & Security', onClick: () => router.push('/privacy') },
+        { icon: HelpCircle, label: 'Help & Support', onClick: () => router.push('/help') },
+        { icon: Settings, label: 'Settings', onClick: () => router.push('/settings') },
+      ],
+    },
   ];
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header + Profile Card */}
-      <div className="px-4 pt-14 pb-6 safe-top">
-        <h1 className="text-h1 text-foreground mb-6">Profile</h1>
+    <div className="min-h-screen bg-background pb-28">
+      {/* ── Profile header ── */}
+      <div className="px-5 pt-14 pb-6 safe-top">
+        <h1 className="text-h1 text-foreground mb-5">Profile</h1>
 
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-xl border border-border bg-card p-5"
+          transition={{ ease }}
+          className="rounded-2xl border border-border bg-card p-5"
         >
           {user ? (
             <div className="flex items-center gap-4">
@@ -164,9 +175,9 @@ export default function ProfilePage() {
                 className="relative shrink-0 group"
                 aria-label="Change profile picture"
               >
-                <Avatar size="lg" className="w-16 h-16 rounded-2xl">
+                <Avatar size="lg" className="w-16 h-16 rounded-2xl ring-2 ring-border">
                   {user.avatarUrl ? <AvatarImage src={user.avatarUrl} alt={user.fullName} /> : null}
-                  <AvatarFallback className="rounded-2xl text-xl">{initials}</AvatarFallback>
+                  <AvatarFallback className="rounded-2xl text-xl font-bold">{initials}</AvatarFallback>
                 </Avatar>
                 <div className="absolute inset-0 rounded-2xl bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                   {uploadingAvatar ? (
@@ -178,12 +189,11 @@ export default function ProfilePage() {
               </button>
               <div className="flex-1 min-w-0">
                 <h2 className="text-h3 text-foreground truncate">{user.fullName}</h2>
-                <p className="text-caption text-muted-foreground truncate flex items-center gap-1">
-                  <Mail className="w-3.5 h-3.5" />
+                <p className="text-caption text-muted-foreground truncate mt-0.5">
                   {user.email}
                 </p>
                 {user.userType && (
-                  <Badge variant="default" size="sm" className="mt-1">
+                  <Badge variant="default" size="sm" className="mt-1.5">
                     {user.userType.replace('_', ' ')}
                   </Badge>
                 )}
@@ -209,18 +219,20 @@ export default function ProfilePage() {
         </motion.div>
       </div>
 
-      {/* Menu */}
-      <div className="px-4 space-y-2">
+      {/* ── Content ── */}
+      <div className="px-5 space-y-5">
         {/* Theme Toggle */}
         <div
-          className="w-full rounded-xl border border-border bg-card p-4 flex items-center gap-3 transition-colors hover:bg-accent cursor-pointer"
+          className="rounded-xl border border-border bg-card p-4 flex items-center gap-3 transition-colors hover:bg-accent cursor-pointer active:scale-[0.99]"
           onClick={toggleTheme}
           role="button"
           tabIndex={0}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') toggleTheme(); }}
         >
-          {isDark ? <Moon className="w-5 h-5 text-brand-500" /> : <Sun className="w-5 h-5 text-brand-500" />}
-          <span className="text-body-sm text-foreground flex-1 text-left">
+          <div className="w-9 h-9 rounded-xl bg-brand-500/10 flex items-center justify-center">
+            {isDark ? <Moon className="w-4.5 h-4.5 text-brand-500" /> : <Sun className="w-4.5 h-4.5 text-brand-500" />}
+          </div>
+          <span className="text-body-sm text-foreground flex-1 text-left font-medium">
             {isDark ? 'Dark Mode' : 'Light Mode'}
           </span>
           <Switch checked={isDark} onCheckedChange={toggleTheme} onClick={(e) => e.stopPropagation()} aria-label="Toggle dark mode" />
@@ -228,10 +240,10 @@ export default function ProfilePage() {
 
         {/* My Societies */}
         {user && (
-          <div className="mt-2">
-            <div className="flex items-center justify-between mb-2 px-1">
+          <div>
+            <div className="flex items-center justify-between mb-2.5 px-1">
               <h3 className="text-overline text-muted-foreground">My Societies</h3>
-              <Link href="/register-society" className="text-brand-600 dark:text-brand-400 text-xs font-medium flex items-center gap-1">
+              <Link href="/register-society" className="text-brand-600 dark:text-brand-400 text-xs font-semibold flex items-center gap-1">
                 <Plus className="w-3 h-3" /> Register
               </Link>
             </div>
@@ -246,7 +258,7 @@ export default function ProfilePage() {
                 </div>
               </div>
             ) : mySocieties.length > 0 ? (
-              <div className="space-y-2">
+              <div className="rounded-xl border border-border bg-card overflow-hidden divide-y divide-border">
                 {mySocieties.map((soc) => (
                   <button
                     key={soc.id + soc.role_name}
@@ -254,17 +266,17 @@ export default function ProfilePage() {
                       if (soc.status === 'APPROVED') router.push(`/society/${soc.id}/dashboard`);
                     }}
                     className={cn(
-                      'w-full rounded-xl border border-border bg-card p-4 flex items-center gap-3 transition-colors hover:bg-accent',
-                      soc.status !== 'APPROVED' && 'opacity-80',
+                      'w-full px-4 py-3.5 flex items-center gap-3 transition-colors hover:bg-accent text-left',
+                      soc.status !== 'APPROVED' && 'opacity-70',
                     )}
                   >
-                    <Avatar size="md" className="rounded-xl">
+                    <Avatar size="md" className="rounded-xl w-10 h-10">
                       {soc.logo_url ? <AvatarImage src={soc.logo_url} alt={soc.name} /> : null}
-                      <AvatarFallback className="rounded-xl">
-                        <Building2 className="w-5 h-5" />
+                      <AvatarFallback className="rounded-xl text-sm font-bold">
+                        {soc.name.slice(0, 2).toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
-                    <div className="flex-1 min-w-0 text-left">
+                    <div className="flex-1 min-w-0">
                       <h4 className="text-body-sm font-medium text-foreground truncate">{soc.name}</h4>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         {soc.status === 'APPROVED' ? (
@@ -294,14 +306,14 @@ export default function ProfilePage() {
             ) : (
               <Link
                 href="/register-society"
-                className="w-full rounded-xl border-2 border-dashed border-brand-500/30 bg-card p-4 flex items-center gap-3"
+                className="w-full rounded-xl border-2 border-dashed border-brand-500/20 bg-card p-4 flex items-center gap-3 hover:border-brand-500/40 transition-colors"
               >
                 <div className="w-10 h-10 rounded-xl bg-brand-500/10 flex items-center justify-center">
                   <Crown className="w-5 h-5 text-brand-500" />
                 </div>
                 <div className="flex-1 text-left">
                   <p className="text-body-sm font-medium text-foreground">Register a Society</p>
-                  <p className="text-caption text-muted-foreground">Become a president of your own society</p>
+                  <p className="text-caption text-muted-foreground">Lead your own student society</p>
                 </div>
                 <ChevronRight className="w-4 h-4 text-brand-500" />
               </Link>
@@ -313,51 +325,63 @@ export default function ProfilePage() {
         {user?.userType === 'SUPER_ADMIN' && (
           <button
             onClick={() => router.push('/admin')}
-            className="w-full rounded-xl border border-brand-500/30 bg-card p-4 flex items-center gap-3 transition-colors hover:bg-accent"
+            className="w-full rounded-xl border border-brand-500/20 bg-card p-4 flex items-center gap-3 transition-colors hover:bg-accent active:scale-[0.99]"
           >
-            <ShieldCheck className="w-5 h-5 text-brand-500" />
-            <span className="text-body-sm text-brand-600 dark:text-brand-400 flex-1 text-left font-semibold">Admin Panel</span>
+            <div className="w-9 h-9 rounded-xl bg-brand-500/10 flex items-center justify-center">
+              <ShieldCheck className="w-4.5 h-4.5 text-brand-500" />
+            </div>
+            <span className="text-body-sm text-foreground flex-1 text-left font-medium">Admin Panel</span>
             <Badge variant="default" size="sm">ADMIN</Badge>
           </button>
         )}
 
-        {/* Menu Items */}
-        {menuItems.map((item, i) => (
-          <motion.button
-            key={item.label}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.04, ease: [0.25, 0.1, 0.25, 1] }}
-            onClick={item.onClick}
-            className="w-full rounded-xl border border-border bg-card p-4 flex items-center gap-3 transition-colors hover:bg-accent"
-          >
-            <item.icon className="w-5 h-5 text-brand-500" />
-            <span className="text-body-sm text-foreground flex-1 text-left">{item.label}</span>
-            <ChevronRight className="w-4 h-4 text-muted-foreground" />
-          </motion.button>
+        {/* Menu groups */}
+        {menuSections.map((section, sectionIdx) => (
+          <div key={sectionIdx} className="rounded-xl border border-border bg-card overflow-hidden divide-y divide-border">
+            {section.items.map((item, i) => (
+              <motion.button
+                key={item.label}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: (sectionIdx * section.items.length + i) * 0.03, ease }}
+                onClick={item.onClick}
+                className="w-full px-4 py-3.5 flex items-center gap-3 transition-colors hover:bg-accent"
+              >
+                <div className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center">
+                  <item.icon className="w-4.5 h-4.5 text-muted-foreground" />
+                </div>
+                <span className="text-body-sm text-foreground flex-1 text-left font-medium">{item.label}</span>
+                <ChevronRight className="w-4 h-4 text-muted-foreground" />
+              </motion.button>
+            ))}
+          </div>
         ))}
 
         {/* Sign Out / Sign In */}
         {user ? (
           <button
             onClick={handleLogout}
-            className="w-full rounded-xl border border-destructive/20 bg-card p-4 flex items-center gap-3 transition-colors hover:bg-destructive/5 mt-4"
+            className="w-full rounded-xl bg-card border border-border p-4 flex items-center gap-3 transition-colors hover:bg-destructive/5 active:scale-[0.99]"
           >
-            <LogOut className="w-5 h-5 text-destructive" />
-            <span className="text-body-sm text-destructive flex-1 text-left">Sign Out</span>
+            <div className="w-9 h-9 rounded-xl bg-destructive/10 flex items-center justify-center">
+              <LogOut className="w-4.5 h-4.5 text-destructive" />
+            </div>
+            <span className="text-body-sm text-destructive flex-1 text-left font-medium">Sign Out</span>
           </button>
         ) : (
           <button
             onClick={() => router.push('/login')}
-            className="w-full rounded-xl border border-brand-500/30 bg-card p-4 flex items-center gap-3 transition-colors hover:bg-accent mt-4"
+            className="w-full rounded-xl border border-brand-500/20 bg-card p-4 flex items-center gap-3 transition-colors hover:bg-accent active:scale-[0.99]"
           >
-            <LogIn className="w-5 h-5 text-brand-500" />
+            <div className="w-9 h-9 rounded-xl bg-brand-500/10 flex items-center justify-center">
+              <LogIn className="w-4.5 h-4.5 text-brand-500" />
+            </div>
             <span className="text-body-sm text-brand-600 dark:text-brand-400 flex-1 text-left font-semibold">Sign In</span>
             <ChevronRight className="w-4 h-4 text-brand-500" />
           </button>
         )}
 
-        <p className="text-center text-caption text-muted-foreground py-4">NUST Events v1.0.0</p>
+        <p className="text-center text-caption text-muted-foreground py-2">NUST Events v1.0</p>
       </div>
     </div>
   );

@@ -2,10 +2,12 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Mail, Lock, User, Eye, EyeOff, UserPlus } from 'lucide-react';
+import { Mail, Lock, User, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+
+const ease = [0.25, 0.1, 0.25, 1] as const;
 
 export default function RegisterPage() {
   const [fullName, setFullName] = useState('');
@@ -44,20 +46,20 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-6 relative overflow-hidden bg-background">
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-80 h-80 bg-brand-500/8 rounded-full blur-[100px] pointer-events-none" />
+      <div className="absolute top-[-20%] left-1/2 -translate-x-1/2 w-[500px] h-[500px] bg-brand-500/6 rounded-full blur-[120px] pointer-events-none" />
 
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: [0.25, 0.1, 0.25, 1] }}
+        transition={{ duration: 0.6, ease }}
         className="w-full max-w-sm relative z-10"
       >
         <div className="text-center mb-10">
-          <div className="w-16 h-16 bg-brand-500 rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-lg shadow-brand-500/25">
-            <span className="text-2xl font-extrabold text-white">N</span>
+          <div className="w-14 h-14 bg-brand-500 rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-lg shadow-brand-500/25">
+            <span className="text-xl font-extrabold text-white">N</span>
           </div>
-          <h1 className="text-display text-foreground">Create Account</h1>
-          <p className="text-body-sm text-muted-foreground mt-1.5">Join the NUST Events community</p>
+          <h1 className="text-display text-foreground">Create account</h1>
+          <p className="text-body-sm text-muted-foreground mt-1">Join the NUST Events community</p>
         </div>
 
         <form onSubmit={handleRegister} className="space-y-4" noValidate>
@@ -65,7 +67,7 @@ export default function RegisterPage() {
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-xl text-sm"
+              className="bg-destructive/8 border border-destructive/15 text-destructive px-4 py-3 rounded-xl text-[13px] font-medium"
               role="alert"
               aria-live="polite"
             >
@@ -88,7 +90,7 @@ export default function RegisterPage() {
             icon={Mail}
             type="email"
             label="Email"
-            placeholder="your.email@seecs.edu.pk"
+            placeholder="you@seecs.edu.pk"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -109,7 +111,7 @@ export default function RegisterPage() {
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="text-muted-foreground hover:text-foreground transition-colors"
+                className="text-muted-foreground hover:text-foreground transition-colors p-0.5"
                 aria-label={showPassword ? 'Hide password' : 'Show password'}
               >
                 {showPassword ? <EyeOff className="w-[18px] h-[18px]" /> : <Eye className="w-[18px] h-[18px]" />}
@@ -130,15 +132,15 @@ export default function RegisterPage() {
           />
 
           <Button type="submit" loading={loading} className="w-full" size="lg">
-            <UserPlus className="w-5 h-5" />
             Create Account
+            <ArrowRight className="w-4 h-4" />
           </Button>
         </form>
 
-        <p className="text-center text-muted-foreground mt-8 text-sm">
+        <p className="text-center text-muted-foreground mt-8 text-[13px]">
           Already have an account?{' '}
           <Link href="/login" className="text-brand-600 dark:text-brand-400 hover:text-brand-700 font-semibold transition-colors">
-            Sign In
+            Sign in
           </Link>
         </p>
       </motion.div>

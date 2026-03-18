@@ -4,10 +4,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Users, Calendar, Ticket, ScanLine, Network, HardDrive,
-  Wallet, TrendingUp, Clock, Activity,
+  Wallet, Clock, Activity, Plus, ChevronRight,
 } from 'lucide-react';
 import { fetchGovernanceOverview, SocietyApiError } from '../../../api';
 import { PageLoader, ErrorState, StatCard, StatusBadge } from '../../../_components/Shared';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import type { GovernanceOverview } from '../../../types';
 
 export default function SocietyOverviewPage() {
@@ -44,24 +46,24 @@ export default function SocietyOverviewPage() {
   const { stats, upcomingEvents, recentActivity, myRole } = data;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-6xl">
       {/* Role banner */}
-      <div className="card p-4 flex items-center gap-3">
-        <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-brand-500/10 text-brand-500">
+      <div className="rounded-xl border border-border bg-card p-4 flex items-center gap-3">
+        <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-brand-500/10 text-brand-500 shrink-0">
           <Activity size={20} />
         </div>
-        <div>
-          <p className="text-sm font-semibold text-primary">
-            Welcome back — you are the <span className="text-brand-500">{myRole.role_name}</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-body-sm font-semibold text-foreground">
+            Welcome back — you are the <span className="text-brand-600 dark:text-brand-400">{myRole.role_name}</span>
           </p>
-          <p className="text-xs text-muted">
+          <p className="text-caption text-muted-foreground flex items-center gap-1.5">
             Society is <StatusBadge status={data.society.status} />
           </p>
         </div>
       </div>
 
       {/* Stat grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard label="Members" value={stats.totalMembers} icon={Users} accent="blue" />
         <StatCard label="Events" value={stats.totalEvents} icon={Calendar} accent="purple" />
         <StatCard label="Upcoming" value={stats.upcomingEvents} icon={Clock} accent="amber" />
@@ -78,78 +80,83 @@ export default function SocietyOverviewPage() {
       </div>
 
       {/* Storage bar */}
-      <div className="card p-4">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-medium text-primary flex items-center gap-2">
-            <HardDrive size={16} className="text-muted" /> Storage Usage
+      <div className="rounded-xl border border-border bg-card p-4">
+        <div className="flex items-center justify-between mb-2.5">
+          <span className="text-body-sm font-medium text-foreground flex items-center gap-2">
+            <HardDrive size={16} className="text-muted-foreground" /> Storage Usage
           </span>
-          <span className="text-xs text-muted">
+          <span className="text-caption text-muted-foreground">
             {stats.storagePercentUsed.toFixed(1)}% used
           </span>
         </div>
-        <div className="h-2 rounded-full bg-secondary overflow-hidden">
+        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
           <div
-            className={`h-full rounded-full transition-all ${
+            className={cn(
+              'h-full rounded-full transition-all duration-500',
               stats.storagePercentUsed > 90 ? 'bg-red-500' :
-              stats.storagePercentUsed > 70 ? 'bg-amber-500' : 'bg-brand-500'
-            }`}
+              stats.storagePercentUsed > 70 ? 'bg-amber-500' : 'bg-brand-500',
+            )}
             style={{ width: `${Math.min(stats.storagePercentUsed, 100)}%` }}
           />
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-6">
+      <div className="grid lg:grid-cols-2 gap-4">
         {/* Upcoming events */}
-        <div className="card p-4">
+        <div className="rounded-xl border border-border bg-card p-5">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-primary">Upcoming Events</h2>
+            <h2 className="text-body-sm font-semibold text-foreground">Upcoming Events</h2>
             <button
               onClick={() => router.push(`/society/${societyId}/events`)}
-              className="text-xs text-brand-500 hover:underline"
+              className="text-caption text-brand-600 dark:text-brand-400 hover:underline font-semibold"
             >
               View all
             </button>
           </div>
           {upcomingEvents.length === 0 ? (
-            <p className="text-sm text-muted text-center py-8">No upcoming events</p>
+            <p className="text-body-sm text-muted-foreground text-center py-8">No upcoming events</p>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-1">
               {upcomingEvents.slice(0, 5).map(event => (
-                <div key={event.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-secondary/50 transition-colors">
-                  <div className="h-10 w-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-500">
+                <button
+                  key={event.id}
+                  onClick={() => router.push(`/society/${societyId}/events`)}
+                  className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-accent transition-colors w-full text-left"
+                >
+                  <div className="h-10 w-10 rounded-xl bg-violet-500/10 flex items-center justify-center text-violet-500 shrink-0">
                     <Calendar size={18} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-primary truncate">{event.title}</p>
-                    <p className="text-xs text-muted">
+                    <p className="text-body-sm font-medium text-foreground truncate">{event.title}</p>
+                    <p className="text-caption text-muted-foreground">
                       {new Date(event.event_start).toLocaleDateString('en-US', {
                         month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
                       })}
                     </p>
                   </div>
                   <StatusBadge status={event.status} />
-                </div>
+                </button>
               ))}
             </div>
           )}
         </div>
 
         {/* Recent activity */}
-        <div className="card p-4">
-          <h2 className="text-sm font-semibold text-primary mb-4">Recent Activity</h2>
+        <div className="rounded-xl border border-border bg-card p-5">
+          <h2 className="text-body-sm font-semibold text-foreground mb-4">Recent Activity</h2>
           {recentActivity.length === 0 ? (
-            <p className="text-sm text-muted text-center py-8">No recent activity</p>
+            <p className="text-body-sm text-muted-foreground text-center py-8">No recent activity</p>
           ) : (
             <div className="space-y-3">
               {recentActivity.slice(0, 8).map(log => (
-                <div key={log.id} className="flex items-start gap-3 py-1">
-                  <div className="h-2 w-2 rounded-full bg-brand-500 mt-1.5 flex-shrink-0" />
+                <div key={log.id} className="flex items-start gap-3">
+                  <div className="h-1.5 w-1.5 rounded-full bg-brand-500 mt-2 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-primary">
+                    <p className="text-body-sm text-foreground">
                       <span className="font-medium">{log.performedByName || 'System'}</span>{' '}
-                      <span className="text-muted">{formatAction(log.action)}</span>
+                      <span className="text-muted-foreground">{formatAction(log.action)}</span>
                     </p>
-                    <p className="text-xs text-muted">
+                    <p className="text-caption text-muted-foreground">
                       {new Date(log.createdAt).toLocaleString('en-US', {
                         month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
                       })}
@@ -164,28 +171,33 @@ export default function SocietyOverviewPage() {
 
       {/* Quick actions */}
       {myRole.hierarchy_level >= 5 && (
-        <div className="card p-4">
-          <h2 className="text-sm font-semibold text-primary mb-3">Quick Actions</h2>
-          <div className="flex flex-wrap gap-2">
-            <button
+        <div className="rounded-xl border border-border bg-card p-5">
+          <h2 className="text-body-sm font-semibold text-foreground mb-3">Quick Actions</h2>
+          <div className="flex flex-wrap gap-2.5">
+            <Button
+              size="sm"
               onClick={() => router.push(`/society/${societyId}/events`)}
-              className="btn-primary text-sm px-4 py-2"
             >
+              <Plus className="w-4 h-4" />
               Create Event
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => router.push(`/society/${societyId}/members`)}
-              className="btn-secondary text-sm px-4 py-2"
             >
+              <Users className="w-4 h-4" />
               Manage Members
-            </button>
+            </Button>
             {myRole.hierarchy_level >= 8 && (
-              <button
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={() => router.push(`/society/${societyId}/approvals`)}
-                className="btn-secondary text-sm px-4 py-2"
               >
+                <Ticket className="w-4 h-4" />
                 Review Tickets
-              </button>
+              </Button>
             )}
           </div>
         </div>

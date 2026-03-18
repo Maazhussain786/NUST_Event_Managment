@@ -2,12 +2,18 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { TrendingUp, Calendar, Bell } from 'lucide-react';
+import {
+  Calendar, Bell, Sparkles, ArrowRight,
+  Ticket, Users, CalendarDays, ChevronRight, Clock,
+  AlertCircle, CheckCircle2,
+} from 'lucide-react';
 import EventCard from '@/components/EventCard';
+import { AnimatedPage } from '@/components/AnimatedPage';
 import { PageHeader } from '@/components/page-header';
 import { EmptyState } from '@/components/empty-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 
 interface Event {
@@ -34,26 +40,76 @@ interface Category {
   description: string;
 }
 
+interface TicketPreview {
+  id: string;
+  event_title: string;
+  event_start: string;
+  event_venue?: string;
+  status: string;
+}
+
+interface UserStats {
+  upcomingEvents: number;
+  pendingTickets: number;
+  followedSocieties: number;
+}
+
+const ease = [0.25, 0.1, 0.25, 1] as const;
+
+function getUserName(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const stored = localStorage.getItem('user');
+    if (!stored) return null;
+    const user = JSON.parse(stored);
+    return user.fullName?.split(' ')[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+function buildContextLine(stats: UserStats): string {
+  const parts: string[] = [];
+  if (stats.upcomingEvents > 0) {
+    parts.push(`${stats.upcomingEvents} upcoming event${stats.upcomingEvents !== 1 ? 's' : ''}`);
+  }
+  if (stats.pendingTickets > 0) {
+    parts.push(`${stats.pendingTickets} pending ticket${stats.pendingTickets !== 1 ? 's' : ''}`);
+  }
+  if (parts.length === 0) return 'Discover events happening around you';
+  return `You have ${parts.join(' and ')}`;
+}
+
 function HomeSkeleton() {
   return (
-    <div className="px-4 py-5 space-y-8">
+    <div className="px-5 py-6 space-y-6">
+      {/* Header skeleton */}
+      <div className="space-y-2">
+        <Skeleton className="h-7 w-48" />
+        <Skeleton className="h-4 w-64" />
+      </div>
+      {/* Action card skeleton */}
+      <Skeleton className="h-24 w-full rounded-2xl" />
+      {/* Stats skeleton */}
+      <div className="flex gap-3">
+        {[1, 2, 3].map((i) => (
+          <Skeleton key={i} className="h-20 flex-1 rounded-xl" />
+        ))}
+      </div>
+      {/* Events skeleton */}
       <div>
-        <Skeleton className="h-5 w-40 mb-4" />
-        <div className="flex gap-4 overflow-x-auto pb-2">
+        <Skeleton className="h-5 w-32 mb-4" />
+        <div className="space-y-3">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="min-w-[280px]">
-              <Skeleton className="h-48 rounded-xl mb-3" />
-              <Skeleton className="h-4 w-3/4 mb-2" />
-              <Skeleton className="h-3 w-1/2" />
+            <div key={i} className="flex gap-3.5 p-3 rounded-xl border border-border">
+              <Skeleton className="w-12 h-14 rounded-lg shrink-0" />
+              <div className="flex-1 space-y-2 py-0.5">
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-3 w-1/2" />
+              </div>
             </div>
           ))}
         </div>
-      </div>
-      <div>
-        <Skeleton className="h-5 w-32 mb-4" />
-        {[1, 2, 3, 4].map((i) => (
-          <Skeleton key={i} className="h-24 rounded-xl mb-3" />
-        ))}
       </div>
     </div>
   );
@@ -66,8 +122,18 @@ export default function HomePage() {
   const [activeCategory, setActiveCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [userName, setUserName] = useState<string | null>(null);
+  const [nextTicket, setNextTicket] = useState<TicketPreview | null>(null);
+  const [pendingTickets, setPendingTickets] = useState<TicketPreview[]>([]);
+  const [userStats, setUserStats] = useState<UserStats>({
+    upcomingEvents: 0,
+    pendingTickets: 0,
+    followedSocieties: 0,
+  });
 
   useEffect(() => {
+    setUserName(getUserName());
+
     Promise.all([
       fetch('/api/events/trending').then((r) => r.json()),
       fetch('/api/events?limit=10').then((r) => r.json()),
@@ -75,11 +141,37 @@ export default function HomePage() {
     ])
       .then(([trendingData, upcomingData, catData]) => {
         setTrending(trendingData.events || []);
-        setUpcoming(upcomingData.events || []);
+        const events = upcomingData.events || [];
+        setUpcoming(events);
         setCategories(catData.categories || []);
+        setUserStats((prev) => ({ ...prev, upcomingEvents: events.length }));
       })
       .catch(console.error)
       .finally(() => setLoading(false));
+
+    // Fetch user's tickets for context
+    if (typeof window !== 'undefined' && localStorage.getItem('user')) {
+      // Fetch next approved ticket
+      fetch('/api/tickets?limit=1&status=APPROVED&upcoming=true')
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data && Array.isArray(data) && data.length > 0) {
+            setNextTicket(data[0]);
+          }
+        })
+        .catch(() => {});
+
+      // Fetch pending tickets for action items
+      fetch('/api/tickets?status=PENDING')
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data && Array.isArray(data)) {
+            setPendingTickets(data);
+            setUserStats((prev) => ({ ...prev, pendingTickets: data.length }));
+          }
+        })
+        .catch(() => {});
+    }
   }, []);
 
   const filteredUpcoming = upcoming.filter((e) => {
@@ -91,18 +183,22 @@ export default function HomePage() {
   });
 
   return (
-    <div className="min-h-screen bg-background">
+    <AnimatedPage className="min-h-screen bg-background">
       <PageHeader
-        title="NUST Events"
-        subtitle="Islamabad"
+        title="Home"
+        greeting={userName ? { userName, contextLine: buildContextLine(userStats) } : undefined}
         action={
           <Button variant="ghost" size="icon" asChild>
             <Link href="/notifications" aria-label="Notifications">
               <div className="relative">
                 <Bell className="h-5 w-5" />
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-brand-500 rounded-full text-[9px] font-bold flex items-center justify-center text-white">
-                  3
-                </span>
+                {(userStats.pendingTickets > 0 || userStats.upcomingEvents > 0) && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-brand-500 rounded-full text-[9px] font-bold flex items-center justify-center text-white ring-2 ring-background">
+                    {userStats.pendingTickets + userStats.upcomingEvents > 9
+                      ? '9+'
+                      : userStats.pendingTickets + userStats.upcomingEvents}
+                  </span>
+                )}
               </div>
             </Link>
           </Button>
@@ -110,7 +206,7 @@ export default function HomePage() {
         search={{
           value: searchQuery,
           onChange: setSearchQuery,
-          placeholder: 'Search for an event',
+          placeholder: 'Search events, societies...',
         }}
         filters={{
           items: [
@@ -125,49 +221,140 @@ export default function HomePage() {
       {loading ? (
         <HomeSkeleton />
       ) : (
-        <div className="px-4 py-5 space-y-8">
-          {/* Trending */}
-          {trending.length > 0 && (
-            <section>
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5 text-brand-500" />
-                  <h2 className="text-h3 text-foreground">Trending</h2>
+        <div className="px-5 py-6 space-y-6 lg:space-y-8">
+          {/* ═══ PRIORITY 1: Continue where you left off ═══ */}
+          {nextTicket && (
+            <motion.section
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.05, ease }}
+            >
+              <Link href={`/tickets/${nextTicket.id}`}>
+                <div className="rounded-2xl border-2 border-brand-200 dark:border-brand-900/50 bg-gradient-to-br from-brand-50 to-white dark:from-brand-950/30 dark:to-card p-4 hover:border-brand-300 dark:hover:border-brand-800 transition-all duration-200 active:scale-[0.99]">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <CheckCircle2 className="w-4 h-4 text-brand-500" />
+                    <span className="text-overline text-brand-600 dark:text-brand-400">YOUR NEXT EVENT</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-body font-semibold text-foreground truncate">
+                        {nextTicket.event_title}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1 text-caption text-muted-foreground">
+                        <Clock className="w-3.5 h-3.5" />
+                        <span>
+                          {new Date(nextTicket.event_start).toLocaleDateString('en-PK', {
+                            weekday: 'short',
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="w-11 h-11 rounded-xl bg-brand-500 flex items-center justify-center shrink-0 ml-3 shadow-lg shadow-brand-500/25">
+                      <ArrowRight className="w-5 h-5 text-white" />
+                    </div>
+                  </div>
                 </div>
-                <Link href="/timeline" className="text-brand-600 dark:text-brand-400 text-sm font-semibold">
-                  View all
-                </Link>
-              </div>
-              <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-2 -mx-1 px-1">
-                {trending.map((event, i) => (
-                  <motion.div
-                    key={event.id}
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.08, ease: [0.25, 0.1, 0.25, 1] }}
-                    className="min-w-[280px] max-w-[300px]"
-                  >
-                    <EventCard event={event} variant="featured" />
-                  </motion.div>
-                ))}
-              </div>
-            </section>
+              </Link>
+            </motion.section>
           )}
 
-          {/* Upcoming */}
+          {/* ═══ PRIORITY 2: Tickets needing action ═══ */}
+          {pendingTickets.length > 0 && (
+            <motion.section
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1, ease }}
+            >
+              <Link href="/tickets">
+                <div className="rounded-xl border border-amber-200 dark:border-amber-900/40 bg-amber-50/50 dark:bg-amber-950/20 p-3.5 hover:border-amber-300 dark:hover:border-amber-800/50 transition-all duration-200 active:scale-[0.99]">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                        <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                      </div>
+                      <div>
+                        <p className="text-body-sm font-semibold text-foreground">
+                          {pendingTickets.length} pending ticket{pendingTickets.length !== 1 ? 's' : ''}
+                        </p>
+                        <p className="text-caption text-muted-foreground">Waiting for approval</p>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                  </div>
+                </div>
+              </Link>
+            </motion.section>
+          )}
+
+          {/* ═══ Quick Stats (logged in users) ═══ */}
+          {userName && (
+            <motion.section
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15, ease }}
+              className="grid grid-cols-3 gap-2.5"
+            >
+              <Link href="/events" className="rounded-xl border border-border bg-card p-3 hover:border-brand-200 dark:hover:border-brand-900/40 transition-all duration-200 text-center active:scale-[0.97]">
+                <CalendarDays className="w-5 h-5 text-brand-500 mx-auto mb-1" />
+                <p className="text-h3 text-foreground">{upcoming.length}</p>
+                <p className="text-caption text-muted-foreground">Events</p>
+              </Link>
+              <Link href="/tickets" className="rounded-xl border border-border bg-card p-3 hover:border-brand-200 dark:hover:border-brand-900/40 transition-all duration-200 text-center active:scale-[0.97]">
+                <Ticket className="w-5 h-5 text-brand-500 mx-auto mb-1" />
+                <p className="text-h3 text-foreground">{pendingTickets.length > 0 ? pendingTickets.length : '—'}</p>
+                <p className="text-caption text-muted-foreground">Tickets</p>
+              </Link>
+              <Link href="/societies" className="rounded-xl border border-border bg-card p-3 hover:border-brand-200 dark:hover:border-brand-900/40 transition-all duration-200 text-center active:scale-[0.97]">
+                <Users className="w-5 h-5 text-brand-500 mx-auto mb-1" />
+                <p className="text-h3 text-foreground">—</p>
+                <p className="text-caption text-muted-foreground">Societies</p>
+              </Link>
+            </motion.section>
+          )}
+
+          {/* ═══ Guest CTA (not logged in) ═══ */}
+          {!userName && !nextTicket && (
+            <motion.section
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1, ease }}
+            >
+              <Link href="/events">
+                <div className="rounded-2xl border border-border bg-card p-4 hover:border-brand-200 dark:hover:border-brand-900/40 transition-all duration-200 active:scale-[0.99]">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-body font-semibold text-foreground">Discover events at NUST</p>
+                      <p className="text-caption text-muted-foreground mt-0.5">Browse upcoming events, workshops & shows</p>
+                    </div>
+                    <div className="w-11 h-11 rounded-xl bg-brand-500/10 flex items-center justify-center shrink-0 ml-3">
+                      <CalendarDays className="w-5 h-5 text-brand-500" />
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            </motion.section>
+          )}
+
+          {/* ═══ PRIORITY 3: Upcoming Events ═══ */}
           <section>
             <div className="flex items-center gap-2 mb-4">
-              <Calendar className="w-5 h-5 text-brand-500" />
+              <div className="w-7 h-7 rounded-lg bg-brand-500/10 flex items-center justify-center">
+                <Calendar className="w-3.5 h-3.5 text-brand-500" />
+              </div>
               <h2 className="text-h3 text-foreground">Upcoming</h2>
             </div>
             {filteredUpcoming.length > 0 ? (
-              <div className="space-y-3">
-                {filteredUpcoming.map((event, i) => (
+              <div className="space-y-2.5 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0">
+                {filteredUpcoming.slice(0, 6).map((event, i) => (
                   <motion.div
                     key={event.id}
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.04, ease: [0.25, 0.1, 0.25, 1] }}
+                    transition={{ delay: 0.2 + i * 0.04, ease }}
                   >
                     <EventCard event={event} variant="compact" />
                   </motion.div>
@@ -179,9 +366,46 @@ export default function HomePage() {
                 message={`No upcoming events${activeCategory !== 'all' ? ' in this category' : ''}`}
               />
             )}
+            {filteredUpcoming.length > 6 && (
+              <div className="mt-4 text-center">
+                <Link href="/events" className="text-brand-600 dark:text-brand-400 text-body-sm font-semibold">
+                  View all events →
+                </Link>
+              </div>
+            )}
           </section>
+
+          {/* ═══ PRIORITY 4: Trending (lowest) ═══ */}
+          {trending.length > 0 && (
+            <section>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-brand-500/10 flex items-center justify-center">
+                    <Sparkles className="w-3.5 h-3.5 text-brand-500" />
+                  </div>
+                  <h2 className="text-h3 text-foreground">Trending</h2>
+                </div>
+                <Link href="/events" className="text-brand-600 dark:text-brand-400 text-body-sm font-semibold flex items-center gap-0.5">
+                  See all <ChevronRight className="w-4 h-4" />
+                </Link>
+              </div>
+              <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-1 -mx-1 px-1 snap-x snap-mandatory lg:grid lg:grid-cols-3 lg:overflow-visible">
+                {trending.map((event, i) => (
+                  <motion.div
+                    key={event.id}
+                    initial={{ opacity: 0, x: 24 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.3 + i * 0.08, ease }}
+                    className="min-w-[280px] max-w-[300px] snap-start lg:min-w-0 lg:max-w-none"
+                  >
+                    <EventCard event={event} variant="featured" />
+                  </motion.div>
+                ))}
+              </div>
+            </section>
+          )}
         </div>
       )}
-    </div>
+    </AnimatedPage>
   );
 }

@@ -83,7 +83,7 @@ async function testConnection() {
     console.log('\n✅ All tests passed! Database is ready to use.\n');
     console.log('Next steps:');
     console.log('  1. Run: npm run dev');
-    console.log('  2. Open: http://localhost:3000');
+    console.log('  2. Open: http://localhost:4000');
     console.log('  3. Login with admin credentials from DATABASE_SETUP.md\n');
 
     process.exit(0);

@@ -29,7 +29,7 @@ export default function ParticipantsPage() {
         setEvents(evts);
         if (!selectedEvent && evts.length > 0) setSelectedEvent(evts[0].id);
       })
-      .catch(() => {});
+      .catch((err) => console.error('Failed to fetch society events:', err));
   }, [societyId, selectedEvent]);
 
   const load = useCallback(async () => {

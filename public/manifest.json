@@ -47,15 +47,8 @@
     {
       "name": "Browse Events",
       "short_name": "Events",
-      "url": "/timeline",
+      "url": "/home",
       "description": "Discover upcoming events",
-      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
-    },
-    {
-      "name": "QR Scanner",
-      "short_name": "Scanner",
-      "url": "/scan",
-      "description": "Scan QR codes for event check-in",
       "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
     }
   ],

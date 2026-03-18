@@ -2,16 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Ticket, QrCode, Calendar, MapPin, ChevronRight, CheckCircle2, WifiOff } from 'lucide-react';
+import { Ticket, QrCode, Calendar, MapPin, ChevronRight, CheckCircle2, WifiOff, AlertCircle, Clock, XCircle } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { getCachedTickets, type CachedTicket } from '@/lib/ticket-cache';
-import { PageHeader } from '@/components/page-header';
 import { EmptyState } from '@/components/empty-state';
 import { ErrorState } from '@/components/error-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 
@@ -32,41 +30,116 @@ interface TicketData {
   is_paid: boolean;
   is_cancelled: boolean;
   source_type: string;
+  rejection_reason?: string;
 }
 
-type BadgeVariant = 'success' | 'warning' | 'destructive';
+const ease = [0.25, 0.1, 0.25, 1] as const;
 
-function getStatusBadge(ticket: TicketData): { label: string; variant: BadgeVariant } | null {
-  if (ticket.is_cancelled) return { label: 'Cancelled', variant: 'destructive' };
-  if (ticket.status === 'APPROVED') return { label: 'Valid', variant: 'success' };
-  if (ticket.status === 'PENDING') return { label: 'Pending', variant: 'warning' };
-  if (ticket.status === 'REJECTED') return { label: 'Rejected', variant: 'destructive' };
-  return null;
+function getStatusConfig(ticket: TicketData) {
+  if (ticket.is_cancelled) {
+    return {
+      variant: 'destructive' as const,
+      label: 'Cancelled',
+      icon: XCircle,
+      borderClass: 'border-l-3 border-l-red-500',
+      bgClass: '',
+    };
+  }
+  switch (ticket.status.toUpperCase()) {
+    case 'APPROVED':
+    case 'CHECKED_IN':
+      return {
+        variant: 'success' as const,
+        label: ticket.status === 'CHECKED_IN' ? 'Checked In' : 'Valid',
+        icon: CheckCircle2,
+        borderClass: 'border-l-3 border-l-emerald-500',
+        bgClass: '',
+      };
+    case 'PENDING':
+      return {
+        variant: 'warning' as const,
+        label: 'Pending',
+        icon: Clock,
+        borderClass: 'border-l-3 border-l-amber-500',
+        bgClass: 'bg-amber-50/50 dark:bg-amber-950/10',
+      };
+    case 'REJECTED':
+      return {
+        variant: 'destructive' as const,
+        label: 'Rejected',
+        icon: XCircle,
+        borderClass: 'border-l-3 border-l-red-500',
+        bgClass: 'bg-red-50/50 dark:bg-red-950/10',
+      };
+    default:
+      return {
+        variant: 'default' as const,
+        label: ticket.status,
+        icon: AlertCircle,
+        borderClass: '',
+        bgClass: '',
+      };
+  }
+}
+
+function getRelativeEventTime(dateStr: string): string {
+  const now = new Date();
+  const target = new Date(dateStr);
+  const diffMs = target.getTime() - now.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffMs < 0) return '';
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Tomorrow';
+  if (diffDays < 7) return `In ${diffDays} days`;
+  return '';
 }
 
 function TicketListItem({ ticket }: { ticket: TicketData }) {
-  const badge = getStatusBadge(ticket);
+  const config = getStatusConfig(ticket);
+  const StatusIcon = config.icon;
+  const date = new Date(ticket.event_start);
+  const day = date.getDate();
+  const month = date.toLocaleDateString('en-PK', { month: 'short' }).toUpperCase();
+  const relativeTime = getRelativeEventTime(ticket.event_start);
+  const isUpcoming = new Date(ticket.event_start) > new Date();
+  const showQR = ticket.has_qr && ticket.status.toUpperCase() === 'APPROVED';
+
   return (
     <Link href={`/tickets/${ticket.id}`}>
-      <div className="rounded-xl border border-border bg-card p-4 hover:shadow-elevation-2 hover:-translate-y-0.5 transition-all duration-200">
-        <div className="flex items-start gap-3">
-          <div className="w-16 h-16 rounded-xl flex items-center justify-center shrink-0 overflow-hidden bg-muted relative">
+      <motion.div
+        whileTap={{ scale: 0.98 }}
+        transition={{ duration: 0.15 }}
+        className={cn(
+          'rounded-xl border border-border bg-card p-4 hover:border-brand-200 dark:hover:border-brand-900/40 hover:shadow-elevation-1 transition-all duration-200',
+          config.borderClass,
+          config.bgClass,
+        )}
+      >
+        <div className="flex items-center gap-3.5">
+          {/* Date or image */}
+          <div className="w-14 h-14 rounded-xl flex-shrink-0 overflow-hidden relative bg-muted flex flex-col items-center justify-center">
             {ticket.event_banner ? (
-              <Image src={ticket.event_banner} alt="" fill className="object-cover" sizes="64px" />
+              <Image src={ticket.event_banner} alt="" fill className="object-cover" sizes="56px" />
             ) : (
-              <Ticket className="w-6 h-6 text-brand-500" />
+              <>
+                <span className="text-[9px] font-bold text-brand-500 uppercase tracking-wider">{month}</span>
+                <span className="text-lg font-extrabold text-foreground leading-none">{day}</span>
+              </>
             )}
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <h3 className="text-body-sm font-semibold text-foreground truncate flex-1">{ticket.event_title}</h3>
-              {badge && <Badge variant={badge.variant} size="sm">{badge.label}</Badge>}
+              <Badge variant={config.variant} size="sm" className="shrink-0">
+                {config.label}
+              </Badge>
             </div>
             <p className="text-caption text-muted-foreground mt-0.5">{ticket.society_name}</p>
-            <div className="flex items-center gap-3 mt-2 text-caption text-muted-foreground">
+            <div className="flex items-center gap-3 mt-1.5 text-caption text-muted-foreground">
               <span className="flex items-center gap-1">
                 <Calendar className="w-3 h-3" />
-                {new Date(ticket.event_start).toLocaleDateString('en-PK', { month: 'short', day: 'numeric' })}
+                {date.toLocaleDateString('en-PK', { month: 'short', day: 'numeric' })}
               </span>
               {ticket.event_venue && (
                 <span className="flex items-center gap-1 truncate">
@@ -74,29 +147,47 @@ function TicketListItem({ ticket }: { ticket: TicketData }) {
                   {ticket.event_venue}
                 </span>
               )}
-              <span className="font-mono text-[10px]">{ticket.ticket_number}</span>
+              {relativeTime && isUpcoming && (
+                <span className="text-brand-600 dark:text-brand-400 font-medium">{relativeTime}</span>
+              )}
             </div>
           </div>
-          <div className="flex items-center gap-1 shrink-0">
-            {ticket.has_qr ? (
-              <QrCode className="w-5 h-5 text-brand-500" />
-            ) : ticket.status === 'APPROVED' ? (
-              <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-            ) : null}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {showQR ? (
+              <div className="w-9 h-9 rounded-lg bg-brand-500/10 flex items-center justify-center">
+                <QrCode className="w-5 h-5 text-brand-500" />
+              </div>
+            ) : (
+              <StatusIcon className={cn(
+                'w-5 h-5',
+                config.variant === 'success' && 'text-emerald-500',
+                config.variant === 'warning' && 'text-amber-500',
+                config.variant === 'destructive' && 'text-red-500',
+              )} />
+            )}
             <ChevronRight className="w-4 h-4 text-muted-foreground" />
           </div>
         </div>
-      </div>
+
+        {/* Rejection reason */}
+        {ticket.status.toUpperCase() === 'REJECTED' && ticket.rejection_reason && (
+          <div className="mt-3 pt-3 border-t border-border">
+            <p className="text-caption text-red-600 dark:text-red-400">
+              <span className="font-medium">Reason:</span> {ticket.rejection_reason}
+            </p>
+          </div>
+        )}
+      </motion.div>
     </Link>
   );
 }
 
 function TicketsSkeleton() {
   return (
-    <div className="space-y-3">
+    <div className="space-y-2.5">
       {[1, 2, 3, 4].map((i) => (
-        <div key={i} className="flex gap-3 p-4 rounded-xl border border-border">
-          <Skeleton className="w-16 h-16 rounded-xl flex-shrink-0" />
+        <div key={i} className="flex gap-3.5 p-4 rounded-xl border border-border">
+          <Skeleton className="w-14 h-14 rounded-xl flex-shrink-0" />
           <div className="flex-1 space-y-2">
             <Skeleton className="h-4 w-3/4" />
             <Skeleton className="h-3 w-1/2" />
@@ -132,7 +223,9 @@ export default function TicketsPage() {
         try {
           const cached = await getCachedTickets();
           setCachedTickets(cached);
-        } catch {}
+        } catch (cacheErr) {
+          console.error('Failed to load cached tickets:', cacheErr);
+        }
         setLoading(false);
         return;
       }
@@ -151,7 +244,8 @@ export default function TicketsPage() {
           } else {
             setError(err instanceof Error ? err.message : 'Failed to load tickets');
           }
-        } catch {
+        } catch (cacheErr) {
+          console.error('Failed to load cached tickets:', cacheErr);
           setError(err instanceof Error ? err.message : 'Failed to load tickets');
         }
       } finally {
@@ -165,36 +259,38 @@ export default function TicketsPage() {
   if (isOffline && cachedTickets.length > 0 && tickets.length === 0) {
     return (
       <div className="min-h-screen bg-background">
-        <PageHeader
-          title="My Tickets"
-          action={
-            <Badge variant="warning" size="md" className="flex items-center gap-1">
-              <WifiOff className="w-3 h-3" /> Offline
-            </Badge>
-          }
-        />
-        <div className="px-4 py-1">
+        <header className="sticky top-0 z-header bg-background/80 backdrop-blur-xl">
+          <div className="px-5 pt-14 pb-3 safe-top">
+            <div className="flex items-center justify-between">
+              <h1 className="text-h1 text-foreground">My Tickets</h1>
+              <Badge variant="warning" size="md" className="flex items-center gap-1">
+                <WifiOff className="w-3 h-3" /> Offline
+              </Badge>
+            </div>
+          </div>
+        </header>
+        <div className="px-5 py-1">
           <p className="text-caption text-muted-foreground mb-3">
             Showing {cachedTickets.length} cached ticket{cachedTickets.length !== 1 ? 's' : ''}
           </p>
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             {cachedTickets.map((ticket, i) => (
               <motion.div
                 key={ticket.id}
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.04 }}
+                transition={{ delay: i * 0.04, ease }}
               >
                 <Link href={`/tickets/${ticket.id}`}>
                   <div className="rounded-xl border border-border bg-card p-4">
-                    <div className="flex items-start gap-3">
-                      <div className="w-16 h-16 rounded-xl flex items-center justify-center shrink-0 bg-muted">
+                    <div className="flex items-start gap-3.5">
+                      <div className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0 bg-muted">
                         <Ticket className="w-6 h-6 text-brand-500" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <h3 className="text-body-sm font-semibold text-foreground truncate">{ticket.event_title}</h3>
                         <p className="text-caption text-muted-foreground mt-0.5">{ticket.society_name}</p>
-                        <div className="flex items-center gap-3 mt-2 text-caption text-muted-foreground">
+                        <div className="flex items-center gap-3 mt-1.5 text-caption text-muted-foreground">
                           <span className="flex items-center gap-1">
                             <Calendar className="w-3 h-3" />
                             {new Date(ticket.event_date).toLocaleDateString('en-PK', { month: 'short', day: 'numeric' })}
@@ -232,74 +328,68 @@ export default function TicketsPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-header bg-background/80 backdrop-blur-xl border-b border-border/50">
-        <div className="px-4 pt-14 pb-3 safe-top">
-          <h1 className="text-h1 text-foreground mb-4">My Tickets</h1>
-          <Tabs defaultValue="upcoming">
+      <Tabs defaultValue="upcoming">
+        <header className="sticky top-0 z-header bg-background/80 backdrop-blur-xl">
+          <div className="px-5 pt-14 pb-3 safe-top">
+            <h1 className="text-h1 text-foreground mb-4">My Tickets</h1>
             <TabsList>
               <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
               <TabsTrigger value="past">Past</TabsTrigger>
             </TabsList>
-          </Tabs>
-        </div>
-      </header>
+          </div>
+        </header>
 
-      <div className="px-4 pb-32">
-        <Tabs defaultValue="upcoming">
+        <div className="px-5 pb-28">
           <TabsContent value="upcoming">
-            <div className="py-1">
-              {loading ? (
-                <TicketsSkeleton />
-              ) : error ? (
-                <ErrorState message={error} onRetry={() => window.location.reload()} />
-              ) : upcomingTickets.length > 0 ? (
-                <div className="space-y-3">
-                  {upcomingTickets.map((ticket, i) => (
-                    <motion.div
-                      key={ticket.id}
-                      initial={{ opacity: 0, y: 12 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.04 }}
-                    >
-                      <TicketListItem ticket={ticket} />
-                    </motion.div>
-                  ))}
-                </div>
-              ) : (
-                <EmptyState
-                  icon={Ticket}
-                  title="No Tickets Yet"
-                  message="Browse events to get your first ticket"
-                  action={{ label: 'Explore Events', onClick: () => (window.location.href = '/home') }}
-                />
-              )}
-            </div>
+            {loading ? (
+              <TicketsSkeleton />
+            ) : error ? (
+              <ErrorState message={error} onRetry={() => window.location.reload()} />
+            ) : upcomingTickets.length > 0 ? (
+              <div className="space-y-2.5">
+                {upcomingTickets.map((ticket, i) => (
+                  <motion.div
+                    key={ticket.id}
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.04, ease }}
+                  >
+                    <TicketListItem ticket={ticket} />
+                  </motion.div>
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                icon={Ticket}
+                title="No Tickets Yet"
+                message="Browse events to get your first ticket"
+                action={{ label: 'Explore Events', onClick: () => (window.location.href = '/home') }}
+              />
+            )}
           </TabsContent>
 
           <TabsContent value="past">
-            <div className="py-1">
-              {loading ? (
-                <TicketsSkeleton />
-              ) : pastTickets.length > 0 ? (
-                <div className="space-y-3">
-                  {pastTickets.map((ticket, i) => (
-                    <motion.div
-                      key={ticket.id}
-                      initial={{ opacity: 0, y: 12 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.04 }}
-                    >
-                      <TicketListItem ticket={ticket} />
-                    </motion.div>
-                  ))}
-                </div>
-              ) : (
-                <EmptyState icon={Ticket} message="No past tickets" />
-              )}
-            </div>
+            {loading ? (
+              <TicketsSkeleton />
+            ) : pastTickets.length > 0 ? (
+              <div className="space-y-2.5">
+                {pastTickets.map((ticket, i) => (
+                  <motion.div
+                    key={ticket.id}
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.04, ease }}
+                  >
+                    <TicketListItem ticket={ticket} />
+                  </motion.div>
+                ))}
+              </div>
+            ) : (
+              <EmptyState icon={Ticket} message="No past tickets" />
+            )}
           </TabsContent>
-        </Tabs>
-      </div>
+        </div>
+      </Tabs>
     </div>
   );
 }

@@ -31,7 +31,7 @@ export default function EventEntryControlPage() {
         if (data?.title) setEventTitle(data.title);
         else if (data?.event?.title) setEventTitle(data.event.title);
       })
-      .catch(() => {});
+      .catch((err) => console.error('Failed to fetch event:', err));
   }, [eventId]);
 
   const loadStats = useCallback(async () => {

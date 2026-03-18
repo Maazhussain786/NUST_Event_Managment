@@ -264,7 +264,7 @@ Located in `scripts/` directory:
    npm run dev
    ```
 
-2. Open browser: `http://localhost:3000`
+2. Open browser: `http://localhost:4000`
 
 3. Login as admin:
    - Email: `mhussain.bscs24seecs@seecs.edu.pk`
