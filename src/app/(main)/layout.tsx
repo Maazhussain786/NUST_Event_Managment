@@ -13,15 +13,15 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
       {/* Main content area */}
       <main className="lg:pl-sidebar">
-        {/* Content wrapper - pb-24 ensures nav doesn't overlap content */}
-        <div className="mx-auto w-full max-w-2xl lg:max-w-3xl xl:max-w-4xl pb-24 lg:pb-6 lg:px-6">
+        {/* Content wrapper with notch-safe top space and bottom-nav clearance */}
+        <div className="app-shell">
           <OfflineIndicator />
           <InstallPrompt />
           {children}
         </div>
       </main>
 
-      {/* Mobile bottom navigation */}
+      {/* Mobile bottom navigation - now floating */}
       <BottomNav />
     </div>
   );
