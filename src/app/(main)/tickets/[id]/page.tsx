@@ -2,12 +2,13 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Calendar, MapPin, Clock, Download, Loader2, AlertTriangle, XCircle, WifiOff } from 'lucide-react';
+import { ArrowLeft, Calendar, MapPin, Clock, Download, Loader2, AlertTriangle, XCircle, User, Hash, Building2 } from 'lucide-react';
 import { useRouter, useParams } from 'next/navigation';
 import QRCode from 'qrcode';
-import { cacheTicket, getCachedTicket, type CachedTicket } from '@/lib/ticket-cache';
+import { cacheTicket, getCachedTicket } from '@/lib/ticket-cache';
 import { StatusTimeline, StatusBadge } from '@/components/StatusTimeline';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 interface TicketDetail {
   id: string;
@@ -55,7 +56,7 @@ export default function TicketDetailPage() {
         if (data.ticket.qr_data) {
           qrUrl = await QRCode.toDataURL(data.ticket.qr_data, {
             width: 300,
-            margin: 2,
+            margin: 3,
             color: { dark: '#000000', light: '#ffffff' },
             errorCorrectionLevel: 'M',
           });
@@ -109,7 +110,7 @@ export default function TicketDetailPage() {
                 setQrImageUrl(cached.qr_image_data_url);
               } else if (cached.qr_data) {
                 const url = await QRCode.toDataURL(cached.qr_data, {
-                  width: 300, margin: 2,
+                  width: 300, margin: 3,
                   color: { dark: '#000000', light: '#ffffff' },
                   errorCorrectionLevel: 'M',
                 });
@@ -141,68 +142,131 @@ export default function TicketDetailPage() {
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
-      const W = 600, H = 900;
+      const W = 600, H = 1000;
       canvas.width = W;
       canvas.height = H;
 
-      // Background
-      ctx.fillStyle = '#ffffff';
+      // Outer background (dark navy)
+      ctx.fillStyle = '#1e1b4b';
       ctx.fillRect(0, 0, W, H);
 
-      // Header band
-      const grad = ctx.createLinearGradient(0, 0, W, 160);
-      grad.addColorStop(0, '#6366f1');
-      grad.addColorStop(1, '#4f46e5');
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, W, 160);
-
-      // Event title on header
+      // Inner ticket card (white with rounded corners simulation)
+      const cardX = 30, cardY = 30, cardW = W - 60, cardH = H - 60;
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 24px system-ui, sans-serif';
-      ctx.fillText(truncate(ticket.event_title, 35), 30, 80);
-      ctx.font = '16px system-ui, sans-serif';
-      ctx.fillStyle = 'rgba(255,255,255,0.85)';
-      ctx.fillText(ticket.society_name, 30, 115);
+      roundedRect(ctx, cardX, cardY, cardW, cardH, 24);
+      ctx.fill();
 
-      // Dashed tear line
-      ctx.setLineDash([8, 6]);
+      // Event banner area
+      const bannerH = 180;
+      ctx.save();
+      roundedRectClip(ctx, cardX, cardY, cardW, bannerH, 24, 24, 0, 0);
+
+      if (ticket.event_banner) {
+        const bannerImg = new Image();
+        bannerImg.crossOrigin = 'anonymous';
+        bannerImg.src = ticket.event_banner;
+        await new Promise<void>((resolve) => {
+          bannerImg.onload = () => {
+            ctx.drawImage(bannerImg, cardX, cardY, cardW, bannerH);
+            resolve();
+          };
+          bannerImg.onerror = () => {
+            // Fallback gradient
+            const grad = ctx.createLinearGradient(cardX, cardY, cardX + cardW, cardY + bannerH);
+            grad.addColorStop(0, '#6366f1');
+            grad.addColorStop(1, '#4f46e5');
+            ctx.fillStyle = grad;
+            ctx.fillRect(cardX, cardY, cardW, bannerH);
+            resolve();
+          };
+        });
+      } else {
+        const grad = ctx.createLinearGradient(cardX, cardY, cardX + cardW, cardY + bannerH);
+        grad.addColorStop(0, '#6366f1');
+        grad.addColorStop(1, '#4f46e5');
+        ctx.fillStyle = grad;
+        ctx.fillRect(cardX, cardY, cardW, bannerH);
+      }
+
+      // Overlay for text readability
+      ctx.fillStyle = 'rgba(0,0,0,0.4)';
+      ctx.fillRect(cardX, cardY, cardW, bannerH);
+      ctx.restore();
+
+      // Event title on banner
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 22px system-ui, -apple-system, sans-serif';
+      wrapText(ctx, ticket.event_title, cardX + 24, cardY + bannerH - 50, cardW - 48, 26);
+
+      ctx.font = '14px system-ui, -apple-system, sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.fillText(ticket.society_name, cardX + 24, cardY + bannerH - 20);
+
+      // Perforation line with cutouts
+      const perfY = cardY + bannerH + 20;
+      ctx.fillStyle = '#1e1b4b';
+      ctx.beginPath();
+      ctx.arc(cardX - 12, perfY, 12, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(cardX + cardW + 12, perfY, 12, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.setLineDash([6, 6]);
       ctx.strokeStyle = '#e5e7eb';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(30, 180);
-      ctx.lineTo(W - 30, 180);
+      ctx.moveTo(cardX + 24, perfY);
+      ctx.lineTo(cardX + cardW - 24, perfY);
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // Details
-      ctx.fillStyle = '#374151';
-      ctx.font = '13px system-ui, sans-serif';
+      // Details section
+      let detailY = perfY + 40;
+      const detailX = cardX + 24;
+      const col2X = cardX + cardW / 2 + 12;
+
       const dateStr = new Date(ticket.event_start).toLocaleDateString('en-PK', {
-        weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
+        weekday: 'short', month: 'short', day: 'numeric', year: 'numeric'
       });
       const timeStr = new Date(ticket.event_start).toLocaleTimeString('en-PK', {
         hour: '2-digit', minute: '2-digit', hour12: true
       });
 
-      const details = [
-        ['Date', dateStr],
-        ['Time', timeStr],
-        ['Venue', ticket.event_venue || 'TBD'],
-        ['Ticket #', ticket.ticket_number || 'N/A'],
-      ];
+      // Row 1: Date & Time
+      drawDetailItem(ctx, detailX, detailY, 'Date', dateStr);
+      drawDetailItem(ctx, col2X, detailY, 'Time', timeStr);
+      detailY += 60;
 
-      let y = 220;
-      for (const [label, value] of details) {
-        ctx.fillStyle = '#9ca3af';
-        ctx.font = '12px system-ui, sans-serif';
-        ctx.fillText(label, 30, y);
-        ctx.fillStyle = '#111827';
-        ctx.font = '15px system-ui, sans-serif';
-        ctx.fillText(truncate(value, 50), 30, y + 20);
-        y += 50;
-      }
+      // Row 2: Venue & Ticket #
+      drawDetailItem(ctx, detailX, detailY, 'Venue', ticket.event_venue || 'TBD', cardW / 2 - 36);
+      drawDetailItem(ctx, col2X, detailY, 'Ticket #', ticket.ticket_number || 'N/A');
+      detailY += 60;
 
-      // QR Code
+      // Row 3: Attendee
+      drawDetailItem(ctx, detailX, detailY, 'Attendee', ticket.attendee_name, cardW - 48);
+      detailY += 70;
+
+      // Perforation before QR
+      const qrPerfY = detailY;
+      ctx.fillStyle = '#1e1b4b';
+      ctx.beginPath();
+      ctx.arc(cardX - 12, qrPerfY, 12, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(cardX + cardW + 12, qrPerfY, 12, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.setLineDash([6, 6]);
+      ctx.strokeStyle = '#e5e7eb';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(cardX + 24, qrPerfY);
+      ctx.lineTo(cardX + cardW - 24, qrPerfY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // QR Code section
       const qrImg = new Image();
       qrImg.src = qrImageUrl;
       await new Promise<void>((resolve) => {
@@ -210,35 +274,30 @@ export default function TicketDetailPage() {
         qrImg.onerror = () => resolve();
       });
 
-      const qrSize = 240;
+      const qrSize = 180;
       const qrX = (W - qrSize) / 2;
-      const qrY = y + 20;
+      const qrY = qrPerfY + 30;
 
       // QR background
-      ctx.fillStyle = '#f9fafb';
-      ctx.fillRect(qrX - 20, qrY - 20, qrSize + 40, qrSize + 40);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(qrX - 16, qrY - 16, qrSize + 32, qrSize + 32);
+      ctx.strokeStyle = '#e5e7eb';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(qrX - 16, qrY - 16, qrSize + 32, qrSize + 32);
       ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
 
-      // Instruction
+      // Instruction text
       ctx.fillStyle = '#6b7280';
-      ctx.font = '12px system-ui, sans-serif';
+      ctx.font = '12px system-ui, -apple-system, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('Show this QR code at the venue entrance', W / 2, qrY + qrSize + 40);
-
-      // Attendee
-      ctx.font = '11px system-ui, sans-serif';
-      ctx.fillStyle = '#9ca3af';
-      ctx.fillText('Attendee', W / 2, qrY + qrSize + 70);
-      ctx.font = 'bold 16px system-ui, sans-serif';
-      ctx.fillStyle = '#111827';
-      ctx.fillText(ticket.attendee_name, W / 2, qrY + qrSize + 92);
+      ctx.fillText('Show this QR code at the venue entrance', W / 2, qrY + qrSize + 45);
       ctx.textAlign = 'start';
 
       // Watermark
-      ctx.fillStyle = '#d1d5db';
-      ctx.font = '10px system-ui, sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      ctx.font = '10px system-ui, -apple-system, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('NUST Events Platform', W / 2, H - 20);
+      ctx.fillText('NUST Events Platform', W / 2, H - 15);
       ctx.textAlign = 'start';
 
       // Download
@@ -262,19 +321,19 @@ export default function TicketDetailPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="w-8 h-8 animate-spin text-brand-500" />
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-b from-indigo-950 via-slate-900 to-slate-950">
+        <Loader2 className="w-8 h-8 animate-spin text-white/60" />
       </div>
     );
   }
 
   if (error || !ticket) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen px-6 bg-background">
-        <AlertTriangle className="w-16 h-16 mb-4 text-amber-500" />
-        <h2 className="mb-1 text-h2 text-foreground">Ticket Not Found</h2>
-        <p className="mb-6 text-muted-foreground text-body-sm">{error || 'This ticket could not be loaded.'}</p>
-        <Button onClick={() => router.push('/tickets')}>
+      <div className="flex flex-col items-center justify-center min-h-screen px-6 bg-gradient-to-b from-indigo-950 via-slate-900 to-slate-950">
+        <AlertTriangle className="w-16 h-16 mb-4 text-amber-400" />
+        <h2 className="mb-1 text-xl font-bold text-white">Ticket Not Found</h2>
+        <p className="mb-6 text-white/60 text-sm text-center">{error || 'This ticket could not be loaded.'}</p>
+        <Button onClick={() => router.push('/tickets')} variant="secondary">
           Back to Tickets
         </Button>
       </div>
@@ -287,181 +346,325 @@ export default function TicketDetailPage() {
   const isScanned = !!ticket.scanned_at;
   const effectiveStatus = isScanned ? 'CHECKED_IN' : ticket.status;
 
+  const dateFormatted = new Date(ticket.event_start).toLocaleDateString('en-PK', {
+    weekday: 'short', month: 'short', day: 'numeric', year: 'numeric'
+  });
+  const timeFormatted = new Date(ticket.event_start).toLocaleTimeString('en-PK', {
+    hour: '2-digit', minute: '2-digit', hour12: true
+  });
+
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gradient-to-b from-indigo-950 via-slate-900 to-slate-950">
       {/* Hidden canvas for download */}
       <canvas ref={canvasRef} className="hidden" />
 
       {/* Header */}
-      <header className="sticky top-0 border-b z-header bg-background/80 backdrop-blur-xl border-border">
+      <header className="sticky top-0 z-50">
         <div
-          className="flex items-center gap-3 px-5 pt-6 pb-4"
-          style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 1.5rem)' }}
+          className="flex items-center justify-between px-4"
+          style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 1rem)', paddingBottom: '0.75rem' }}
         >
           <Button
             variant="ghost"
             size="icon"
             onClick={() => router.back()}
-            className="-ml-2"
+            className="text-white/80 hover:text-white hover:bg-white/10"
           >
             <ArrowLeft className="w-5 h-5" />
           </Button>
-          <h1 className="text-h2 text-foreground">E-Ticket</h1>
+          <h1 className="text-lg font-semibold text-white">Your Ticket</h1>
+          {isApproved && qrImageUrl && !isCancelled ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleDownload}
+              disabled={downloading}
+              className="text-white/80 hover:text-white hover:bg-white/10"
+            >
+              {downloading ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <Download className="w-5 h-5" />
+              )}
+            </Button>
+          ) : (
+            <div className="w-10" /> // Spacer for centering
+          )}
         </div>
       </header>
 
-      <div className="px-5 py-6 pb-24 space-y-6 lg:pb-8">
-        {/* Status Timeline */}
+      <div className="px-4 pb-8">
+        {/* Status Section - Above Ticket */}
         <motion.div
-          initial={{ opacity: 0, y: 12 }}
+          initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
+          transition={{ delay: 0.05 }}
+          className="mb-4"
         >
           <StatusTimeline status={effectiveStatus} />
+          <div className="mt-3">
+            <StatusBadge
+              status={effectiveStatus}
+              reason={ticket.status === 'REJECTED' ? ticket.rejection_reason : undefined}
+            />
+          </div>
         </motion.div>
 
-        {/* Status Badge with description */}
-        <StatusBadge
-          status={effectiveStatus}
-          reason={ticket.status === 'REJECTED' ? ticket.rejection_reason : undefined}
-        />
-
-        {/* Ticket Card */}
+        {/* Premium Ticket Card */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-          className={`rounded-2xl overflow-hidden border border-border bg-card ${isCancelled ? 'opacity-60' : ''}`}
+          initial={{ opacity: 0, y: 20, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ delay: 0.1, type: 'spring', stiffness: 100 }}
+          className={cn(
+            'relative overflow-hidden rounded-3xl bg-white dark:bg-zinc-100 shadow-2xl',
+            isCancelled && 'opacity-70 grayscale-[30%]'
+          )}
         >
-          {/* Top Section - Event Banner */}
-          <div className="relative h-40 overflow-hidden bg-gradient-to-br from-brand-500 to-brand-700">
-            {ticket.event_banner && (
-              <img src={ticket.event_banner} alt="" className="absolute inset-0 object-cover w-full h-full" />
+          {/* Event Banner */}
+          <div className="relative aspect-[16/9] overflow-hidden">
+            {ticket.event_banner ? (
+              <img
+                src={ticket.event_banner}
+                alt={ticket.event_title}
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+            ) : (
+              <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500" />
             )}
-            <div className="absolute inset-0 bg-black/40" />
-            <div className="absolute bottom-4 left-4 right-4">
-              <h2 className="text-xl font-bold text-white line-clamp-2">
+            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+
+            {/* Event info overlay */}
+            <div className="absolute bottom-0 left-0 right-0 p-5">
+              <h2 className="text-xl font-bold text-white leading-tight line-clamp-2 drop-shadow-lg">
                 {ticket.event_title}
               </h2>
-              <p className="text-sm text-white/80">
+              <p className="mt-1 text-sm text-white/85 flex items-center gap-1.5">
+                <Building2 className="w-3.5 h-3.5" />
                 {ticket.society_name}
               </p>
             </div>
-          </div>
 
-          {/* Tear Line */}
-          <div className="relative">
-            <div className="absolute left-0 w-6 h-6 rounded-full -top-3 bg-background" />
-            <div className="absolute right-0 w-6 h-6 rounded-full -top-3 bg-background" />
-            <div className="mx-8 border-t-2 border-dashed border-border" />
-          </div>
-
-          {/* Details Section */}
-          <div className="p-5 space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="mb-1 text-caption text-muted-foreground">Date</p>
-                <div className="flex items-center gap-1.5 text-body-sm text-foreground">
-                  <Calendar className="w-4 h-4 text-brand-500" />
-                  {new Date(ticket.event_start).toLocaleDateString('en-PK', {
-                    month: 'short', day: 'numeric', year: 'numeric'
-                  })}
-                </div>
-              </div>
-              <div>
-                <p className="mb-1 text-caption text-muted-foreground">Time</p>
-                <div className="flex items-center gap-1.5 text-body-sm text-foreground">
-                  <Clock className="w-4 h-4 text-brand-500" />
-                  {new Date(ticket.event_start).toLocaleTimeString('en-PK', {
-                    hour: '2-digit', minute: '2-digit', hour12: true
-                  })}
-                </div>
-              </div>
-              <div>
-                <p className="mb-1 text-caption text-muted-foreground">Venue</p>
-                <div className="flex items-center gap-1.5 text-body-sm text-foreground">
-                  <MapPin className="w-4 h-4 text-brand-500" />
-                  {ticket.event_venue || 'TBD'}
-                </div>
-              </div>
-              <div>
-                <p className="mb-1 text-caption text-muted-foreground">Ticket #</p>
-                <p className="font-mono text-body-sm text-foreground">
-                  {ticket.ticket_number || 'N/A'}
-                </p>
-              </div>
-            </div>
-
-            {/* Type badge */}
-            <div className="flex items-center gap-2">
-              <span className={`text-caption px-2.5 py-1 rounded-full font-medium ${
-                ticket.is_paid ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-              }`}>
-                {ticket.is_paid ? 'Paid Ticket' : 'Free Registration'}
+            {/* Type Badge */}
+            <div className="absolute top-4 right-4">
+              <span className={cn(
+                'px-3 py-1 rounded-full text-xs font-semibold backdrop-blur-sm',
+                ticket.is_paid
+                  ? 'bg-amber-500/90 text-white'
+                  : 'bg-emerald-500/90 text-white'
+              )}>
+                {ticket.is_paid ? 'PAID' : 'FREE'}
               </span>
             </div>
+          </div>
 
-            {/* QR Code or Status Message */}
+          {/* Perforation Divider */}
+          <div className="relative h-6">
+            <div className="absolute -left-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-gradient-to-b from-indigo-950 via-slate-900 to-slate-950" />
+            <div className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-gradient-to-b from-indigo-950 via-slate-900 to-slate-950" />
+            <div className="absolute inset-x-6 top-1/2 border-t-2 border-dashed border-gray-300" />
+          </div>
+
+          {/* Ticket Details */}
+          <div className="px-5 pb-2">
+            <div className="grid grid-cols-2 gap-4">
+              {/* Date */}
+              <div className="space-y-1">
+                <p className="text-[10px] uppercase tracking-wider text-gray-500 font-medium">Date</p>
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-indigo-500" />
+                  <span className="text-sm font-medium text-gray-900">{dateFormatted}</span>
+                </div>
+              </div>
+
+              {/* Time */}
+              <div className="space-y-1">
+                <p className="text-[10px] uppercase tracking-wider text-gray-500 font-medium">Time</p>
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-indigo-500" />
+                  <span className="text-sm font-medium text-gray-900">{timeFormatted}</span>
+                </div>
+              </div>
+
+              {/* Venue */}
+              <div className="space-y-1 col-span-2">
+                <p className="text-[10px] uppercase tracking-wider text-gray-500 font-medium">Venue</p>
+                <div className="flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-indigo-500 shrink-0" />
+                  <span className="text-sm font-medium text-gray-900 line-clamp-1">{ticket.event_venue || 'To be announced'}</span>
+                </div>
+              </div>
+
+              {/* Attendee */}
+              <div className="space-y-1">
+                <p className="text-[10px] uppercase tracking-wider text-gray-500 font-medium">Attendee</p>
+                <div className="flex items-center gap-2">
+                  <User className="w-4 h-4 text-indigo-500" />
+                  <span className="text-sm font-medium text-gray-900 truncate">{ticket.attendee_name}</span>
+                </div>
+              </div>
+
+              {/* Ticket Number */}
+              <div className="space-y-1">
+                <p className="text-[10px] uppercase tracking-wider text-gray-500 font-medium">Ticket #</p>
+                <div className="flex items-center gap-2">
+                  <Hash className="w-4 h-4 text-indigo-500" />
+                  <span className="text-sm font-mono font-medium text-gray-900">{ticket.ticket_number || 'N/A'}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Second Perforation */}
+          <div className="relative h-6 mt-2">
+            <div className="absolute -left-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-gradient-to-b from-indigo-950 via-slate-900 to-slate-950" />
+            <div className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-gradient-to-b from-indigo-950 via-slate-900 to-slate-950" />
+            <div className="absolute inset-x-6 top-1/2 border-t-2 border-dashed border-gray-300" />
+          </div>
+
+          {/* QR Code Section */}
+          <div className="px-5 pb-6 pt-2">
             {isCancelled ? (
               <div className="flex flex-col items-center py-8">
-                <XCircle className="w-16 h-16 mb-3 text-red-400" />
-                <p className="font-medium text-red-500 text-body-sm">This ticket has been cancelled</p>
-                <p className="mt-1 text-muted-foreground text-caption">Contact event organizers for help</p>
+                <div className="w-20 h-20 rounded-full bg-red-100 flex items-center justify-center mb-4">
+                  <XCircle className="w-10 h-10 text-red-500" />
+                </div>
+                <p className="font-semibold text-red-600 text-base">Ticket Cancelled</p>
+                <p className="mt-1 text-gray-500 text-sm text-center">
+                  Contact event organizers for assistance
+                </p>
               </div>
             ) : isPending ? (
               <div className="flex flex-col items-center py-8">
-                <Loader2 className="w-12 h-12 mb-3 text-amber-400 animate-spin" />
-                <p className="font-medium text-amber-600 dark:text-amber-400 text-body-sm">Awaiting Approval</p>
-                <p className="mt-1 text-muted-foreground text-caption">QR code will appear once approved</p>
+                <div className="w-20 h-20 rounded-full bg-amber-100 flex items-center justify-center mb-4">
+                  <Loader2 className="w-10 h-10 text-amber-500 animate-spin" />
+                </div>
+                <p className="font-semibold text-amber-600 text-base">Awaiting Approval</p>
+                <p className="mt-1 text-gray-500 text-sm text-center">
+                  Your QR code will appear once approved
+                </p>
               </div>
             ) : qrImageUrl ? (
-              <div className="flex flex-col items-center py-4">
-                <div className="flex items-center justify-center p-3 bg-white border shadow-sm w-52 h-52 rounded-2xl border-border">
-                  <img src={qrImageUrl} alt="QR Code" className="w-full h-full" />
+              <div className="flex flex-col items-center">
+                {/* QR Container with white padding for scanability */}
+                <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                  <img
+                    src={qrImageUrl}
+                    alt="Ticket QR Code"
+                    className="w-48 h-48 sm:w-56 sm:h-56"
+                  />
                 </div>
-                <p className="mt-3 text-muted-foreground text-caption">Show this QR code at the venue entrance</p>
+
+                <p className="mt-4 text-gray-600 text-sm font-medium text-center">
+                  Show this QR code at the entrance
+                </p>
+
                 {isScanned && (
-                  <p className="mt-1 font-medium text-emerald-600 dark:text-emerald-400 text-caption">
-                    Checked in on {new Date(ticket.scanned_at!).toLocaleString('en-PK')}
-                  </p>
+                  <div className="mt-3 px-4 py-2 bg-emerald-50 rounded-full">
+                    <p className="text-emerald-600 text-xs font-medium">
+                      ✓ Checked in on {new Date(ticket.scanned_at!).toLocaleString('en-PK', {
+                        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                      })}
+                    </p>
+                  </div>
                 )}
               </div>
             ) : (
               <div className="flex flex-col items-center py-8">
-                <AlertTriangle className="w-12 h-12 mb-3 text-muted-foreground opacity-40" />
-                <p className="text-muted-foreground text-body-sm">QR code not available</p>
+                <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+                  <AlertTriangle className="w-10 h-10 text-gray-400" />
+                </div>
+                <p className="font-semibold text-gray-600 text-base">QR Code Unavailable</p>
+                <p className="mt-1 text-gray-500 text-sm text-center">
+                  Please contact support
+                </p>
               </div>
             )}
-
-            {/* Attendee */}
-            <div className="p-3 text-center rounded-xl bg-muted/50">
-              <p className="text-caption text-muted-foreground">Attendee</p>
-              <p className="font-semibold text-foreground">{ticket.attendee_name}</p>
-            </div>
           </div>
         </motion.div>
 
-        {/* Download Button - only show for approved tickets with QR */}
-        {isApproved && qrImageUrl && !isCancelled && (
-          <Button
-            onClick={handleDownload}
-            disabled={downloading}
-            variant="secondary"
-            className="w-full"
-          >
-            {downloading ? (
-              <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-            ) : (
-              <Download className="w-5 h-5 mr-2" />
-            )}
-            {downloading ? 'Generating...' : 'Save Ticket as Image'}
-          </Button>
-        )}
+        {/* Bottom safe area spacing */}
+        <div className="h-20 lg:h-4" />
       </div>
     </div>
   );
 }
 
+// ============================================================================
+// Canvas Helper Functions
+// ============================================================================
+
 function truncate(str: string, max: number): string {
-  return str.length > max ? str.substring(0, max - 1) + '...' : str;
+  return str.length > max ? str.substring(0, max - 1) + '…' : str;
+}
+
+function roundedRect(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, w: number, h: number, r: number
+) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function roundedRectClip(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, w: number, h: number,
+  tl: number, tr: number, br: number, bl: number
+) {
+  ctx.beginPath();
+  ctx.moveTo(x + tl, y);
+  ctx.lineTo(x + w - tr, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + tr);
+  ctx.lineTo(x + w, y + h - br);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - br, y + h);
+  ctx.lineTo(x + bl, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - bl);
+  ctx.lineTo(x, y + tl);
+  ctx.quadraticCurveTo(x, y, x + tl, y);
+  ctx.closePath();
+  ctx.clip();
+}
+
+function wrapText(
+  ctx: CanvasRenderingContext2D,
+  text: string, x: number, y: number, maxWidth: number, lineHeight: number
+) {
+  const words = text.split(' ');
+  let line = '';
+  let currentY = y;
+
+  for (let i = 0; i < words.length; i++) {
+    const testLine = line + words[i] + ' ';
+    const metrics = ctx.measureText(testLine);
+    if (metrics.width > maxWidth && i > 0) {
+      ctx.fillText(line.trim(), x, currentY);
+      line = words[i] + ' ';
+      currentY += lineHeight;
+    } else {
+      line = testLine;
+    }
+  }
+  ctx.fillText(line.trim(), x, currentY);
+}
+
+function drawDetailItem(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, label: string, value: string, maxWidth?: number
+) {
+  ctx.fillStyle = '#9ca3af';
+  ctx.font = '10px system-ui, -apple-system, sans-serif';
+  ctx.fillText(label.toUpperCase(), x, y);
+
+  ctx.fillStyle = '#111827';
+  ctx.font = '14px system-ui, -apple-system, sans-serif';
+  const displayValue = maxWidth ? truncate(value, Math.floor(maxWidth / 7)) : value;
+  ctx.fillText(displayValue, x, y + 18);
 }
