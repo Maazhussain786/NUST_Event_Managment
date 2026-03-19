@@ -262,7 +262,7 @@ export default function TicketDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="w-8 h-8 animate-spin text-brand-500" />
       </div>
     );
@@ -270,10 +270,10 @@ export default function TicketDetailPage() {
 
   if (error || !ticket) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-6 bg-background">
-        <AlertTriangle className="w-16 h-16 text-amber-500 mb-4" />
-        <h2 className="text-h2 text-foreground mb-1">Ticket Not Found</h2>
-        <p className="text-muted-foreground text-body-sm mb-6">{error || 'This ticket could not be loaded.'}</p>
+      <div className="flex flex-col items-center justify-center min-h-screen px-6 bg-background">
+        <AlertTriangle className="w-16 h-16 mb-4 text-amber-500" />
+        <h2 className="mb-1 text-h2 text-foreground">Ticket Not Found</h2>
+        <p className="mb-6 text-muted-foreground text-body-sm">{error || 'This ticket could not be loaded.'}</p>
         <Button onClick={() => router.push('/tickets')}>
           Back to Tickets
         </Button>
@@ -293,8 +293,11 @@ export default function TicketDetailPage() {
       <canvas ref={canvasRef} className="hidden" />
 
       {/* Header */}
-      <header className="sticky top-0 z-header bg-background/80 backdrop-blur-xl border-b border-border">
-        <div className="px-5 pt-14 pb-4 safe-top flex items-center gap-3">
+      <header className="sticky top-0 border-b z-header bg-background/80 backdrop-blur-xl border-border">
+        <div
+          className="flex items-center gap-3 px-5 pt-6 pb-4"
+          style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 1.5rem)' }}
+        >
           <Button
             variant="ghost"
             size="icon"
@@ -307,7 +310,7 @@ export default function TicketDetailPage() {
         </div>
       </header>
 
-      <div className="px-5 py-6 space-y-6">
+      <div className="px-5 py-6 pb-24 space-y-6 lg:pb-8">
         {/* Status Timeline */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
@@ -331,16 +334,16 @@ export default function TicketDetailPage() {
           className={`rounded-2xl overflow-hidden border border-border bg-card ${isCancelled ? 'opacity-60' : ''}`}
         >
           {/* Top Section - Event Banner */}
-          <div className="h-40 bg-gradient-to-br from-brand-500 to-brand-700 relative overflow-hidden">
+          <div className="relative h-40 overflow-hidden bg-gradient-to-br from-brand-500 to-brand-700">
             {ticket.event_banner && (
-              <img src={ticket.event_banner} alt="" className="absolute inset-0 w-full h-full object-cover" />
+              <img src={ticket.event_banner} alt="" className="absolute inset-0 object-cover w-full h-full" />
             )}
             <div className="absolute inset-0 bg-black/40" />
             <div className="absolute bottom-4 left-4 right-4">
               <h2 className="text-xl font-bold text-white line-clamp-2">
                 {ticket.event_title}
               </h2>
-              <p className="text-white/80 text-sm">
+              <p className="text-sm text-white/80">
                 {ticket.society_name}
               </p>
             </div>
@@ -348,8 +351,8 @@ export default function TicketDetailPage() {
 
           {/* Tear Line */}
           <div className="relative">
-            <div className="absolute left-0 -top-3 w-6 h-6 rounded-full bg-background" />
-            <div className="absolute right-0 -top-3 w-6 h-6 rounded-full bg-background" />
+            <div className="absolute left-0 w-6 h-6 rounded-full -top-3 bg-background" />
+            <div className="absolute right-0 w-6 h-6 rounded-full -top-3 bg-background" />
             <div className="mx-8 border-t-2 border-dashed border-border" />
           </div>
 
@@ -357,7 +360,7 @@ export default function TicketDetailPage() {
           <div className="p-5 space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <p className="text-caption text-muted-foreground mb-1">Date</p>
+                <p className="mb-1 text-caption text-muted-foreground">Date</p>
                 <div className="flex items-center gap-1.5 text-body-sm text-foreground">
                   <Calendar className="w-4 h-4 text-brand-500" />
                   {new Date(ticket.event_start).toLocaleDateString('en-PK', {
@@ -366,7 +369,7 @@ export default function TicketDetailPage() {
                 </div>
               </div>
               <div>
-                <p className="text-caption text-muted-foreground mb-1">Time</p>
+                <p className="mb-1 text-caption text-muted-foreground">Time</p>
                 <div className="flex items-center gap-1.5 text-body-sm text-foreground">
                   <Clock className="w-4 h-4 text-brand-500" />
                   {new Date(ticket.event_start).toLocaleTimeString('en-PK', {
@@ -375,15 +378,15 @@ export default function TicketDetailPage() {
                 </div>
               </div>
               <div>
-                <p className="text-caption text-muted-foreground mb-1">Venue</p>
+                <p className="mb-1 text-caption text-muted-foreground">Venue</p>
                 <div className="flex items-center gap-1.5 text-body-sm text-foreground">
                   <MapPin className="w-4 h-4 text-brand-500" />
                   {ticket.event_venue || 'TBD'}
                 </div>
               </div>
               <div>
-                <p className="text-caption text-muted-foreground mb-1">Ticket #</p>
-                <p className="text-body-sm text-foreground font-mono">
+                <p className="mb-1 text-caption text-muted-foreground">Ticket #</p>
+                <p className="font-mono text-body-sm text-foreground">
                   {ticket.ticket_number || 'N/A'}
                 </p>
               </div>
@@ -401,39 +404,39 @@ export default function TicketDetailPage() {
             {/* QR Code or Status Message */}
             {isCancelled ? (
               <div className="flex flex-col items-center py-8">
-                <XCircle className="w-16 h-16 text-red-400 mb-3" />
-                <p className="text-red-500 font-medium text-body-sm">This ticket has been cancelled</p>
-                <p className="text-muted-foreground text-caption mt-1">Contact event organizers for help</p>
+                <XCircle className="w-16 h-16 mb-3 text-red-400" />
+                <p className="font-medium text-red-500 text-body-sm">This ticket has been cancelled</p>
+                <p className="mt-1 text-muted-foreground text-caption">Contact event organizers for help</p>
               </div>
             ) : isPending ? (
               <div className="flex flex-col items-center py-8">
-                <Loader2 className="w-12 h-12 text-amber-400 mb-3 animate-spin" />
-                <p className="text-amber-600 dark:text-amber-400 font-medium text-body-sm">Awaiting Approval</p>
-                <p className="text-muted-foreground text-caption mt-1">QR code will appear once approved</p>
+                <Loader2 className="w-12 h-12 mb-3 text-amber-400 animate-spin" />
+                <p className="font-medium text-amber-600 dark:text-amber-400 text-body-sm">Awaiting Approval</p>
+                <p className="mt-1 text-muted-foreground text-caption">QR code will appear once approved</p>
               </div>
             ) : qrImageUrl ? (
               <div className="flex flex-col items-center py-4">
-                <div className="w-52 h-52 bg-white rounded-2xl flex items-center justify-center p-3 shadow-sm border border-border">
+                <div className="flex items-center justify-center p-3 bg-white border shadow-sm w-52 h-52 rounded-2xl border-border">
                   <img src={qrImageUrl} alt="QR Code" className="w-full h-full" />
                 </div>
-                <p className="text-muted-foreground text-caption mt-3">Show this QR code at the venue entrance</p>
+                <p className="mt-3 text-muted-foreground text-caption">Show this QR code at the venue entrance</p>
                 {isScanned && (
-                  <p className="text-emerald-600 dark:text-emerald-400 text-caption mt-1 font-medium">
+                  <p className="mt-1 font-medium text-emerald-600 dark:text-emerald-400 text-caption">
                     Checked in on {new Date(ticket.scanned_at!).toLocaleString('en-PK')}
                   </p>
                 )}
               </div>
             ) : (
               <div className="flex flex-col items-center py-8">
-                <AlertTriangle className="w-12 h-12 text-muted-foreground mb-3 opacity-40" />
+                <AlertTriangle className="w-12 h-12 mb-3 text-muted-foreground opacity-40" />
                 <p className="text-muted-foreground text-body-sm">QR code not available</p>
               </div>
             )}
 
             {/* Attendee */}
-            <div className="rounded-xl p-3 text-center bg-muted/50">
+            <div className="p-3 text-center rounded-xl bg-muted/50">
               <p className="text-caption text-muted-foreground">Attendee</p>
-              <p className="text-foreground font-semibold">{ticket.attendee_name}</p>
+              <p className="font-semibold text-foreground">{ticket.attendee_name}</p>
             </div>
           </div>
         </motion.div>
@@ -447,7 +450,7 @@ export default function TicketDetailPage() {
             className="w-full"
           >
             {downloading ? (
-              <Loader2 className="w-5 h-5 animate-spin mr-2" />
+              <Loader2 className="w-5 h-5 mr-2 animate-spin" />
             ) : (
               <Download className="w-5 h-5 mr-2" />
             )}

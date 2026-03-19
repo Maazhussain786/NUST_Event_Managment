@@ -32,66 +32,61 @@ export default function BottomNav() {
     <nav
       role="navigation"
       aria-label="Main navigation"
-      className="fixed bottom-0 left-0 right-0 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-zinc-900 lg:hidden"
-      style={{
-        zIndex: 9999,
-        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-        boxShadow: '0 -2px 16px rgba(0,0,0,0.06)',
-      }}
+      className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[calc(100%-32px)] max-w-md lg:hidden z-50"
+      style={{ marginBottom: 'env(safe-area-inset-bottom, 0px)' }}
     >
-      <div className="flex items-center justify-around py-2 px-1 max-w-lg mx-auto">
-        {navItems.map(({ href, icon: Icon, label }) => {
-          const isActive = pathname === href || pathname?.startsWith(href + '/');
-          return (
-            <Link
-              key={href}
-              href={href}
-              aria-current={isActive ? 'page' : undefined}
-              className={cn(
-                'relative flex flex-col items-center gap-1 py-2 px-3 rounded-xl min-w-[56px]',
-                isActive
-                  ? 'text-orange-500'
-                  : 'text-gray-500 dark:text-gray-400 active:scale-95 transition-transform',
-              )}
-            >
-              {/* Active indicator background */}
-              {isActive && (
-                <motion.div
-                  layoutId="bottomnav-pill"
-                  className="absolute inset-0 bg-orange-500/10 rounded-xl"
-                  transition={{
-                    type: 'spring',
-                    stiffness: 500,
-                    damping: 35,
-                  }}
-                />
-              )}
+      <div
+        className={cn(
+          'w-full rounded-2xl backdrop-blur-md shadow-[0_8px_30px_rgba(0,0,0,0.4)]',
+          // Light mode
+          'bg-white/90 border border-black/10',
+          // Dark mode
+          'dark:bg-zinc-900/80 dark:border-white/10'
+        )}
+      >
+        <div className="flex items-center justify-between px-4 py-2">
+          {navItems.map(({ href, icon: Icon, label }) => {
+            const isActive = pathname === href || pathname?.startsWith(href + '/');
 
+            return (
               <motion.div
-                className="relative z-10"
-                animate={isActive ? { scale: 1.1 } : { scale: 1 }}
-                transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                key={href}
+                className="flex-1"
+                whileTap={{ scale: 0.97 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
               >
-                <Icon
+                <Link
+                  href={href}
+                  aria-current={isActive ? 'page' : undefined}
                   className={cn(
-                    'w-6 h-6',
-                    isActive ? 'text-orange-500' : 'text-gray-500 dark:text-gray-400',
+                    'relative flex flex-col items-center justify-center gap-1 rounded-xl px-2 py-2',
+                    isActive
+                      ? 'text-brand-600 dark:text-brand-400'
+                      : 'text-muted-foreground',
                   )}
-                  strokeWidth={isActive ? 2.2 : 1.8}
-                />
-              </motion.div>
+                >
+                  {isActive && (
+                    <motion.div
+                      layoutId="bottom-nav-active-pill"
+                      className="absolute inset-0 rounded-xl border border-brand-500/30 bg-brand-500/10 dark:bg-brand-500/20"
+                      transition={{ duration: 0.2, ease: 'easeOut' }}
+                    />
+                  )}
 
-              <span
-                className={cn(
-                  'relative z-10 text-[11px] font-semibold',
-                  isActive ? 'text-orange-500' : 'text-gray-500 dark:text-gray-400',
-                )}
-              >
-                {label}
-              </span>
-            </Link>
-          );
-        })}
+                  <motion.div
+                    className="relative z-10"
+                    animate={isActive ? { scale: 1.05 } : { scale: 1 }}
+                    transition={{ duration: 0.2, ease: 'easeOut' }}
+                  >
+                    <Icon className="h-5 w-5" strokeWidth={isActive ? 2.2 : 2} />
+                  </motion.div>
+
+                  <span className="relative z-10 text-[10px] font-medium leading-none">{label}</span>
+                </Link>
+              </motion.div>
+            );
+          })}
+        </div>
       </div>
     </nav>
   );

@@ -82,7 +82,7 @@ function buildContextLine(stats: UserStats): string {
 
 function HomeSkeleton() {
   return (
-    <div className="px-5 py-6 space-y-6">
+    <div className="px-4 pt-4 pb-24 space-y-6 md:px-6 lg:px-8 lg:pb-8">
       {/* Header skeleton */}
       <div className="space-y-2">
         <Skeleton className="h-7 w-48" />
@@ -221,7 +221,7 @@ export default function HomePage() {
       {loading ? (
         <HomeSkeleton />
       ) : (
-        <div className="px-5 py-6 space-y-6 lg:space-y-8">
+        <div className="px-4 pt-4 pb-24 space-y-6 md:px-6 lg:px-8 lg:space-y-8 lg:pb-8">
           {/* ═══ PRIORITY 1: Continue where you left off ═══ */}
           {nextTicket && (
             <motion.section
@@ -340,7 +340,7 @@ export default function HomePage() {
           )}
 
           {/* ═══ PRIORITY 3: Upcoming Events ═══ */}
-          <section>
+          <section className="mt-8">
             <div className="flex items-center gap-2 mb-4">
               <div className="w-7 h-7 rounded-lg bg-brand-500/10 flex items-center justify-center">
                 <Calendar className="w-3.5 h-3.5 text-brand-500" />
@@ -348,7 +348,7 @@ export default function HomePage() {
               <h2 className="text-h3 text-foreground">Upcoming</h2>
             </div>
             {filteredUpcoming.length > 0 ? (
-              <div className="space-y-2.5 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0">
+              <div className="space-y-3 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0">
                 {filteredUpcoming.slice(0, 6).map((event, i) => (
                   <motion.div
                     key={event.id}
@@ -377,7 +377,7 @@ export default function HomePage() {
 
           {/* ═══ PRIORITY 4: Trending (lowest) ═══ */}
           {trending.length > 0 && (
-            <section>
+            <section className="mt-8">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <div className="w-7 h-7 rounded-lg bg-brand-500/10 flex items-center justify-center">

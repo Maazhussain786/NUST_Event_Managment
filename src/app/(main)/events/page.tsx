@@ -111,11 +111,14 @@ export default function EventsPage() {
     <AnimatedPage className="min-h-screen bg-background">
       {/* Header */}
       <header className="sticky top-0 z-header bg-background/95 backdrop-blur-sm border-b border-border/50">
-        <div className="px-5 pt-14 pb-3 safe-top">
+        <div
+          className="px-5 pt-6 pb-3"
+          style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 1.5rem)' }}
+        >
           <h1 className="text-h1 text-foreground mb-4">Events</h1>
 
           {/* Search */}
-          <div className="relative mb-3">
+          <div className="relative mb-4">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
               type="text"
@@ -148,7 +151,7 @@ export default function EventsPage() {
         </div>
       </header>
 
-      <div className="px-5 py-4 lg:py-6">
+      <div className="px-5 py-4 pb-24 lg:py-6 lg:pb-8">
         {loading ? (
           <EventsSkeleton />
         ) : filtered.length === 0 ? (

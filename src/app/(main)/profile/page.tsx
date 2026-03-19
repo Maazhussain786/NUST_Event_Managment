@@ -148,9 +148,12 @@ export default function ProfilePage() {
   ];
 
   return (
-    <div className="min-h-screen bg-background pb-28">
+    <div className="min-h-screen bg-background pb-24 lg:pb-8">
       {/* ── Profile header ── */}
-      <div className="px-5 pt-14 pb-6 safe-top">
+      <div
+        className="px-5 pt-6 pb-6"
+        style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 1.5rem)' }}
+      >
         <h1 className="text-h1 text-foreground mb-5">Profile</h1>
 
         <motion.div

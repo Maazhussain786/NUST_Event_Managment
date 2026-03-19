@@ -260,7 +260,10 @@ export default function TicketsPage() {
     return (
       <div className="min-h-screen bg-background">
         <header className="sticky top-0 z-header bg-background/80 backdrop-blur-xl">
-          <div className="px-5 pt-14 pb-3 safe-top">
+          <div
+            className="px-5 pt-6 pb-3"
+            style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 1.5rem)' }}
+          >
             <div className="flex items-center justify-between">
               <h1 className="text-h1 text-foreground">My Tickets</h1>
               <Badge variant="warning" size="md" className="flex items-center gap-1">
@@ -269,7 +272,7 @@ export default function TicketsPage() {
             </div>
           </div>
         </header>
-        <div className="px-5 py-1">
+        <div className="px-5 py-1 pb-24 lg:pb-8">
           <p className="text-caption text-muted-foreground mb-3">
             Showing {cachedTickets.length} cached ticket{cachedTickets.length !== 1 ? 's' : ''}
           </p>
@@ -330,7 +333,10 @@ export default function TicketsPage() {
     <div className="min-h-screen bg-background">
       <Tabs defaultValue="upcoming">
         <header className="sticky top-0 z-header bg-background/80 backdrop-blur-xl">
-          <div className="px-5 pt-14 pb-3 safe-top">
+          <div
+            className="px-5 pt-6 pb-3"
+            style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 1.5rem)' }}
+          >
             <h1 className="text-h1 text-foreground mb-4">My Tickets</h1>
             <TabsList>
               <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
@@ -339,7 +345,7 @@ export default function TicketsPage() {
           </div>
         </header>
 
-        <div className="px-5 pb-28">
+        <div className="px-5 pb-24 lg:pb-8">
           <TabsContent value="upcoming">
             {loading ? (
               <TicketsSkeleton />

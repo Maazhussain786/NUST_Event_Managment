@@ -83,7 +83,7 @@ export default function SocietiesPage() {
         }}
       />
 
-      <div className="px-5 py-4">
+      <div className="px-5 py-4 pb-24 lg:pb-8">
         {loading ? (
           <div className="space-y-2.5">
             {[1, 2, 3, 4, 5].map((i) => (

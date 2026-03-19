@@ -422,6 +422,33 @@
   .safe-top { padding-top: env(safe-area-inset-top, 0px); }
   .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
 
+  /* Shared layout rhythm for main app screens */
+  .page-gutter {
+    @apply px-4 md:px-6 lg:px-8;
+  }
+
+  .app-shell {
+    @apply mx-auto w-full max-w-2xl lg:max-w-3xl xl:max-w-4xl pb-24 lg:pb-8;
+    padding-top: calc(env(safe-area-inset-top, 0px) + 1.5rem);
+  }
+
+  @media (min-width: 768px) {
+    .app-shell {
+      padding-top: calc(env(safe-area-inset-top, 0px) + 2rem);
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .app-shell {
+      padding-top: calc(env(safe-area-inset-top, 0px) + 2.5rem);
+    }
+  }
+
+  /* Safe-area top padding for headers */
+  .safe-area-top {
+    padding-top: calc(env(safe-area-inset-top, 0px) + 16px);
+  }
+
   /* Touch feedback */
   .touch-target {
     @apply relative;
