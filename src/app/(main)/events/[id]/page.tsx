@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Calendar, MapPin, Clock, Users, Star, Ticket, Heart, Share2 } from 'lucide-react';
+import { ArrowLeft, Calendar, MapPin, Clock, Users, Star, Ticket, Heart, Share2, Loader2 } from 'lucide-react';
 import { useRouter, useParams } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useAuth } from '@/components/AuthProvider';
+import { useToast } from '@/components/ToastProvider';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -62,9 +63,11 @@ export default function EventDetailPage() {
   const router = useRouter();
   const params = useParams();
   const { requireAuth } = useAuth();
+  const toast = useToast();
   const [event, setEvent] = useState<EventDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [isFavorite, setIsFavorite] = useState(false);
+  const [registering, setRegistering] = useState(false);
 
   useEffect(() => {
     fetch(`/api/events/${params.id}`)
@@ -73,6 +76,44 @@ export default function EventDetailPage() {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [params.id]);
+
+  const handleCTA = async () => {
+    if (!requireAuth('Sign in to buy tickets or register for events')) return;
+    if (!event || registering) return;
+
+    setRegistering(true);
+    try {
+      const isFreeEvent = !event.is_paid;
+      const url = isFreeEvent
+        ? `/api/events/${event.id}/register`
+        : `/api/events/${event.id}/purchase-ticket`;
+
+      const res = await fetch(url, { method: 'POST' });
+      const data = await res.json();
+
+      if (!res.ok) {
+        toast.error(data.error || 'Something went wrong');
+        return;
+      }
+
+      if (isFreeEvent) {
+        if (data.waitlisted) {
+          toast.info('Added to Waitlist', `You're #${data.waitlist?.position} on the waitlist`);
+        } else {
+          toast.success('Registered!', `You're registered for "${event.title}"`);
+        }
+      } else {
+        toast.success('Ticket Requested', 'Your ticket is pending approval by the society');
+      }
+
+      router.push('/tickets');
+    } catch {
+      toast.error('Network Error', 'Please check your connection and try again');
+    } finally {
+      setRegistering(false);
+    }
+  };
+
 
   if (loading) return <EventDetailSkeleton />;
 
@@ -264,12 +305,15 @@ export default function EventDetailPage() {
             <Button
               size="lg"
               className="rounded-xl px-8"
-              onClick={() => {
-                if (!requireAuth('Sign in to buy tickets or register for events')) return;
-              }}
+              disabled={registering}
+              onClick={handleCTA}
             >
-              <Ticket className="w-5 h-5" />
-              {isFree ? 'Register' : 'Get Ticket'}
+              {registering ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <Ticket className="w-5 h-5" />
+              )}
+              {registering ? 'Processing…' : isFree ? 'Register' : 'Get Ticket'}
             </Button>
           </div>
         </motion.footer>

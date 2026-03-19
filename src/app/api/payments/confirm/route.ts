@@ -3,27 +3,24 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getClient } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
-import { generateQrPayload } from '@/lib/qr';
 
 /**
  * POST /api/payments/confirm
  *
- * Confirm payment for a pending ticket.
+ * Record payment confirmation for a pending ticket.
  *
  * Input:
  *   - payment_reference: UUID (from purchase-ticket response)
- *   - transaction_id: string (simulated gateway transaction ID)
+ *   - transaction_id: string (gateway transaction ID)
  *
  * Rules:
  *   - Must match existing PENDING ticket
- *   - Re-checks capacity before approval (prevents overselling)
- *   - Marks ticket status = APPROVED
- *   - participants_count incremented by DB trigger
- *   - reserved_count decremented by DB trigger
- *   - Generates QR code for approved ticket
- *   - Idempotent: if already APPROVED, returns success without mutation
+ *   - Records the transaction_id on the ticket
+ *   - Does NOT auto-approve — ticket stays PENDING until society approver reviews
+ *   - Notifies society approvers that payment has been submitted
  *
- * Audit: TICKET_APPROVED
+ * NOTE: Approval and QR generation are handled by
+ *       /api/societies/[id]/governance/ticket-approvals/[ticketId]
  */
 export async function POST(req: NextRequest) {
   const client = await getClient();
@@ -43,18 +40,17 @@ export async function POST(req: NextRequest) {
 
     await client.query('BEGIN');
 
-    // ── Find ticket by payment_reference with event lock ──────────────
-    // Lock both ticket AND event to prevent race conditions
+    // ── Find ticket by payment_reference ──────────────────────────────
     const ticketResult = await client.query(
       `SELECT t.id, t.event_id, t.user_id, t.status, t.payment_reference,
               e.title AS event_title, e.society_id, e.ticket_price,
-              e.max_participants, e.participants_count, e.is_cancelled,
+              e.is_cancelled,
               s.name AS society_name
        FROM tickets t
        JOIN events e ON e.id = t.event_id
        JOIN societies s ON s.id = e.society_id
        WHERE t.payment_reference = $1
-       FOR UPDATE OF t, e`,
+       FOR UPDATE OF t`,
       [payment_reference]
     );
 
@@ -76,7 +72,7 @@ export async function POST(req: NextRequest) {
       await client.query('ROLLBACK');
       return NextResponse.json({
         success: true,
-        message: 'Payment already confirmed',
+        message: 'Ticket already approved',
         ticket: {
           id: ticket.id,
           status: 'APPROVED',
@@ -96,7 +92,6 @@ export async function POST(req: NextRequest) {
 
     // ── Check if event is still valid ─────────────────────────────────
     if (ticket.is_cancelled) {
-      // Cancel the ticket since event is cancelled
       await client.query(
         `UPDATE tickets SET status = 'CANCELLED', cancelled_at = NOW(), updated_at = NOW()
          WHERE id = $1`,
@@ -109,100 +104,65 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── CRITICAL: Re-check capacity before approval ───────────────────
-    // This prevents overselling when multiple PENDING tickets are approved concurrently
-    if (ticket.max_participants !== null) {
-      if (ticket.participants_count >= ticket.max_participants) {
-        // Capacity exceeded - reject the ticket
-        await client.query(
-          `UPDATE tickets SET status = 'REJECTED', updated_at = NOW() WHERE id = $1`,
-          [ticket.id]
-        );
-
-        // Log the capacity exceeded event
-        await client.query(
-          `INSERT INTO audit_logs (action, performed_by, society_id, target_type, target_id, metadata)
-           VALUES ('CAPACITY_EXCEEDED', $1, $2, 'ticket', $3, $4)`,
-          [
-            user.userId,
-            ticket.society_id,
-            ticket.id,
-            JSON.stringify({
-              eventTitle: ticket.event_title,
-              maxParticipants: ticket.max_participants,
-              currentCount: ticket.participants_count,
-              message: 'Ticket rejected due to capacity being reached during payment',
-            }),
-          ]
-        );
-
-        await client.query('COMMIT');
-        return NextResponse.json(
-          { error: 'Event has reached maximum capacity. Payment cannot be processed. Please contact support for a refund.' },
-          { status: 409 }
-        );
-      }
-    }
-
-    // ── Approve ticket (trigger increments participants_count) ────────
+    // ── Record payment confirmation (ticket stays PENDING) ────────────
+    // The ticket remains PENDING until a society approver reviews and approves it.
+    // We only record the transaction_id so the approver can verify it.
     await client.query(
-      `UPDATE tickets
-       SET status = 'APPROVED', approved_at = NOW(), approved_by = $1, updated_at = NOW()
-       WHERE id = $2`,
-      [user.userId, ticket.id]
-    );
-
-    // ── Generate QR code ──────────────────────────────────────────────
-    const qrPayload = generateQrPayload({
-      type: 'T',
-      id: ticket.id,
-      eventId: ticket.event_id,
-      userId: ticket.user_id,
-    });
-
-    // Deactivate any existing QR for this ticket
-    await client.query(
-      `UPDATE ticket_qr_codes SET is_active = FALSE WHERE ticket_id = $1 AND is_active = TRUE`,
-      [ticket.id]
-    );
-
-    const qrResult = await client.query(
-      `INSERT INTO ticket_qr_codes (ticket_id, qr_data, is_active)
-       VALUES ($1, $2, TRUE)
-       RETURNING id`,
-      [ticket.id, qrPayload]
-    );
-
-    // ── Audit log ─────────────────────────────────────────────────────
-    await client.query(
-      `INSERT INTO audit_logs (action, performed_by, society_id, target_type, target_id, old_value, new_value, metadata)
-       VALUES ('TICKET_APPROVED', $1, $2, 'ticket', $3, $4, $5, $6)`,
+      `INSERT INTO audit_logs (action, performed_by, society_id, target_type, target_id, new_value, metadata)
+       VALUES ('PAYMENT_VERIFIED', $1, $2, 'ticket', $3, $4, $5)`,
       [
         user.userId,
         ticket.society_id,
         ticket.id,
-        JSON.stringify({ status: 'PENDING' }),
-        JSON.stringify({ status: 'APPROVED', transaction_id }),
+        JSON.stringify({ transaction_id, payment_reference }),
         JSON.stringify({
           eventTitle: ticket.event_title,
           societyName: ticket.society_name,
           ticketPrice: ticket.ticket_price,
-          paymentReference: payment_reference,
-          transactionId: transaction_id,
+          message: 'Payment submitted. Awaiting society approval.',
         }),
       ]
     );
+
+    // ── Notify approvers that payment proof has been submitted ─────────
+    try {
+      const approvers = await client.query(
+        `SELECT DISTINCT sm.user_id
+         FROM society_memberships sm
+         JOIN roles r ON sm.role_id = r.id
+         JOIN role_privileges rp ON r.id = rp.role_id
+         JOIN privileges p ON rp.privilege_id = p.id
+         WHERE sm.society_id = $1
+           AND sm.is_active = TRUE
+           AND p.name = 'VERIFY_PAYMENTS'
+           AND sm.user_id != $2`,
+        [ticket.society_id, user.userId]
+      );
+      for (const approver of approvers.rows) {
+        await client.query(
+          `INSERT INTO notifications (user_id, title, body, link)
+           VALUES ($1, $2, $3, $4)`,
+          [
+            approver.user_id,
+            'Payment Submitted',
+            `${user.fullName || 'A student'} submitted payment for "${ticket.event_title}"`,
+            `/society/${ticket.society_id}/approvals`,
+          ]
+        );
+      }
+    } catch (notifErr) {
+      console.error('Failed to notify approvers:', notifErr);
+    }
 
     await client.query('COMMIT');
 
     return NextResponse.json({
       success: true,
+      message: 'Payment recorded. Your ticket is pending approval by the society.',
       ticket: {
         id: ticket.id,
-        status: 'APPROVED',
+        status: 'PENDING',
         eventTitle: ticket.event_title,
-        qrCodeId: qrResult.rows[0].id,
-        qrPayload,
       },
     }, { status: 200 });
   } catch (error) {

@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getClient } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { generateQrPayload } from '@/lib/qr';
 
 // PATCH /api/societies/[id]/governance/ticket-approvals/[ticketId] — approve/reject a single ticket
 export async function PATCH(
@@ -59,11 +60,41 @@ export async function PATCH(
       );
     }
 
+    // ── Self-approval protection ──────────────────────────────────────
+    // Prevent a user from approving their own ticket
+    if (action === 'APPROVE' && ticket.user_id === user.userId) {
+      await client.query('ROLLBACK');
+      return NextResponse.json(
+        { error: 'You cannot approve your own ticket. Another authorized member must review it.' },
+        { status: 403 }
+      );
+    }
+
     if (action === 'APPROVE') {
       await client.query(
         `UPDATE tickets SET status = 'APPROVED', approved_at = NOW(), approved_by = $1, updated_at = NOW()
          WHERE id = $2`,
         [user.userId, ticketId]
+      );
+
+      // ── Generate QR code for approved ticket ────────────────────────
+      const qrPayload = generateQrPayload({
+        type: 'T',
+        id: ticketId,
+        eventId: ticket.event_id,
+        userId: ticket.user_id,
+      });
+
+      // Deactivate any existing QR for this ticket
+      await client.query(
+        `UPDATE ticket_qr_codes SET is_active = FALSE WHERE ticket_id = $1 AND is_active = TRUE`,
+        [ticketId]
+      );
+
+      await client.query(
+        `INSERT INTO ticket_qr_codes (ticket_id, qr_data, is_active)
+         VALUES ($1, $2, TRUE)`,
+        [ticketId, qrPayload]
       );
     } else if (action === 'REJECT') {
       await client.query(
@@ -107,13 +138,13 @@ export async function PATCH(
        VALUES ($1, $2, $3, $4)`,
       [
         ticket.user_id,
-        action === 'APPROVE' ? 'Ticket Approved' : action === 'REJECT' ? 'Ticket Rejected' : 'Re-upload Required',
+        action === 'APPROVE' ? 'Ticket Approved 🎉' : action === 'REJECT' ? 'Ticket Rejected' : 'Re-upload Required',
         action === 'APPROVE'
-          ? `Your ticket for "${ticket.event_title}" has been approved!`
+          ? `Your ticket for "${ticket.event_title}" has been approved! Your QR code is ready.`
           : action === 'REJECT'
           ? `Your ticket for "${ticket.event_title}" was rejected. ${reason || ''}`
           : `Please re-upload payment proof for "${ticket.event_title}". ${reason || ''}`,
-        `/events/${ticket.event_id}`,
+        action === 'APPROVE' ? `/tickets` : `/events/${ticket.event_id}`,
       ]
     );
 

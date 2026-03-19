@@ -25,14 +25,14 @@ import {
  */
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const client = await getClient();
   try {
     const user = await getCurrentUser();
     if (!user) return ApiErrors.unauthorized();
 
-    const { id: eventId } = params;
+    const { id: eventId } = await params;
     const ip = extractIpAddress(req);
 
     await client.query('BEGIN');

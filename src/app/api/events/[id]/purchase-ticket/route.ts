@@ -24,14 +24,14 @@ import { getCurrentUser } from '@/lib/auth';
  */
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const client = await getClient();
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { id: eventId } = params;
+    const { id: eventId } = await params;
 
     await client.query('BEGIN');
 
@@ -50,6 +50,7 @@ export async function POST(
       `SELECT e.id, e.title, e.society_id, e.is_cancelled, e.status,
               e.is_paid, e.ticket_price, e.max_participants, e.participants_count,
               e.event_start, e.event_end, e.registration_end, e.visibility,
+              e.created_by,
               s.status AS society_status, s.name AS society_name
        FROM events e
        JOIN societies s ON e.society_id = s.id
@@ -119,6 +120,33 @@ export async function POST(
       return NextResponse.json({ error: 'You are suspended from this society' }, { status: 403 });
     }
 
+    // ── Self-purchase protection ──────────────────────────────────────
+    // Block event creator from buying their own event
+    if (event.created_by === user.userId) {
+      await client.query('ROLLBACK');
+      return NextResponse.json(
+        { error: 'Event organizers cannot purchase tickets for their own events' },
+        { status: 403 }
+      );
+    }
+    // Block society president/VP (hierarchy >= 8) from buying own society events
+    if (user.userType !== 'SUPER_ADMIN') {
+      const orgCheck = await client.query(
+        `SELECT r.hierarchy_level FROM society_memberships sm
+         JOIN roles r ON sm.role_id = r.id
+         WHERE sm.user_id = $1 AND sm.society_id = $2 AND sm.is_active = TRUE
+         AND r.hierarchy_level >= 8`,
+        [user.userId, event.society_id]
+      );
+      if (orgCheck.rows.length > 0) {
+        await client.query('ROLLBACK');
+        return NextResponse.json(
+          { error: 'Society leadership cannot purchase tickets for their own society events' },
+          { status: 403 }
+        );
+      }
+    }
+
     // ── Capacity check (PENDING + APPROVED both count toward cap) ─────
     // For paid events, we check pending tickets too to prevent over-selling
     if (event.max_participants) {
@@ -185,13 +213,7 @@ export async function POST(
             status: 'PENDING',
             paymentReference: updated.rows[0].payment_reference,
           },
-          payment: {
-            amount: parseFloat(event.ticket_price),
-            currency: 'PKR',
-            reference: updated.rows[0].payment_reference,
-            gateway: 'SIMULATED',
-            instructions: 'Use POST /api/payments/confirm with this reference to complete payment.',
-          },
+          message: 'Ticket request re-submitted. Pending approval by society.',
         }, { status: 200 });
       }
     }
@@ -224,6 +246,37 @@ export async function POST(
       ]
     );
 
+    // ── Notify society approvers ─────────────────────────────────────
+    try {
+      const approvers = await client.query(
+        `SELECT DISTINCT sm.user_id
+         FROM society_memberships sm
+         JOIN roles r ON sm.role_id = r.id
+         JOIN role_privileges rp ON r.id = rp.role_id
+         JOIN privileges p ON rp.privilege_id = p.id
+         WHERE sm.society_id = $1
+           AND sm.is_active = TRUE
+           AND p.name = 'VERIFY_PAYMENTS'
+           AND sm.user_id != $2`,
+        [event.society_id, user.userId]
+      );
+      for (const approver of approvers.rows) {
+        await client.query(
+          `INSERT INTO notifications (user_id, title, body, link)
+           VALUES ($1, $2, $3, $4)`,
+          [
+            approver.user_id,
+            'New Ticket Request',
+            `${user.fullName || 'A student'} requested a ticket for "${event.title}" (Rs. ${event.ticket_price})`,
+            `/society/${event.society_id}/approvals`,
+          ]
+        );
+      }
+    } catch (notifErr) {
+      // Don't fail the ticket purchase if notification fails
+      console.error('Failed to notify approvers:', notifErr);
+    }
+
     await client.query('COMMIT');
 
     return NextResponse.json({
@@ -233,13 +286,7 @@ export async function POST(
         status: 'PENDING',
         paymentReference: ticket.payment_reference,
       },
-      payment: {
-        amount: parseFloat(event.ticket_price),
-        currency: 'PKR',
-        reference: ticket.payment_reference,
-        gateway: 'SIMULATED',
-        instructions: 'Use POST /api/payments/confirm with this reference to complete payment.',
-      },
+      message: 'Ticket request submitted. Pending approval by society.',
     }, { status: 201 });
   } catch (error) {
     await client.query('ROLLBACK');

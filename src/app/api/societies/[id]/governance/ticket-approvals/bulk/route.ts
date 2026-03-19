@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getClient } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { generateQrPayload } from '@/lib/qr';
 
 // POST /api/societies/[id]/governance/ticket-approvals/bulk — bulk approve/reject tickets
 export async function POST(
@@ -39,6 +40,7 @@ export async function POST(
 
     let processed = 0;
     let failed = 0;
+    let skippedSelf = 0;
 
     for (const ticketId of ticketIds) {
       try {
@@ -59,11 +61,36 @@ export async function POST(
 
         const ticket = ticketResult.rows[0];
 
+        // ── Self-approval protection ──────────────────────────────────
+        if (action === 'APPROVE' && ticket.user_id === user.userId) {
+          skippedSelf++;
+          continue;
+        }
+
         if (action === 'APPROVE') {
           await client.query(
             `UPDATE tickets SET status = 'APPROVED', approved_at = NOW(), approved_by = $1, updated_at = NOW()
              WHERE id = $2`,
             [user.userId, ticketId]
+          );
+
+          // ── Generate QR code for approved ticket ──────────────────
+          const qrPayload = generateQrPayload({
+            type: 'T',
+            id: ticketId,
+            eventId: ticket.event_id,
+            userId: ticket.user_id,
+          });
+
+          await client.query(
+            `UPDATE ticket_qr_codes SET is_active = FALSE WHERE ticket_id = $1 AND is_active = TRUE`,
+            [ticketId]
+          );
+
+          await client.query(
+            `INSERT INTO ticket_qr_codes (ticket_id, qr_data, is_active)
+             VALUES ($1, $2, TRUE)`,
+            [ticketId, qrPayload]
           );
         } else {
           await client.query(
@@ -85,11 +112,11 @@ export async function POST(
            VALUES ($1, $2, $3, $4)`,
           [
             ticket.user_id,
-            action === 'APPROVE' ? 'Ticket Approved' : 'Ticket Rejected',
+            action === 'APPROVE' ? 'Ticket Approved 🎉' : 'Ticket Rejected',
             action === 'APPROVE'
-              ? `Your ticket for "${ticket.event_title}" has been approved!`
+              ? `Your ticket for "${ticket.event_title}" has been approved! Your QR code is ready.`
               : `Your ticket for "${ticket.event_title}" was rejected. ${reason || ''}`,
-            `/events/${ticket.event_id}`,
+            action === 'APPROVE' ? `/tickets` : `/events/${ticket.event_id}`,
           ]
         );
 
@@ -109,13 +136,17 @@ export async function POST(
         societyId,
         ticketIds[0],
         JSON.stringify({ action, bulkCount: ticketIds.length }),
-        JSON.stringify({ reviewedBy: user.fullName, processed, failed }),
+        JSON.stringify({ reviewedBy: user.fullName, processed, failed, skippedSelf }),
       ]
     );
 
     await client.query('COMMIT');
 
-    return NextResponse.json({ success: true, processed, failed });
+    const message = skippedSelf > 0
+      ? `${processed} tickets ${action.toLowerCase()}d. ${skippedSelf} skipped (cannot approve your own ticket).`
+      : undefined;
+
+    return NextResponse.json({ success: true, processed, failed, skippedSelf, message });
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Bulk review error:', error);

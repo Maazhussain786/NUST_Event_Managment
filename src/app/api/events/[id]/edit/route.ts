@@ -41,14 +41,14 @@ const CORE_FIELDS = new Set([
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const client = await getClient();
   try {
     const user = await getCurrentUser();
     if (!user) return ApiErrors.unauthorized();
 
-    const { id: eventId } = params;
+    const { id: eventId } = await params;
     const body = await req.json();
     const ip = extractIpAddress(req);
 
