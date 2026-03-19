@@ -573,7 +573,7 @@ export async function logQuotaExceeded(
 // Allowlist of valid tables and foreign keys for media count queries
 const ALLOWED_MEDIA_TABLES = new Set([
   'society_media', 'society_album_photos', 'society_post_images',
-  'event_media', 'note_attachments',
+  'event_media', 'event_note_attachments',
 ]);
 
 const ALLOWED_FOREIGN_KEYS = new Set([

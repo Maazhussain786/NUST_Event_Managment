@@ -3,9 +3,16 @@ import { Pool, PoolConfig } from 'pg';
 /**
  * Database connection pool.
  * Respects ACTIVE_DB env var to switch between Azure (cloud) and Local configs.
+ *
+ * Pool settings optimized for:
+ * - Statement timeout: 30s max per query (prevents runaway queries)
+ * - Connection timeout: 10s (fail fast on connection issues)
+ * - Idle timeout: 30s (release connections not in use)
+ * - Application name: helps identify connections in pg_stat_activity
  */
 
 const isAzure = process.env.ACTIVE_DB !== 'local';
+const appName = 'nust-events';
 
 const azureConfig: PoolConfig = {
   host: process.env.AZURE_DB_HOST,
@@ -19,6 +26,9 @@ const azureConfig: PoolConfig = {
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000,
+  application_name: appName,
+  statement_timeout: 30000, // 30 seconds max per query
+  query_timeout: 30000,
 };
 
 const localConfig: PoolConfig = {
@@ -30,9 +40,18 @@ const localConfig: PoolConfig = {
   ssl: false,
   max: 20,
   idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000,
+  application_name: appName,
+  statement_timeout: 30000,
+  query_timeout: 30000,
 };
 
 const pool = new Pool(isAzure ? azureConfig : localConfig);
+
+// Log pool errors (connection issues, etc.)
+pool.on('error', (err) => {
+  console.error('Unexpected database pool error:', err);
+});
 
 export async function query(text: string, params?: unknown[]) {
   const start = Date.now();
