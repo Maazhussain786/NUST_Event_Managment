@@ -28,8 +28,8 @@ export interface AdminUser {
   id: string;
   email: string;
   full_name: string;
-  user_type: 'SUPER_ADMIN' | 'STUDENT';
-  status: 'ACTIVE' | 'PENDING_VERIFICATION' | 'SUSPENDED';
+  user_type: "SUPER_ADMIN" | "STUDENT";
+  status: "ACTIVE" | "PENDING_VERIFICATION" | "SUSPENDED";
   created_at: string;
   society_count: string;
 }
@@ -38,7 +38,7 @@ export interface UserDetail {
   id: string;
   email: string;
   full_name: string;
-  user_type: 'SUPER_ADMIN' | 'STUDENT';
+  user_type: "SUPER_ADMIN" | "STUDENT";
   status: string;
   avatar_url: string | null;
   created_at: string;
@@ -77,7 +77,13 @@ export interface Administrator {
 
 // ─── Societies ──────────────────────────────────────────────────────────────
 
-export type SocietyStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED' | 'DEACTIVATED' | 'INFO_REQUESTED';
+export type SocietyStatus =
+  | "PENDING"
+  | "APPROVED"
+  | "REJECTED"
+  | "SUSPENDED"
+  | "DEACTIVATED"
+  | "INFO_REQUESTED";
 
 export interface AdminSociety {
   id: string;
@@ -101,9 +107,26 @@ export interface AdminSociety {
   contact_email: string | null;
 }
 
+export interface SocietyTransferMember {
+  id: string;
+  full_name: string;
+  email: string;
+  role_name: string;
+  is_current_president: boolean;
+}
+
 // ─── Events ─────────────────────────────────────────────────────────────────
 
-export type EventStatus = 'DRAFT' | 'PENDING' | 'UPCOMING' | 'ONGOING' | 'COMPLETED' | 'APPROVED' | 'REJECTED' | 'ARCHIVED' | 'CANCELLED';
+export type EventStatus =
+  | "DRAFT"
+  | "PENDING"
+  | "UPCOMING"
+  | "ONGOING"
+  | "COMPLETED"
+  | "APPROVED"
+  | "REJECTED"
+  | "ARCHIVED"
+  | "CANCELLED";
 
 export interface AdminEvent {
   id: string;
@@ -173,23 +196,54 @@ export interface RecentPayment {
 // ─── Audit Logs ─────────────────────────────────────────────────────────────
 
 export type AuditAction =
-  | 'CHAT_CREATED' | 'CHAT_DELETED' | 'CHAT_UPDATED'
-  | 'CONTENT_DELETED' | 'CONTENT_UPLOADED'
-  | 'EVENT_CANCELLED' | 'EVENT_CREATED' | 'EVENT_REGISTERED' | 'EVENT_UPDATED' | 'EVENT_WAITLISTED'
-  | 'MEDIA_DELETED' | 'MEDIA_UPLOADED'
-  | 'MEMBER_ADDED' | 'MEMBER_REACTIVATED' | 'MEMBER_REMOVED' | 'MEMBER_SUSPENDED'
-  | 'NOTE_CREATED' | 'NOTE_DELETED' | 'NOTE_UPDATED'
-  | 'PAYMENT_REJECTED' | 'PAYMENT_VERIFIED'
-  | 'PORTFOLIO_CREATED' | 'PORTFOLIO_DELETED'
-  | 'POST_CREATED' | 'POST_DELETED' | 'POST_UPDATED'
-  | 'PRESIDENCY_TRANSFERRED' | 'PRIVILEGE_GRANTED' | 'PRIVILEGE_REVOKED'
-  | 'QR_REGENERATED' | 'QR_SCANNED' | 'QUOTA_EXCEEDED'
-  | 'ROLE_ASSIGNED' | 'ROLE_REVOKED' | 'ROLE_UPDATED'
-  | 'SOCIETY_APPROVED' | 'SOCIETY_DEACTIVATED' | 'SOCIETY_REACTIVATED' | 'SOCIETY_REJECTED' | 'SOCIETY_SUSPENDED'
-  | 'STORAGE_DECREMENT' | 'STORAGE_LIMIT_UPDATED'
-  | 'SUPERADMIN_OVERRIDE'
-  | 'TICKET_APPROVED' | 'TICKET_REJECTED' | 'TICKET_TRANSFERRED'
-  | 'WING_CREATED' | 'WING_DELETED';
+  | "CHAT_CREATED"
+  | "CHAT_DELETED"
+  | "CHAT_UPDATED"
+  | "CONTENT_DELETED"
+  | "CONTENT_UPLOADED"
+  | "EVENT_CANCELLED"
+  | "EVENT_CREATED"
+  | "EVENT_REGISTERED"
+  | "EVENT_UPDATED"
+  | "EVENT_WAITLISTED"
+  | "MEDIA_DELETED"
+  | "MEDIA_UPLOADED"
+  | "MEMBER_ADDED"
+  | "MEMBER_REACTIVATED"
+  | "MEMBER_REMOVED"
+  | "MEMBER_SUSPENDED"
+  | "NOTE_CREATED"
+  | "NOTE_DELETED"
+  | "NOTE_UPDATED"
+  | "PAYMENT_REJECTED"
+  | "PAYMENT_VERIFIED"
+  | "PORTFOLIO_CREATED"
+  | "PORTFOLIO_DELETED"
+  | "POST_CREATED"
+  | "POST_DELETED"
+  | "POST_UPDATED"
+  | "PRESIDENCY_TRANSFERRED"
+  | "PRIVILEGE_GRANTED"
+  | "PRIVILEGE_REVOKED"
+  | "QR_REGENERATED"
+  | "QR_SCANNED"
+  | "QUOTA_EXCEEDED"
+  | "ROLE_ASSIGNED"
+  | "ROLE_REVOKED"
+  | "ROLE_UPDATED"
+  | "SOCIETY_APPROVED"
+  | "SOCIETY_DEACTIVATED"
+  | "SOCIETY_REACTIVATED"
+  | "SOCIETY_REJECTED"
+  | "SOCIETY_SUSPENDED"
+  | "STORAGE_DECREMENT"
+  | "STORAGE_LIMIT_UPDATED"
+  | "SUPERADMIN_OVERRIDE"
+  | "TICKET_APPROVED"
+  | "TICKET_REJECTED"
+  | "TICKET_TRANSFERRED"
+  | "WING_CREATED"
+  | "WING_DELETED";
 
 export interface AuditLog {
   id: string;
@@ -348,7 +402,7 @@ export interface FeatureFlag {
   label: string;
   description: string;
   enabled: boolean;
-  scope: 'global' | 'per_society';
+  scope: "global" | "per_society";
   category: string;
 }
 
@@ -359,7 +413,7 @@ export interface SystemConfigItem {
   label: string;
   description: string;
   value: string | number;
-  type: 'number' | 'string' | 'boolean';
+  type: "number" | "string" | "boolean";
   unit?: string;
   category: string;
 }
@@ -370,8 +424,8 @@ export interface Incident {
   id: string;
   title: string;
   description: string | null;
-  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-  status: 'OPEN' | 'INVESTIGATING' | 'RESOLVED' | 'CLOSED';
+  severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+  status: "OPEN" | "INVESTIGATING" | "RESOLVED" | "CLOSED";
   created_by_name: string;
   created_by_email: string;
   assigned_to_name: string | null;
@@ -399,7 +453,7 @@ export interface SearchResults {
 
 export interface SearchResultItem {
   id: string;
-  type: 'user' | 'society' | 'event' | 'audit_log';
+  type: "user" | "society" | "event" | "audit_log";
   title: string;
   subtitle: string | null;
   status: string | null;
@@ -412,7 +466,7 @@ export interface HealthStatus {
   database: ServiceHealth;
   storage: ServiceHealth;
   api: ServiceHealth;
-  overall: 'healthy' | 'degraded' | 'unhealthy';
+  overall: "healthy" | "degraded" | "unhealthy";
   timestamp: string;
   systemInfo: {
     totalUsers: number;
@@ -425,7 +479,7 @@ export interface HealthStatus {
 }
 
 export interface ServiceHealth {
-  status: 'healthy' | 'degraded' | 'unhealthy';
+  status: "healthy" | "degraded" | "unhealthy";
   latency: number;
   message: string;
 }
@@ -436,11 +490,11 @@ export interface UniversityEvent {
   id: string;
   title: string;
   description: string | null;
+  banner_url: string | null;
   event_start: string;
   event_end: string | null;
   location: string | null;
   status: string;
-  banner_url: string | null;
   ticket_price: string;
   max_tickets: string | null;
   is_pinned: boolean;
@@ -455,7 +509,11 @@ export interface UniversityEvent {
 
 // ─── Co-Host Request Workflow ───────────────────────────────────────────────
 
-export type CoHostRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED';
+export type CoHostRequestStatus =
+  | "PENDING"
+  | "APPROVED"
+  | "REJECTED"
+  | "EXPIRED";
 
 export interface CoHostRequest {
   id: string;
@@ -476,8 +534,8 @@ export interface CoHostRequest {
 
 // ─── Notification Engine (In-App) ───────────────────────────────────────────
 
-export type NotificationPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
-export type NotificationTargetType = 'ALL' | 'SOCIETY' | 'EVENT' | 'USER';
+export type NotificationPriority = "LOW" | "NORMAL" | "HIGH" | "URGENT";
+export type NotificationTargetType = "ALL" | "SOCIETY" | "EVENT" | "USER";
 
 export interface PlatformNotification {
   id: string;
@@ -504,7 +562,7 @@ export interface BlackoutDate {
   start_date: string;
   end_date: string;
   reason: string | null;
-  scope: 'ALL' | 'EVENTS' | 'REGISTRATIONS';
+  scope: "ALL" | "EVENTS" | "REGISTRATIONS";
   created_by_name: string;
   created_at: string;
 }
@@ -522,5 +580,5 @@ export interface EmergencyFlag {
   label: string;
   description: string;
   enabled: boolean;
-  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 }

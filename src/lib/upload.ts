@@ -5,9 +5,9 @@
  * and quota enforcement for all file uploads.
  */
 
-import sharp from 'sharp';
-import { query } from './db';
-import { PoolClient } from 'pg';
+import sharp from "sharp";
+import { query } from "./db";
+import { PoolClient } from "pg";
 
 // ============================================================================
 // Constants & Limits
@@ -63,17 +63,17 @@ export const RATE_LIMITS = {
 // ============================================================================
 
 export const ALLOWED_IMAGE_MIMES = new Set([
-  'image/jpeg',
-  'image/jpg',
-  'image/png',
-  'image/gif',
-  'image/webp',
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/gif",
+  "image/webp",
 ]);
 
 export const ALLOWED_DOCUMENT_MIMES = new Set([
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ]);
 
 export const ALLOWED_ALL_MIMES = new Set([
@@ -83,15 +83,15 @@ export const ALLOWED_ALL_MIMES = new Set([
 
 // Extension-to-MIME mapping for validation
 const EXTENSION_MIME_MAP: Record<string, string[]> = {
-  '.jpg': ['image/jpeg', 'image/jpg'],
-  '.jpeg': ['image/jpeg', 'image/jpg'],
-  '.png': ['image/png'],
-  '.gif': ['image/gif'],
-  '.webp': ['image/webp'],
-  '.pdf': ['application/pdf'],
-  '.doc': ['application/msword'],
-  '.docx': [
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  ".jpg": ["image/jpeg", "image/jpg"],
+  ".jpeg": ["image/jpeg", "image/jpg"],
+  ".png": ["image/png"],
+  ".gif": ["image/gif"],
+  ".webp": ["image/webp"],
+  ".pdf": ["application/pdf"],
+  ".doc": ["application/msword"],
+  ".docx": [
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   ],
 };
 
@@ -112,13 +112,13 @@ export function validateFile(
   mimeType: string,
   sizeBytes: number,
   allowedMimes: Set<string>,
-  maxSizeBytes: number
+  maxSizeBytes: number,
 ): ValidationResult {
   // 1. Check MIME type
   if (!allowedMimes.has(mimeType)) {
     return {
       valid: false,
-      error: `File type '${mimeType}' is not allowed. Allowed: ${Array.from(allowedMimes).join(', ')}`,
+      error: `File type '${mimeType}' is not allowed. Allowed: ${Array.from(allowedMimes).join(", ")}`,
     };
   }
 
@@ -144,7 +144,7 @@ export function validateFile(
 
   // 4. Check minimum size (likely corrupt or empty)
   if (sizeBytes < 100) {
-    return { valid: false, error: 'File is too small — possibly corrupt' };
+    return { valid: false, error: "File is too small — possibly corrupt" };
   }
 
   return { valid: true };
@@ -156,9 +156,15 @@ export function validateFile(
 export function validateImageFile(
   fileName: string,
   mimeType: string,
-  sizeBytes: number
+  sizeBytes: number,
 ): ValidationResult {
-  return validateFile(fileName, mimeType, sizeBytes, ALLOWED_IMAGE_MIMES, MAX_IMAGE_SIZE);
+  return validateFile(
+    fileName,
+    mimeType,
+    sizeBytes,
+    ALLOWED_IMAGE_MIMES,
+    MAX_IMAGE_SIZE,
+  );
 }
 
 /**
@@ -167,9 +173,15 @@ export function validateImageFile(
 export function validateDocumentFile(
   fileName: string,
   mimeType: string,
-  sizeBytes: number
+  sizeBytes: number,
 ): ValidationResult {
-  return validateFile(fileName, mimeType, sizeBytes, ALLOWED_DOCUMENT_MIMES, MAX_DOCUMENT_SIZE);
+  return validateFile(
+    fileName,
+    mimeType,
+    sizeBytes,
+    ALLOWED_DOCUMENT_MIMES,
+    MAX_DOCUMENT_SIZE,
+  );
 }
 
 /**
@@ -178,11 +190,17 @@ export function validateDocumentFile(
 export function validateAnyFile(
   fileName: string,
   mimeType: string,
-  sizeBytes: number
+  sizeBytes: number,
 ): ValidationResult {
   const isImage = ALLOWED_IMAGE_MIMES.has(mimeType);
   const maxSize = isImage ? MAX_IMAGE_SIZE : MAX_DOCUMENT_SIZE;
-  return validateFile(fileName, mimeType, sizeBytes, ALLOWED_ALL_MIMES, maxSize);
+  return validateFile(
+    fileName,
+    mimeType,
+    sizeBytes,
+    ALLOWED_ALL_MIMES,
+    maxSize,
+  );
 }
 
 // ============================================================================
@@ -190,15 +208,15 @@ export function validateAnyFile(
 // ============================================================================
 
 const MAGIC_BYTES: Record<string, number[][]> = {
-  'image/jpeg': [[0xff, 0xd8, 0xff]],
-  'image/jpg': [[0xff, 0xd8, 0xff]],
-  'image/png': [[0x89, 0x50, 0x4e, 0x47]],
-  'image/gif': [
+  "image/jpeg": [[0xff, 0xd8, 0xff]],
+  "image/jpg": [[0xff, 0xd8, 0xff]],
+  "image/png": [[0x89, 0x50, 0x4e, 0x47]],
+  "image/gif": [
     [0x47, 0x49, 0x46, 0x38, 0x37, 0x61], // GIF87a
     [0x47, 0x49, 0x46, 0x38, 0x39, 0x61], // GIF89a
   ],
-  'image/webp': [[0x52, 0x49, 0x46, 0x46]], // RIFF
-  'application/pdf': [[0x25, 0x50, 0x44, 0x46]], // %PDF
+  "image/webp": [[0x52, 0x49, 0x46, 0x46]], // RIFF
+  "application/pdf": [[0x25, 0x50, 0x44, 0x46]], // %PDF
 };
 
 /**
@@ -207,7 +225,7 @@ const MAGIC_BYTES: Record<string, number[][]> = {
  */
 export function validateMagicBytes(
   buffer: Buffer,
-  claimedMime: string
+  claimedMime: string,
 ): boolean {
   const signatures = MAGIC_BYTES[claimedMime];
   if (!signatures) return true; // No signature check for this type
@@ -240,14 +258,14 @@ export interface ProcessedImage {
  */
 export async function processImage(
   inputBuffer: Buffer,
-  originalMime: string
+  originalMime: string,
 ): Promise<ProcessedImage> {
   const originalSize = inputBuffer.length;
 
   let pipeline = sharp(inputBuffer)
     .rotate() // Auto-rotate based on EXIF
     .resize(MAX_IMAGE_WIDTH, MAX_IMAGE_HEIGHT, {
-      fit: 'inside', // Maintain aspect ratio, fit within bounds
+      fit: "inside", // Maintain aspect ratio, fit within bounds
       withoutEnlargement: true, // Don't upscale small images
     })
     .withMetadata({ orientation: undefined }); // Strip EXIF but keep color profile
@@ -256,35 +274,31 @@ export async function processImage(
   let outputMime: string;
 
   switch (originalMime) {
-    case 'image/png':
+    case "image/png":
       outputBuffer = await pipeline
         .png({ compressionLevel: PNG_COMPRESSION_LEVEL })
         .toBuffer();
-      outputMime = 'image/png';
+      outputMime = "image/png";
       break;
 
-    case 'image/webp':
-      outputBuffer = await pipeline
-        .webp({ quality: WEBP_QUALITY })
-        .toBuffer();
-      outputMime = 'image/webp';
+    case "image/webp":
+      outputBuffer = await pipeline.webp({ quality: WEBP_QUALITY }).toBuffer();
+      outputMime = "image/webp";
       break;
 
-    case 'image/gif':
+    case "image/gif":
       // GIF: just resize, keep format
-      outputBuffer = await pipeline
-        .gif()
-        .toBuffer();
-      outputMime = 'image/gif';
+      outputBuffer = await pipeline.gif().toBuffer();
+      outputMime = "image/gif";
       break;
 
-    case 'image/jpeg':
-    case 'image/jpg':
+    case "image/jpeg":
+    case "image/jpg":
     default:
       outputBuffer = await pipeline
         .jpeg({ quality: JPEG_QUALITY, mozjpeg: true })
         .toBuffer();
-      outputMime = 'image/jpeg';
+      outputMime = "image/jpeg";
       break;
   }
 
@@ -305,14 +319,12 @@ export async function processImage(
  * Generate a thumbnail version of an image (for list views / previews).
  * Fixed width of 400px, JPEG format, aggressive compression.
  */
-export async function generateThumbnail(
-  inputBuffer: Buffer
-): Promise<Buffer> {
+export async function generateThumbnail(inputBuffer: Buffer): Promise<Buffer> {
   return sharp(inputBuffer)
     .rotate()
     .resize(400, 400, {
-      fit: 'cover',
-      position: 'centre',
+      fit: "cover",
+      position: "centre",
     })
     .jpeg({ quality: 75, mozjpeg: true })
     .toBuffer();
@@ -340,7 +352,8 @@ const cleanupTimer = setInterval(() => {
     }
   });
 }, 300000);
-if (typeof cleanupTimer === 'object' && cleanupTimer.unref) cleanupTimer.unref();
+if (typeof cleanupTimer === "object" && cleanupTimer.unref)
+  cleanupTimer.unref();
 
 /**
  * Check if a user has exceeded upload rate limits.
@@ -348,7 +361,7 @@ if (typeof cleanupTimer === 'object' && cleanupTimer.unref) cleanupTimer.unref()
  */
 export function checkRateLimit(
   userId: string,
-  fileSizeBytes: number
+  fileSizeBytes: number,
 ): string | null {
   const now = Date.now();
   const minuteKey = `${userId}:min`;
@@ -433,7 +446,7 @@ export function recordUpload(userId: string, fileSizeBytes: number): void {
  */
 export async function checkSocietyQuota(
   societyId: string,
-  additionalBytes: number
+  additionalBytes: number,
 ): Promise<string | null> {
   const result = await query(
     `SELECT
@@ -442,11 +455,11 @@ export async function checkSocietyQuota(
      FROM societies s
      LEFT JOIN society_settings ss ON ss.society_id = s.id
      WHERE s.id = $2`,
-    [LIMITS.DEFAULT_SOCIETY_QUOTA_BYTES, societyId]
+    [LIMITS.DEFAULT_SOCIETY_QUOTA_BYTES, societyId],
   );
 
   if (result.rows.length === 0) {
-    return 'Society not found';
+    return "Society not found";
   }
 
   const { quota, used } = result.rows[0];
@@ -471,21 +484,33 @@ export async function checkSocietyQuota(
 export async function checkSocietyQuotaTx(
   client: PoolClient,
   societyId: string,
-  additionalBytes: number
-): Promise<{ allowed: boolean; error?: string; quota?: number; used?: number }> {
+  additionalBytes: number,
+): Promise<{
+  allowed: boolean;
+  error?: string;
+  quota?: number;
+  used?: number;
+}> {
+  // Ensure a settings row exists so FOR UPDATE lock and updates are reliable.
+  await client.query(
+    `INSERT INTO society_settings (society_id, storage_quota_bytes, storage_used_bytes)
+     VALUES ($1, $2, 0)
+     ON CONFLICT (society_id) DO NOTHING`,
+    [societyId, LIMITS.DEFAULT_SOCIETY_QUOTA_BYTES],
+  );
+
   const result = await client.query(
     `SELECT
        COALESCE(ss.storage_quota_bytes, $1) AS quota,
        COALESCE(ss.storage_used_bytes, 0) AS used
-     FROM societies s
-     LEFT JOIN society_settings ss ON ss.society_id = s.id
-     WHERE s.id = $2
-     FOR UPDATE OF ss`,
-    [LIMITS.DEFAULT_SOCIETY_QUOTA_BYTES, societyId]
+     FROM society_settings ss
+     WHERE ss.society_id = $2
+     FOR UPDATE`,
+    [LIMITS.DEFAULT_SOCIETY_QUOTA_BYTES, societyId],
   );
 
   if (result.rows.length === 0) {
-    return { allowed: false, error: 'Society not found' };
+    return { allowed: false, error: "Society not found" };
   }
 
   const quota = parseInt(result.rows[0].quota, 10);
@@ -512,13 +537,13 @@ export async function checkSocietyQuotaTx(
  */
 export async function updateSocietyStorageUsed(
   societyId: string,
-  byteDelta: number
+  byteDelta: number,
 ): Promise<void> {
   await query(
     `UPDATE society_settings
      SET storage_used_bytes = GREATEST(0, COALESCE(storage_used_bytes, 0) + $1)
      WHERE society_id = $2`,
-    [byteDelta, societyId]
+    [byteDelta, societyId],
   );
 }
 
@@ -529,13 +554,20 @@ export async function updateSocietyStorageUsed(
 export async function updateSocietyStorageUsedTx(
   client: PoolClient,
   societyId: string,
-  byteDelta: number
+  byteDelta: number,
 ): Promise<void> {
+  await client.query(
+    `INSERT INTO society_settings (society_id, storage_quota_bytes, storage_used_bytes)
+     VALUES ($1, $2, 0)
+     ON CONFLICT (society_id) DO NOTHING`,
+    [societyId, LIMITS.DEFAULT_SOCIETY_QUOTA_BYTES],
+  );
+
   await client.query(
     `UPDATE society_settings
      SET storage_used_bytes = GREATEST(0, COALESCE(storage_used_bytes, 0) + $1)
      WHERE society_id = $2`,
-    [byteDelta, societyId]
+    [byteDelta, societyId],
   );
 }
 
@@ -548,7 +580,7 @@ export async function logQuotaExceeded(
   societyId: string,
   fileBytes: number,
   quota: number,
-  used: number
+  used: number,
 ): Promise<void> {
   await client.query(
     `INSERT INTO audit_logs (action, performed_by, society_id, target_type, target_id, metadata)
@@ -560,9 +592,9 @@ export async function logQuotaExceeded(
         attempted_bytes: fileBytes,
         current_used_bytes: used,
         quota_bytes: quota,
-        exceeded_by_bytes: (used + fileBytes) - quota,
+        exceeded_by_bytes: used + fileBytes - quota,
       }),
-    ]
+    ],
   );
 }
 
@@ -572,12 +604,19 @@ export async function logQuotaExceeded(
 
 // Allowlist of valid tables and foreign keys for media count queries
 const ALLOWED_MEDIA_TABLES = new Set([
-  'society_media', 'society_album_photos', 'society_post_images',
-  'event_media', 'event_note_attachments',
+  "society_media",
+  "society_album_photos",
+  "society_post_images",
+  "event_media",
+  "event_note_attachments",
 ]);
 
 const ALLOWED_FOREIGN_KEYS = new Set([
-  'society_id', 'album_id', 'post_id', 'event_id', 'note_id',
+  "society_id",
+  "album_id",
+  "post_id",
+  "event_id",
+  "note_id",
 ]);
 
 /**
@@ -588,7 +627,7 @@ export async function checkEntityMediaCount(
   foreignKey: string,
   entityId: string,
   maxCount: number,
-  mediaType?: string
+  mediaType?: string,
 ): Promise<string | null> {
   if (!ALLOWED_MEDIA_TABLES.has(table)) {
     throw new Error(`Invalid table name: ${table}`);
@@ -632,9 +671,9 @@ export function generateBlobPath(
   entityType: string,
   entityId: string,
   subType: string,
-  originalFileName: string
+  originalFileName: string,
 ): string {
-  const ext = getFileExtension(originalFileName) || '.jpg';
+  const ext = getFileExtension(originalFileName) || ".jpg";
   const uuid = generateUUID();
   return `${entityType}/${entityId}/${subType}/${uuid}${ext}`;
 }
@@ -644,14 +683,14 @@ export function generateBlobPath(
 // ============================================================================
 
 function getFileExtension(fileName: string): string {
-  const lastDot = fileName.lastIndexOf('.');
-  if (lastDot === -1) return '';
+  const lastDot = fileName.lastIndexOf(".");
+  if (lastDot === -1) return "";
   return fileName.substring(lastDot).toLowerCase();
 }
 
 function generateUUID(): string {
   // crypto.randomUUID() in Node 19+, fallback to timestamp + random
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
     return crypto.randomUUID();
   }
   return `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
