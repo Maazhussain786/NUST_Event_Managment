@@ -29,7 +29,8 @@ import type {
   PlatformNotification,
   BlackoutDate,
   EmergencyStatus,
-} from './types';
+  SocietyTransferMember,
+} from "./types";
 
 // ─── Base Fetch ─────────────────────────────────────────────────────────────
 
@@ -51,8 +52,8 @@ export class PlatformApiError extends Error {
 
 async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(path, {
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    credentials: "include",
+    headers: { "Content-Type": "application/json", ...options?.headers },
     ...options,
   });
 
@@ -72,18 +73,23 @@ async function api<T>(path: string, options?: RequestInit): Promise<T> {
 // ─── Overview (Command Center) ──────────────────────────────────────────────
 
 export function fetchStats(): Promise<PlatformStats> {
-  return api<PlatformStats>('/api/admin/stats');
+  return api<PlatformStats>("/api/admin/stats");
 }
 
 // ─── Administrators ─────────────────────────────────────────────────────────
 
-export function fetchAdministrators(): Promise<{ administrators: Administrator[]; totalCount: number }> {
-  return api('/api/admin/administrators');
+export function fetchAdministrators(): Promise<{
+  administrators: Administrator[];
+  totalCount: number;
+}> {
+  return api("/api/admin/administrators");
 }
 
-export function addAdministrator(userId: string): Promise<{ success: boolean; message: string }> {
-  return api('/api/admin/administrators', {
-    method: 'POST',
+export function addAdministrator(
+  userId: string,
+): Promise<{ success: boolean; message: string }> {
+  return api("/api/admin/administrators", {
+    method: "POST",
     body: JSON.stringify({ userId }),
   });
 }
@@ -91,58 +97,61 @@ export function addAdministrator(userId: string): Promise<{ success: boolean; me
 // ─── Users ──────────────────────────────────────────────────────────────────
 
 export function fetchUsers(): Promise<AdminUser[]> {
-  return api<AdminUser[]>('/api/admin/users');
+  return api<AdminUser[]>("/api/admin/users");
 }
 
 export function fetchUserDetail(id: string): Promise<UserDetail> {
   return api<UserDetail>(`/api/admin/users/${id}`);
 }
 
-export function suspendUser(id: string, reason: string): Promise<{ success: boolean }> {
+export function suspendUser(
+  id: string,
+  reason: string,
+): Promise<{ success: boolean }> {
   return api(`/api/admin/users/${id}/suspend`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify({ reason }),
   });
 }
 
 export function reactivateUser(id: string): Promise<{ success: boolean }> {
-  return api(`/api/admin/users/${id}/reactivate`, { method: 'POST' });
+  return api(`/api/admin/users/${id}/reactivate`, { method: "POST" });
 }
 
 // ─── Societies ──────────────────────────────────────────────────────────────
 
 export function fetchSocieties(status?: string): Promise<AdminSociety[]> {
-  const qs = status ? `?status=${status}` : '';
+  const qs = status ? `?status=${status}` : "";
   return api<AdminSociety[]>(`/api/admin/societies${qs}`);
 }
 
 export function patchSociety(
   id: string,
   action: string,
-  reason?: string
+  reason?: string,
 ): Promise<{ success: boolean; status: string }> {
   return api(`/api/admin/societies/${id}`, {
-    method: 'PATCH',
+    method: "PATCH",
     body: JSON.stringify({ action, reason }),
   });
 }
 
 export function suspendSociety(
   id: string,
-  reason: string
+  reason: string,
 ): Promise<{ success: boolean; message: string }> {
   return api(`/api/admin/societies/${id}/suspend`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify({ reason }),
   });
 }
 
 export function reactivateSociety(
   id: string,
-  reason?: string
+  reason?: string,
 ): Promise<{ success: boolean; message: string }> {
   return api(`/api/admin/societies/${id}/reactivate`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify({ reason }),
   });
 }
@@ -150,37 +159,48 @@ export function reactivateSociety(
 export function forceTransferPresidency(
   id: string,
   targetUserId: string,
-  reason: string
+  reason: string,
 ): Promise<{ success: boolean; message: string }> {
   return api(`/api/admin/societies/${id}/force-transfer`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify({ targetUserId, reason }),
   });
 }
 
+export function searchSocietyMembersForTransfer(
+  id: string,
+  q: string,
+): Promise<SocietyTransferMember[]> {
+  const sp = new URLSearchParams();
+  if (q.trim()) sp.set("q", q.trim());
+  return api<SocietyTransferMember[]>(
+    `/api/admin/societies/${id}/members?${sp.toString()}`,
+  );
+}
+
 export function updateStorageLimit(
   id: string,
-  storageLimitBytes: number
+  storageLimitBytes: number,
 ): Promise<{ success: boolean; newLimit: number; currentUsed: number }> {
   return api(`/api/admin/societies/${id}/storage-limit`, {
-    method: 'PATCH',
+    method: "PATCH",
     body: JSON.stringify({ storage_limit_bytes: storageLimitBytes }),
   });
 }
 
 // ─── Events ─────────────────────────────────────────────────────────────────
 
-export function fetchEvents(status: string = 'ALL'): Promise<AdminEvent[]> {
+export function fetchEvents(status: string = "ALL"): Promise<AdminEvent[]> {
   return api<AdminEvent[]>(`/api/admin/events?status=${status}`);
 }
 
 export function patchEvent(
   id: string,
   action: string,
-  reason?: string
+  reason?: string,
 ): Promise<{ success: boolean; status: string }> {
   return api(`/api/admin/events/${id}`, {
-    method: 'PATCH',
+    method: "PATCH",
     body: JSON.stringify({ action, reason }),
   });
 }
@@ -188,7 +208,7 @@ export function patchEvent(
 // ─── Financial Intelligence ─────────────────────────────────────────────────
 
 export function fetchFinance(): Promise<FinanceData> {
-  return api<FinanceData>('/api/admin/finance');
+  return api<FinanceData>("/api/admin/finance");
 }
 
 // ─── Audit Logs ─────────────────────────────────────────────────────────────
@@ -203,44 +223,47 @@ export function fetchAuditLogs(params: {
   to?: string;
 }): Promise<AuditLogResponse> {
   const sp = new URLSearchParams();
-  if (params.page) sp.set('page', String(params.page));
-  if (params.limit) sp.set('limit', String(params.limit));
-  if (params.action) sp.set('action', params.action);
-  if (params.userId) sp.set('userId', params.userId);
-  if (params.societyId) sp.set('societyId', params.societyId);
-  if (params.from) sp.set('from', params.from);
-  if (params.to) sp.set('to', params.to);
+  if (params.page) sp.set("page", String(params.page));
+  if (params.limit) sp.set("limit", String(params.limit));
+  if (params.action) sp.set("action", params.action);
+  if (params.userId) sp.set("userId", params.userId);
+  if (params.societyId) sp.set("societyId", params.societyId);
+  if (params.from) sp.set("from", params.from);
+  if (params.to) sp.set("to", params.to);
   return api<AuditLogResponse>(`/api/admin/audit-logs?${sp.toString()}`);
 }
 
 // ─── Analytics ──────────────────────────────────────────────────────────────
 
 export function fetchAnalytics(): Promise<AnalyticsData> {
-  return api<AnalyticsData>('/api/admin/analytics');
+  return api<AnalyticsData>("/api/admin/analytics");
 }
 
 // ─── Storage ────────────────────────────────────────────────────────────────
 
 export function fetchStorageOverview(sort?: string): Promise<StorageResponse> {
-  const qs = sort ? `?sort=${sort}` : '';
+  const qs = sort ? `?sort=${sort}` : "";
   return api<StorageResponse>(`/api/admin/storage${qs}`);
 }
 
 // ─── Security Monitoring ────────────────────────────────────────────────────
 
 export function fetchSecurityMetrics(): Promise<SecurityMetrics> {
-  return api<SecurityMetrics>('/api/admin/security');
+  return api<SecurityMetrics>("/api/admin/security");
 }
 
 // ─── Feature Flags ──────────────────────────────────────────────────────────
 
 export function fetchFeatureFlags(): Promise<FeatureFlag[]> {
-  return api<FeatureFlag[]>('/api/admin/feature-flags');
+  return api<FeatureFlag[]>("/api/admin/feature-flags");
 }
 
-export function updateFeatureFlag(key: string, enabled: boolean): Promise<{ success: boolean }> {
-  return api('/api/admin/feature-flags', {
-    method: 'PATCH',
+export function updateFeatureFlag(
+  key: string,
+  enabled: boolean,
+): Promise<{ success: boolean }> {
+  return api("/api/admin/feature-flags", {
+    method: "PATCH",
     body: JSON.stringify({ key, enabled }),
   });
 }
@@ -248,12 +271,15 @@ export function updateFeatureFlag(key: string, enabled: boolean): Promise<{ succ
 // ─── System Configuration ───────────────────────────────────────────────────
 
 export function fetchSystemConfig(): Promise<SystemConfigItem[]> {
-  return api<SystemConfigItem[]>('/api/admin/system-config');
+  return api<SystemConfigItem[]>("/api/admin/system-config");
 }
 
-export function updateSystemConfig(key: string, value: string | number): Promise<{ success: boolean }> {
-  return api('/api/admin/system-config', {
-    method: 'PATCH',
+export function updateSystemConfig(
+  key: string,
+  value: string | number,
+): Promise<{ success: boolean }> {
+  return api("/api/admin/system-config", {
+    method: "PATCH",
     body: JSON.stringify({ key, value }),
   });
 }
@@ -261,7 +287,7 @@ export function updateSystemConfig(key: string, value: string | number): Promise
 // ─── Incident Management ────────────────────────────────────────────────────
 
 export function fetchIncidents(): Promise<Incident[]> {
-  return api<Incident[]>('/api/admin/incidents');
+  return api<Incident[]>("/api/admin/incidents");
 }
 
 export function createIncident(data: {
@@ -269,19 +295,22 @@ export function createIncident(data: {
   description?: string;
   severity: string;
 }): Promise<{ success: boolean; id: string }> {
-  return api('/api/admin/incidents', {
-    method: 'POST',
+  return api("/api/admin/incidents", {
+    method: "POST",
     body: JSON.stringify(data),
   });
 }
 
-export function updateIncident(id: number | string, data: {
-  status?: string;
-  severity?: string;
-  note?: string;
-}): Promise<{ success: boolean }> {
+export function updateIncident(
+  id: number | string,
+  data: {
+    status?: string;
+    severity?: string;
+    note?: string;
+  },
+): Promise<{ success: boolean }> {
   return api(`/api/admin/incidents/${id}`, {
-    method: 'PATCH',
+    method: "PATCH",
     body: JSON.stringify(data),
   });
 }
@@ -295,55 +324,101 @@ export function globalSearch(query: string): Promise<SearchResults> {
 // ─── Health Monitor ─────────────────────────────────────────────────────────
 
 export function fetchHealthStatus(): Promise<HealthStatus> {
-  return api<HealthStatus>('/api/admin/health');
+  return api<HealthStatus>("/api/admin/health");
 }
 
 // ─── University Events (NUST Official) ──────────────────────────────────────
 
 export function fetchUniversityEvents(): Promise<UniversityEvent[]> {
-  return api<UniversityEvent[]>('/api/admin/university-events');
+  return api<UniversityEvent[]>("/api/admin/university-events");
 }
 
 export function createUniversityEvent(data: {
   title: string;
   description?: string;
   event_start: string;
-  event_end?: string;
+  event_end: string;
   location?: string;
+  banner_url?: string;
   ticket_price?: number;
   max_tickets?: number;
   is_pinned?: boolean;
   priority_rank?: number;
 }): Promise<{ success: boolean; id: string }> {
-  return api('/api/admin/university-events', {
-    method: 'POST',
+  return api("/api/admin/university-events", {
+    method: "POST",
     body: JSON.stringify(data),
+  });
+}
+
+export function uploadUniversityEventBanner(
+  eventId: string,
+  file: File,
+): Promise<{ success: boolean; data: { url: string } }> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  return fetch(`/api/upload/event-media?eventId=${eventId}&type=banner`, {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  }).then(async (res) => {
+    if (!res.ok) {
+      let body: ApiError;
+      try {
+        body = await res.json();
+      } catch {
+        body = { error: `HTTP ${res.status}` };
+      }
+      throw new PlatformApiError(res.status, body);
+    }
+    return res.json();
   });
 }
 
 export function patchUniversityEvent(
   id: string,
-  data: { is_pinned?: boolean; is_locked?: boolean; priority_rank?: number; status?: string }
+  data: {
+    is_pinned?: boolean;
+    is_locked?: boolean;
+    priority_rank?: number;
+    status?: string;
+    title?: string;
+    description?: string;
+    event_start?: string;
+    event_end?: string;
+    location?: string;
+    banner_url?: string;
+    ticket_price?: number;
+    max_tickets?: number;
+  },
 ): Promise<{ success: boolean }> {
   return api(`/api/admin/university-events/${id}`, {
-    method: 'PATCH',
+    method: "PATCH",
     body: JSON.stringify(data),
   });
 }
 
+export function deleteUniversityEvent(
+  id: string,
+): Promise<{ success: boolean }> {
+  return api(`/api/admin/university-events/${id}`, {
+    method: "DELETE",
+  });
+}
 // ─── Co-Host Request Workflow ───────────────────────────────────────────────
 
 export function fetchCoHostRequests(status?: string): Promise<CoHostRequest[]> {
-  const qs = status ? `?status=${status}` : '';
+  const qs = status ? `?status=${status}` : "";
   return api<CoHostRequest[]>(`/api/admin/cohost-requests${qs}`);
 }
 
 export function updateCoHostRequest(
   id: string,
-  data: { action: 'APPROVED' | 'REJECTED'; admin_note?: string }
+  data: { action: "APPROVED" | "REJECTED"; admin_note?: string },
 ): Promise<{ success: boolean }> {
   return api(`/api/admin/cohost-requests/${id}`, {
-    method: 'PATCH',
+    method: "PATCH",
     body: JSON.stringify(data),
   });
 }
@@ -351,7 +426,7 @@ export function updateCoHostRequest(
 // ─── Notification Engine (In-App) ───────────────────────────────────────────
 
 export function fetchNotifications(): Promise<PlatformNotification[]> {
-  return api<PlatformNotification[]>('/api/admin/notifications');
+  return api<PlatformNotification[]>("/api/admin/notifications");
 }
 
 export function createNotification(data: {
@@ -363,20 +438,20 @@ export function createNotification(data: {
   scheduled_at?: string;
   expires_at?: string;
 }): Promise<{ success: boolean; id: string }> {
-  return api('/api/admin/notifications', {
-    method: 'POST',
+  return api("/api/admin/notifications", {
+    method: "POST",
     body: JSON.stringify(data),
   });
 }
 
 export function deleteNotification(id: string): Promise<{ success: boolean }> {
-  return api(`/api/admin/notifications/${id}`, { method: 'DELETE' });
+  return api(`/api/admin/notifications/${id}`, { method: "DELETE" });
 }
 
 // ─── Blackout Calendar ──────────────────────────────────────────────────────
 
 export function fetchBlackoutDates(): Promise<BlackoutDate[]> {
-  return api<BlackoutDate[]>('/api/admin/blackout-dates');
+  return api<BlackoutDate[]>("/api/admin/blackout-dates");
 }
 
 export function createBlackoutDate(data: {
@@ -386,28 +461,28 @@ export function createBlackoutDate(data: {
   reason?: string;
   scope?: string;
 }): Promise<{ success: boolean; id: string }> {
-  return api('/api/admin/blackout-dates', {
-    method: 'POST',
+  return api("/api/admin/blackout-dates", {
+    method: "POST",
     body: JSON.stringify(data),
   });
 }
 
 export function deleteBlackoutDate(id: string): Promise<{ success: boolean }> {
-  return api(`/api/admin/blackout-dates/${id}`, { method: 'DELETE' });
+  return api(`/api/admin/blackout-dates/${id}`, { method: "DELETE" });
 }
 
 // ─── Emergency Controls ─────────────────────────────────────────────────────
 
 export function fetchEmergencyStatus(): Promise<EmergencyStatus> {
-  return api<EmergencyStatus>('/api/admin/emergency');
+  return api<EmergencyStatus>("/api/admin/emergency");
 }
 
 export function toggleEmergencyFlag(
   key: string,
-  enabled: boolean
+  enabled: boolean,
 ): Promise<{ success: boolean }> {
-  return api('/api/admin/emergency', {
-    method: 'POST',
+  return api("/api/admin/emergency", {
+    method: "POST",
     body: JSON.stringify({ key, enabled }),
   });
 }
@@ -422,13 +497,13 @@ export function exportAuditLogsCsv(params: {
   to?: string;
 }): Promise<string> {
   const sp = new URLSearchParams();
-  sp.set('format', 'csv');
-  if (params.action) sp.set('action', params.action);
-  if (params.userId) sp.set('userId', params.userId);
-  if (params.societyId) sp.set('societyId', params.societyId);
-  if (params.from) sp.set('from', params.from);
-  if (params.to) sp.set('to', params.to);
+  sp.set("format", "csv");
+  if (params.action) sp.set("action", params.action);
+  if (params.userId) sp.set("userId", params.userId);
+  if (params.societyId) sp.set("societyId", params.societyId);
+  if (params.from) sp.set("from", params.from);
+  if (params.to) sp.set("to", params.to);
   return fetch(`/api/admin/audit-logs?${sp.toString()}`, {
-    credentials: 'include',
-  }).then(r => r.text());
+    credentials: "include",
+  }).then((r) => r.text());
 }
