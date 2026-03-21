@@ -24,37 +24,57 @@ export async function GET(
 
     const { id } = await params;
 
-    // First try to find as a paid ticket
-    let result = await query(
-      `SELECT
-        t.id,
-        t.ticket_number,
-        t.status,
-        t.purchased_at,
-        e.id AS event_id,
-        e.title AS event_title,
-        e.location AS event_venue,
-        e.event_start,
-        e.event_end,
-        e.banner_url AS event_banner,
-        e.is_paid,
-        s.name AS society_name,
-        s.id AS society_id,
-        s.logo_url AS society_logo,
-        u.full_name AS attendee_name,
-        u.email AS attendee_email,
-        qr.qr_data,
-        qr.is_scanned,
-        qr.scanned_at,
-        'TICKET' AS source_type
-      FROM tickets t
-      JOIN events e ON t.event_id = e.id
-      JOIN societies s ON e.society_id = s.id
-      JOIN users u ON t.user_id = u.id
-      LEFT JOIN ticket_qr_codes qr ON qr.ticket_id = t.id AND qr.is_active = TRUE
-      WHERE t.id = $1 AND t.user_id = $2`,
-      [id, user.userId]
+    // Detect schema drift: older deployments may not have tickets.ticket_number yet.
+    const ticketNumberColumn = await query(
+      `SELECT 1
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'tickets'
+         AND column_name = 'ticket_number'
+       LIMIT 1`
     );
+
+    const ticketNumberExpr = ticketNumberColumn.rows.length > 0
+      ? 't.ticket_number'
+      : `'TICKET-' || SUBSTRING(t.id::text, 1, 8)`;
+
+    // First try to find as a paid ticket.
+    // This must not block free-registration fallback if paid-ticket schema differs.
+    let result: { rows: any[] } = { rows: [] };
+    try {
+      result = await query(
+        `SELECT
+          t.id,
+          ${ticketNumberExpr} AS ticket_number,
+          t.status,
+          t.purchased_at,
+          e.id AS event_id,
+          e.title AS event_title,
+          e.location AS event_venue,
+          e.event_start,
+          e.event_end,
+          e.banner_url AS event_banner,
+          e.is_paid,
+          e.is_cancelled,
+          s.name AS society_name,
+          s.id AS society_id,
+          s.logo_url AS society_logo,
+          u.full_name AS attendee_name,
+          u.email AS attendee_email,
+          qr.qr_data,
+          qr.scanned_at,
+          'ticket' AS source_type
+        FROM tickets t
+        JOIN events e ON t.event_id = e.id
+        JOIN societies s ON e.society_id = s.id
+        JOIN users u ON t.user_id = u.id
+        LEFT JOIN ticket_qr_codes qr ON qr.ticket_id = t.id AND qr.is_active = TRUE
+        WHERE t.id = $1 AND t.user_id = $2`,
+        [id, user.userId]
+      );
+    } catch (ticketErr) {
+      console.error('Paid ticket detail query failed, falling back to registration query:', ticketErr);
+    }
 
     let ticket = result.rows[0];
     let sourceType = 'TICKET';
@@ -75,15 +95,15 @@ export async function GET(
             e.event_end,
             e.banner_url AS event_banner,
             e.is_paid,
+            e.is_cancelled,
             s.name AS society_name,
             s.id AS society_id,
             s.logo_url AS society_logo,
             u.full_name AS attendee_name,
             u.email AS attendee_email,
             NULL AS qr_data,
-            FALSE AS is_scanned,
             NULL AS scanned_at,
-            'REGISTRATION' AS source_type
+            'registration' AS source_type
           FROM event_registrations er
           JOIN events e ON er.event_id = e.id
           JOIN societies s ON e.society_id = s.id
@@ -134,7 +154,7 @@ export async function GET(
       }
     }
 
-    return NextResponse.json(ticket);
+    return NextResponse.json({ ticket });
   } catch (error) {
     console.error('Ticket detail error:', error);
     return NextResponse.json({ error: 'Failed to fetch ticket' }, { status: 500 });

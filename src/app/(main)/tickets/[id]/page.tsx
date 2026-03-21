@@ -49,12 +49,16 @@ export default function TicketDetailPage() {
           throw new Error(data.error || 'Ticket not found');
         }
         const data = await res.json();
-        setTicket(data.ticket);
+        const ticketData = data?.ticket ?? data;
+        if (!ticketData?.id) {
+          throw new Error('Invalid ticket response');
+        }
+        setTicket(ticketData);
 
         // Generate QR code image if qr_data exists
         let qrUrl: string | null = null;
-        if (data.ticket.qr_data) {
-          qrUrl = await QRCode.toDataURL(data.ticket.qr_data, {
+        if (ticketData.qr_data) {
+          qrUrl = await QRCode.toDataURL(ticketData.qr_data, {
             width: 300,
             margin: 3,
             color: { dark: '#000000', light: '#ffffff' },
@@ -64,20 +68,20 @@ export default function TicketDetailPage() {
         }
 
         // Cache ticket for offline access (only approved tickets with QR)
-        if (data.ticket.status === 'APPROVED' && data.ticket.qr_data) {
+        if (ticketData.status === 'APPROVED' && ticketData.qr_data) {
           cacheTicket({
-            id: data.ticket.id,
-            event_id: data.ticket.event_id || '',
-            event_title: data.ticket.event_title,
-            event_date: data.ticket.event_start,
-            event_venue: data.ticket.event_venue || '',
-            event_banner_url: data.ticket.event_banner || undefined,
-            society_name: data.ticket.society_name,
-            ticket_number: data.ticket.ticket_number,
-            status: data.ticket.status,
-            qr_data: data.ticket.qr_data,
+            id: ticketData.id,
+            event_id: ticketData.event_id || '',
+            event_title: ticketData.event_title,
+            event_date: ticketData.event_start,
+            event_venue: ticketData.event_venue || '',
+            event_banner_url: ticketData.event_banner || undefined,
+            society_name: ticketData.society_name,
+            ticket_number: ticketData.ticket_number,
+            status: ticketData.status,
+            qr_data: ticketData.qr_data,
             qr_image_data_url: qrUrl || undefined,
-            attendee_name: data.ticket.attendee_name,
+            attendee_name: ticketData.attendee_name,
             attendee_email: '',
             cached_at: Date.now(),
           }).catch((err) => console.error('Failed to cache ticket:', err));
