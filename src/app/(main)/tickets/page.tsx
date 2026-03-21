@@ -118,19 +118,19 @@ function TicketListItem({ ticket }: { ticket: TicketData }) {
       >
         <div className="flex items-center gap-3.5">
           {/* Date or image */}
-          <div className="w-14 h-14 rounded-xl flex-shrink-0 overflow-hidden relative bg-muted flex flex-col items-center justify-center">
+          <div className="relative flex flex-col items-center justify-center flex-shrink-0 overflow-hidden w-14 h-14 rounded-xl bg-muted">
             {ticket.event_banner ? (
               <Image src={ticket.event_banner} alt="" fill className="object-cover" sizes="56px" />
             ) : (
               <>
                 <span className="text-[9px] font-bold text-brand-500 uppercase tracking-wider">{month}</span>
-                <span className="text-lg font-extrabold text-foreground leading-none">{day}</span>
+                <span className="text-lg font-extrabold leading-none text-foreground">{day}</span>
               </>
             )}
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <h3 className="text-body-sm font-semibold text-foreground truncate flex-1">{ticket.event_title}</h3>
+              <h3 className="flex-1 font-semibold truncate text-body-sm text-foreground">{ticket.event_title}</h3>
               <Badge variant={config.variant} size="sm" className="shrink-0">
                 {config.label}
               </Badge>
@@ -148,13 +148,13 @@ function TicketListItem({ ticket }: { ticket: TicketData }) {
                 </span>
               )}
               {relativeTime && isUpcoming && (
-                <span className="text-brand-600 dark:text-brand-400 font-medium">{relativeTime}</span>
+                <span className="font-medium text-brand-600 dark:text-brand-400">{relativeTime}</span>
               )}
             </div>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
             {showQR ? (
-              <div className="w-9 h-9 rounded-lg bg-brand-500/10 flex items-center justify-center">
+              <div className="flex items-center justify-center rounded-lg w-9 h-9 bg-brand-500/10">
                 <QrCode className="w-5 h-5 text-brand-500" />
               </div>
             ) : (
@@ -171,8 +171,8 @@ function TicketListItem({ ticket }: { ticket: TicketData }) {
 
         {/* Rejection reason */}
         {ticket.status.toUpperCase() === 'REJECTED' && ticket.rejection_reason && (
-          <div className="mt-3 pt-3 border-t border-border">
-            <p className="text-caption text-red-600 dark:text-red-400">
+          <div className="pt-3 mt-3 border-t border-border">
+            <p className="text-red-600 text-caption dark:text-red-400">
               <span className="font-medium">Reason:</span> {ticket.rejection_reason}
             </p>
           </div>
@@ -187,11 +187,11 @@ function TicketsSkeleton() {
     <div className="space-y-2.5">
       {[1, 2, 3, 4].map((i) => (
         <div key={i} className="flex gap-3.5 p-4 rounded-xl border border-border">
-          <Skeleton className="w-14 h-14 rounded-xl flex-shrink-0" />
+          <Skeleton className="flex-shrink-0 w-14 h-14 rounded-xl" />
           <div className="flex-1 space-y-2">
-            <Skeleton className="h-4 w-3/4" />
-            <Skeleton className="h-3 w-1/2" />
-            <Skeleton className="h-3 w-2/3" />
+            <Skeleton className="w-3/4 h-4" />
+            <Skeleton className="w-1/2 h-3" />
+            <Skeleton className="w-2/3 h-3" />
           </div>
         </div>
       ))}
@@ -284,7 +284,7 @@ export default function TicketsPage() {
           </div>
         </header>
         <div className="px-5 py-1 pb-24 lg:pb-8">
-          <p className="text-caption text-muted-foreground mb-3">
+          <p className="mb-3 text-caption text-muted-foreground">
             Showing {cachedTickets.length} cached ticket{cachedTickets.length !== 1 ? 's' : ''}
           </p>
           <div className="space-y-2.5">
@@ -296,13 +296,13 @@ export default function TicketsPage() {
                 transition={{ delay: i * 0.04, ease }}
               >
                 <Link href={`/tickets/${ticket.id}`}>
-                  <div className="rounded-xl border border-border bg-card p-4">
+                  <div className="p-4 border rounded-xl border-border bg-card">
                     <div className="flex items-start gap-3.5">
-                      <div className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0 bg-muted">
+                      <div className="flex items-center justify-center w-14 h-14 rounded-xl shrink-0 bg-muted">
                         <Ticket className="w-6 h-6 text-brand-500" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h3 className="text-body-sm font-semibold text-foreground truncate">{ticket.event_title}</h3>
+                        <h3 className="font-semibold truncate text-body-sm text-foreground">{ticket.event_title}</h3>
                         <p className="text-caption text-muted-foreground mt-0.5">{ticket.society_name}</p>
                         <div className="flex items-center gap-3 mt-1.5 text-caption text-muted-foreground">
                           <span className="flex items-center gap-1">
@@ -348,7 +348,7 @@ export default function TicketsPage() {
             className="px-5 pt-6 pb-3"
             style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 1.5rem)' }}
           >
-            <h1 className="text-h1 text-foreground mb-4">My Tickets</h1>
+            <h1 className="mb-4 text-h1 text-foreground">My Tickets</h1>
             <TabsList>
               <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
               <TabsTrigger value="past">Past</TabsTrigger>
