@@ -369,6 +369,8 @@ CREATE TABLE payment_proofs (
     uploaded_by     UUID NOT NULL REFERENCES users(id),
     proof_url       TEXT NOT NULL,
     proof_type      VARCHAR(50),                              -- e.g. screenshot, receipt
+    transaction_reference VARCHAR(200),
+    student_note    TEXT,
     status          payment_proof_status_enum NOT NULL DEFAULT 'PENDING',
     verified_by     UUID REFERENCES users(id),
     verified_at     TIMESTAMPTZ,

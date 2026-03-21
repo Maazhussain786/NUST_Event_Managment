@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Calendar, MapPin, Clock, Users, Star, Ticket, Heart, Share2, Loader2, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Calendar, MapPin, Clock, Users, Star, Ticket, Heart, Share2, Loader2, CheckCircle2, Copy, X, AlertTriangle } from 'lucide-react';
 import { useRouter, useParams } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -43,6 +43,19 @@ interface UserRegistration {
   hasTicket: boolean;
   status?: string;
   ticketId?: string;
+  paymentReference?: string | null;
+  paymentProofStatus?: string | null;
+  paymentRejectionReason?: string | null;
+  hasProof?: boolean;
+}
+
+interface PaymentDetails {
+  provider: string | null;
+  recipient_name: string | null;
+  account_number: string | null;
+  iban: string | null;
+  instructions: string | null;
+  configured: boolean;
 }
 
 function EventDetailSkeleton() {
@@ -77,8 +90,18 @@ export default function EventDetailPage() {
   const [loading, setLoading] = useState(true);
   const [isFavorite, setIsFavorite] = useState(false);
   const [registering, setRegistering] = useState(false);
+  const [paymentDetails, setPaymentDetails] = useState<PaymentDetails | null>(null);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [transactionRef, setTransactionRef] = useState('');
+  const [paymentNote, setPaymentNote] = useState('');
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [proofPreview, setProofPreview] = useState<string | null>(null);
+  const [submittingProof, setSubmittingProof] = useState(false);
 
   useEffect(() => {
+    setUserRegistration({ hasTicket: false });
+    setPaymentDetails(null);
+
     fetch(`/api/events/${params.id}`)
       .then((r) => r.json())
       .then((data) => {
@@ -86,6 +109,7 @@ export default function EventDetailPage() {
         if (data.userRegistration) {
           setUserRegistration(data.userRegistration);
         }
+        setPaymentDetails(data.paymentDetails || null);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -98,6 +122,15 @@ export default function EventDetailPage() {
     setRegistering(true);
     try {
       const isFreeEvent = !event.is_paid;
+      if (!isFreeEvent) {
+        if (!paymentDetails?.configured) {
+          toast.error('Payment details are not configured for this event yet');
+          return;
+        }
+        setShowPaymentModal(true);
+        return;
+      }
+
       const url = isFreeEvent
         ? `/api/events/${event.id}/register`
         : `/api/events/${event.id}/purchase-ticket`;
@@ -116,8 +149,6 @@ export default function EventDetailPage() {
         } else {
           toast.success('Registered!', { description: `You're registered for "${event.title}"` });
         }
-      } else {
-        toast.success('Ticket Requested', { description: 'Your ticket is pending approval by the society' });
       }
 
       router.push('/tickets');
@@ -125,6 +156,105 @@ export default function EventDetailPage() {
       toast.error('Network Error', { description: 'Please check your connection and try again' });
     } finally {
       setRegistering(false);
+    }
+  };
+
+  const handleProofFile = (file: File | null) => {
+    setProofFile(file);
+    if (proofPreview) {
+      URL.revokeObjectURL(proofPreview);
+      setProofPreview(null);
+    }
+    if (file) {
+      setProofPreview(URL.createObjectURL(file));
+    }
+  };
+
+  const submitPaidProof = async () => {
+    if (!event || !paymentDetails?.configured) return;
+    if (!proofFile) {
+      toast.error('Please upload payment screenshot');
+      return;
+    }
+    if (!transactionRef.trim()) {
+      toast.error('Please enter transaction/reference ID');
+      return;
+    }
+
+    setSubmittingProof(true);
+    try {
+      let ticketId = userRegistration.ticketId;
+      let paymentReference = userRegistration.paymentReference || null;
+
+      const purchaseRes = await fetch(`/api/events/${event.id}/purchase-ticket`, { method: 'POST' });
+      const purchaseData = await purchaseRes.json();
+
+      if (!purchaseRes.ok) {
+        // Pending ticket already exists, reuse that canonical ticket id.
+        if (purchaseRes.status === 409 && purchaseData.ticketId) {
+          ticketId = purchaseData.ticketId;
+          paymentReference = purchaseData.paymentReference || purchaseData.ticket?.paymentReference || paymentReference;
+        } else {
+          toast.error(purchaseData.error || 'Unable to create ticket request');
+          return;
+        }
+      } else {
+        ticketId = purchaseData.ticket?.id || purchaseData.ticketId;
+        paymentReference = purchaseData.ticket?.paymentReference || null;
+        setUserRegistration({
+          hasTicket: true,
+          status: 'PENDING_VERIFICATION',
+          ticketId,
+          paymentReference,
+          hasProof: false,
+        });
+      }
+
+      if (!ticketId) {
+        toast.error('Unable to resolve ticket for payment proof submission');
+        return;
+      }
+
+      const fd = new FormData();
+      fd.append('ticket_id', ticketId);
+      fd.append('event_id', event.id);
+      if (paymentReference) {
+        fd.append('payment_reference', paymentReference);
+      }
+      fd.append('transaction_reference', transactionRef.trim());
+      fd.append('note', paymentNote.trim());
+      fd.append('proof', proofFile);
+
+      const proofRes = await fetch('/api/payments/submit-proof', {
+        method: 'POST',
+        body: fd,
+      });
+      const proofData = await proofRes.json();
+
+      if (!proofRes.ok) {
+        toast.error(proofData.error || 'Failed to submit payment proof');
+        return;
+      }
+
+      setUserRegistration((prev) => ({
+        ...prev,
+        hasTicket: true,
+        status: 'PENDING',
+        ticketId,
+        paymentReference: prev.paymentReference || paymentReference,
+        hasProof: true,
+        paymentProofStatus: 'PENDING',
+      }));
+
+      setShowPaymentModal(false);
+      toast.success('Payment proof submitted', {
+        description: 'Your ticket is pending society verification',
+      });
+      router.push(`/tickets/${ticketId}`);
+    } catch {
+      toast.error('Network error while submitting payment proof');
+    } finally {
+      setSubmittingProof(false);
     }
   };
 
@@ -159,6 +289,8 @@ export default function EventDetailPage() {
   const hasExistingTicket = userRegistration.hasTicket;
   const ticketStatus = userRegistration.status;
   const isTicketPending = ticketStatus === 'PENDING';
+  const isTicketPendingVerification = ticketStatus === 'PENDING_VERIFICATION';
+  const isTicketNeedsReupload = ticketStatus === 'NEEDS_REUPLOAD';
   const isTicketApproved = ticketStatus === 'APPROVED';
 
   const formatDate = (d: Date) =>
@@ -338,9 +470,25 @@ export default function EventDetailPage() {
                 size="lg"
                 className="rounded-xl px-8"
                 variant={isTicketApproved ? 'soft' : 'secondary'}
-                onClick={() => router.push(`/tickets/${userRegistration.ticketId}`)}
+                onClick={() => {
+                  if (!isFree && (isTicketPendingVerification || isTicketNeedsReupload)) {
+                    setShowPaymentModal(true);
+                    return;
+                  }
+                  router.push(`/tickets/${userRegistration.ticketId}`);
+                }}
               >
-                {isTicketPending ? (
+                {isTicketNeedsReupload ? (
+                  <>
+                    <AlertTriangle className="w-5 h-5" />
+                    Reupload Proof
+                  </>
+                ) : isTicketPendingVerification ? (
+                  <>
+                    <Clock className="w-5 h-5" />
+                    Complete Payment
+                  </>
+                ) : isTicketPending ? (
                   <>
                     <Clock className="w-5 h-5" />
                     Pending Approval
@@ -378,6 +526,112 @@ export default function EventDetailPage() {
             )}
           </div>
         </motion.footer>
+      )}
+
+      {showPaymentModal && event?.is_paid && (
+        <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm p-4 flex items-end sm:items-center justify-center">
+          <div className="w-full max-w-lg rounded-2xl bg-card border border-border shadow-2xl p-5 space-y-4 max-h-[90vh] overflow-auto">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-semibold text-foreground">Submit Payment Proof</h3>
+                <p className="text-sm text-muted-foreground">{event.title}</p>
+              </div>
+              <button
+                onClick={() => setShowPaymentModal(false)}
+                className="w-8 h-8 rounded-full bg-muted flex items-center justify-center"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="rounded-xl border border-border bg-secondary/30 p-3 space-y-2">
+              <p className="text-sm font-semibold text-foreground">Amount: Rs. {event.ticket_price}</p>
+              <p className="text-xs text-muted-foreground">Provider: {paymentDetails?.provider || 'N/A'}</p>
+              <p className="text-xs text-muted-foreground">Recipient: {paymentDetails?.recipient_name || 'N/A'}</p>
+              {(paymentDetails?.account_number || paymentDetails?.iban) && (
+                <div className="space-y-1">
+                  {paymentDetails?.account_number && (
+                    <div className="flex items-center justify-between gap-2 text-xs">
+                      <span className="text-muted-foreground">Account/Wallet: {paymentDetails.account_number}</span>
+                      <button
+                        className="px-2 py-1 rounded-md bg-muted text-foreground"
+                        onClick={() => {
+                          navigator.clipboard.writeText(paymentDetails.account_number || '');
+                          toast.success('Account number copied');
+                        }}
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                  {paymentDetails?.iban && (
+                    <div className="flex items-center justify-between gap-2 text-xs">
+                      <span className="text-muted-foreground">IBAN: {paymentDetails.iban}</span>
+                      <button
+                        className="px-2 py-1 rounded-md bg-muted text-foreground"
+                        onClick={() => {
+                          navigator.clipboard.writeText(paymentDetails.iban || '');
+                          toast.success('IBAN copied');
+                        }}
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+              {paymentDetails?.instructions && (
+                <p className="text-xs text-muted-foreground whitespace-pre-wrap">{paymentDetails.instructions}</p>
+              )}
+              {userRegistration.paymentRejectionReason && (
+                <p className="text-xs text-red-600">Previous review note: {userRegistration.paymentRejectionReason}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">Transaction / Reference ID</label>
+              <input
+                value={transactionRef}
+                onChange={(e) => setTransactionRef(e.target.value)}
+                placeholder="Enter transfer reference"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">Optional Note</label>
+              <textarea
+                value={paymentNote}
+                onChange={(e) => setPaymentNote(e.target.value)}
+                placeholder="Any context for approver"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm min-h-[80px]"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">Payment Screenshot</label>
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/jpg,image/webp"
+                onChange={(e) => handleProofFile(e.target.files?.[0] || null)}
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+              />
+              {proofPreview && (
+                <img src={proofPreview} alt="Payment proof preview" className="w-full rounded-lg border border-border max-h-52 object-contain bg-muted" />
+              )}
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <Button variant="secondary" className="flex-1" onClick={() => setShowPaymentModal(false)} disabled={submittingProof}>
+                Cancel
+              </Button>
+              <Button className="flex-1" onClick={submitPaidProof} disabled={submittingProof}>
+                {submittingProof ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                {submittingProof ? 'Submitting...' : 'Submit Proof'}
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

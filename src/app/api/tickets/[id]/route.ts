@@ -38,6 +38,15 @@ export async function GET(
       ? 't.ticket_number'
       : `'TICKET-' || SUBSTRING(t.id::text, 1, 8)`;
 
+    const proofMetaCols = await query(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'payment_proofs'
+         AND column_name IN ('transaction_reference', 'student_note')`
+    );
+    const hasProofMetaCols = proofMetaCols.rows.length >= 2;
+
     // First try to find as a paid ticket.
     let result: { rows: any[] } = { rows: [] };
     try {
@@ -45,8 +54,15 @@ export async function GET(
         `SELECT
           t.id,
           ${ticketNumberExpr} AS ticket_number,
-          t.status,
+          CASE
+            WHEN t.status = 'PENDING' AND pp.status = 'REJECTED' THEN 'NEEDS_REUPLOAD'
+            WHEN t.status = 'PENDING' AND pp.proof_url IS NULL THEN 'PENDING_VERIFICATION'
+            ELSE t.status::TEXT
+          END AS status,
+          t.status AS ticket_status,
           t.purchased_at,
+          COALESCE(e.ticket_price, 0) AS amount,
+          COALESCE(t.payment_reference::TEXT, '') AS payment_reference,
           e.id AS event_id,
           e.title AS event_title,
           e.location AS event_venue,
@@ -63,12 +79,32 @@ export async function GET(
           u.email AS attendee_email,
           qr.qr_data,
           qr.scanned_at,
+          pp.proof_url AS payment_proof_url,
+          pp.status AS payment_proof_status,
+          ${hasProofMetaCols ? 'pp.transaction_reference' : `''::TEXT`} AS transaction_reference,
+          ${hasProofMetaCols ? 'pp.student_note' : 'NULL::TEXT'} AS student_note,
+          pp.rejection_reason,
+          pp.created_at AS proof_submitted_at,
           'ticket' AS source_type
         FROM tickets t
         JOIN events e ON t.event_id = e.id
         JOIN societies s ON e.society_id = s.id
         JOIN users u ON t.user_id = u.id
         LEFT JOIN ticket_qr_codes qr ON qr.ticket_id = t.id AND qr.is_active = TRUE
+        LEFT JOIN LATERAL (
+          SELECT
+            proof_url,
+            status,
+            rejection_reason,
+            created_at,
+            updated_at,
+            ${hasProofMetaCols ? 'transaction_reference' : `''::TEXT AS transaction_reference`},
+            ${hasProofMetaCols ? 'student_note' : 'NULL::TEXT AS student_note'}
+          FROM payment_proofs
+          WHERE ticket_id = t.id
+          ORDER BY updated_at DESC, created_at DESC
+          LIMIT 1
+        ) pp ON TRUE
         WHERE t.id = $1 AND t.user_id = $2`,
         [id, user.userId]
       );
@@ -87,7 +123,10 @@ export async function GET(
             er.id,
             'FREE-' || SUBSTRING(er.id::text, 1, 8) AS ticket_number,
             'APPROVED' AS status,
+            'APPROVED' AS ticket_status,
             er.registered_at AS purchased_at,
+            0::NUMERIC AS amount,
+            ''::TEXT AS payment_reference,
             e.id AS event_id,
             e.title AS event_title,
             e.location AS event_venue,
@@ -104,6 +143,12 @@ export async function GET(
             u.email AS attendee_email,
             qr.qr_data,
             NULL AS scanned_at,
+            NULL::TEXT AS payment_proof_url,
+            NULL::TEXT AS payment_proof_status,
+            ''::TEXT AS transaction_reference,
+            NULL::TEXT AS student_note,
+            NULL::TEXT AS rejection_reason,
+            NULL::TIMESTAMPTZ AS proof_submitted_at,
             'registration' AS source_type
           FROM event_registrations er
           JOIN events e ON er.event_id = e.id
@@ -125,7 +170,7 @@ export async function GET(
     }
 
     const expectedType = sourceType === 'ticket' ? 'T' : 'R';
-    const shouldHaveQr = ticket.status === 'APPROVED' && !ticket.is_cancelled;
+    const shouldHaveQr = ticket.ticket_status === 'APPROVED' && !ticket.is_cancelled;
     const parsedQr = ticket.qr_data ? verifyQrPayload(ticket.qr_data) : null;
     const isQrValid = !!parsedQr
       && parsedQr.type === expectedType

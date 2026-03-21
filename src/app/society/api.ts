@@ -126,6 +126,7 @@ export function createSocietyEvent(
     venue_details?: string;
     venue?: string;
     visibility?: string;
+    is_paid?: boolean;
     ticket_price?: number;
     max_participants?: number;
     registration_end?: string;
@@ -137,6 +138,7 @@ export function createSocietyEvent(
     ...data,
     location: data.location ?? data.venue,
     registration_end: data.registration_end ?? data.registration_deadline,
+    is_paid: Number(data.ticket_price ?? 0) > 0,
   };
 
   return api(`${s(societyId)}/events`, {

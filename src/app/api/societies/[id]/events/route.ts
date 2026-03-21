@@ -56,6 +56,17 @@ export async function POST(
     const body = await req.json();
     const location = body.location ?? body.venue ?? null;
     const registrationEnd = body.registration_end ?? body.registration_deadline ?? null;
+    const rawTicketPrice = body.ticket_price;
+    const normalizedTicketPrice =
+      rawTicketPrice === undefined || rawTicketPrice === null || rawTicketPrice === ''
+        ? null
+        : Number(rawTicketPrice);
+
+    if (normalizedTicketPrice !== null && (Number.isNaN(normalizedTicketPrice) || normalizedTicketPrice < 0)) {
+      return NextResponse.json({ error: 'ticket_price must be a non-negative number' }, { status: 400 });
+    }
+
+    const derivedIsPaid = normalizedTicketPrice !== null && normalizedTicketPrice > 0;
 
     // ── Required field validation ─────────────────────────────────────
     const { title, event_start, event_end, thumbnail_url } = body;
@@ -167,8 +178,8 @@ export async function POST(
         body.description || null,
         location,
         body.venue_details || null,
-        body.is_paid ?? false,
-        body.ticket_price ?? null,
+        derivedIsPaid,
+        normalizedTicketPrice,
         body.max_tickets ?? null,
         body.max_participants ?? null,
         event_start,

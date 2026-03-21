@@ -109,6 +109,11 @@ export interface PendingTicket {
   amount: string;
   payment_reference: string;
   payment_proof_url: string | null;
+  proof_type: string | null;
+  transaction_reference: string;
+  student_note: string | null;
+  proof_submitted_at: string | null;
+  payment_proof_status: 'PENDING' | 'VERIFIED' | 'REJECTED' | null;
   status: TicketStatus;
   purchased_at: string;
   reviewed_at: string | null;
@@ -337,6 +342,11 @@ export interface SocietySettings {
   ticketing_enabled: boolean;
   transfer_policy: 'ALLOWED' | 'RESTRICTED' | 'DISABLED';
   transfer_deadline_hours: number;
+  payment_provider: string | null;
+  payment_recipient_name: string | null;
+  payment_account_number: string | null;
+  payment_iban: string | null;
+  payment_instructions: string | null;
 }
 
 // ─── Society Profile (Public Branding) ──────────────────────────────────────

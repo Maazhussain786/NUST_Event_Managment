@@ -56,12 +56,21 @@ function getStatusConfig(ticket: TicketData) {
         bgClass: '',
       };
     case 'PENDING':
+    case 'PENDING_VERIFICATION':
       return {
         variant: 'warning' as const,
-        label: 'Pending',
+        label: ticket.status.toUpperCase() === 'PENDING_VERIFICATION' ? 'Proof Needed' : 'Pending',
         icon: Clock,
         borderClass: 'border-l-3 border-l-amber-500',
         bgClass: 'bg-amber-50/50 dark:bg-amber-950/10',
+      };
+    case 'NEEDS_REUPLOAD':
+      return {
+        variant: 'warning' as const,
+        label: 'Reupload Required',
+        icon: AlertCircle,
+        borderClass: 'border-l-3 border-l-orange-500',
+        bgClass: 'bg-orange-50/50 dark:bg-orange-950/10',
       };
     case 'REJECTED':
       return {

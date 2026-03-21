@@ -40,7 +40,12 @@ export async function GET(
         content_upload_role: 'Deputy Director',
         ticketing_enabled: true,
         transfer_policy: 'ALLOWED',
-        transfer_deadline_hours: 24
+        transfer_deadline_hours: 24,
+        payment_provider: null,
+        payment_recipient_name: null,
+        payment_account_number: null,
+        payment_iban: null,
+        payment_instructions: null,
       });
     }
 
@@ -81,7 +86,12 @@ export async function PATCH(
       content_upload_role,
       ticketing_enabled,
       transfer_policy,
-      transfer_deadline_hours
+      transfer_deadline_hours,
+      payment_provider,
+      payment_recipient_name,
+      payment_account_number,
+      payment_iban,
+      payment_instructions,
     } = body;
 
     const validRoles = ['President', 'Vice President', 'Director', 'Deputy Director', 'Member'];
@@ -99,8 +109,21 @@ export async function PATCH(
 
     // Upsert settings
     const result = await query(
-      `INSERT INTO society_settings (society_id, event_creation_role, chat_management_role, content_upload_role, ticketing_enabled, transfer_policy, transfer_deadline_hours)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO society_settings (
+         society_id,
+         event_creation_role,
+         chat_management_role,
+         content_upload_role,
+         ticketing_enabled,
+         transfer_policy,
+         transfer_deadline_hours,
+         payment_provider,
+         payment_recipient_name,
+         payment_account_number,
+         payment_iban,
+         payment_instructions
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        ON CONFLICT (society_id) DO UPDATE SET
          event_creation_role = COALESCE($2, society_settings.event_creation_role),
          chat_management_role = COALESCE($3, society_settings.chat_management_role),
@@ -108,6 +131,11 @@ export async function PATCH(
          ticketing_enabled = COALESCE($5, society_settings.ticketing_enabled),
          transfer_policy = COALESCE($6, society_settings.transfer_policy),
          transfer_deadline_hours = COALESCE($7, society_settings.transfer_deadline_hours),
+         payment_provider = COALESCE($8, society_settings.payment_provider),
+         payment_recipient_name = COALESCE($9, society_settings.payment_recipient_name),
+         payment_account_number = COALESCE($10, society_settings.payment_account_number),
+         payment_iban = COALESCE($11, society_settings.payment_iban),
+         payment_instructions = COALESCE($12, society_settings.payment_instructions),
          updated_at = NOW()
        RETURNING *`,
       [
@@ -117,7 +145,12 @@ export async function PATCH(
         content_upload_role || 'Deputy Director',
         ticketing_enabled ?? true,
         transfer_policy || 'ALLOWED',
-        transfer_deadline_hours || 24
+        transfer_deadline_hours || 24,
+        payment_provider ?? null,
+        payment_recipient_name ?? null,
+        payment_account_number ?? null,
+        payment_iban ?? null,
+        payment_instructions ?? null,
       ]
     );
 

@@ -206,6 +206,23 @@ export default function TicketApprovalsPage() {
                     <span className="mx-2">•</span>
                     <span className="font-medium">Ref:</span> {ticket.payment_reference}
                   </p>
+                  <p className="text-xs text-secondary mt-1">
+                    <span className="font-medium">Txn ID:</span> {ticket.transaction_reference || 'N/A'}
+                    <span className="mx-2">•</span>
+                    <span className="font-medium">Proof Status:</span> {ticket.payment_proof_status || 'Not submitted'}
+                  </p>
+                  {ticket.student_note && (
+                    <p className="text-xs text-secondary mt-1">
+                      <span className="font-medium">Student Note:</span> {ticket.student_note}
+                    </p>
+                  )}
+                  {ticket.proof_submitted_at && (
+                    <p className="text-xs text-muted mt-1">
+                      Proof Submitted: {new Date(ticket.proof_submitted_at).toLocaleString('en-US', {
+                        month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+                      })}
+                    </p>
+                  )}
                   <p className="text-xs text-muted mt-1">
                     Purchased: {new Date(ticket.purchased_at).toLocaleString('en-US', {
                       month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',

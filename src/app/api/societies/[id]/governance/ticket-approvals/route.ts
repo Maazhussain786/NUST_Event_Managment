@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { CONTAINERS, extractBlobName, generateReadUrl } from '@/lib/blob';
 
 // GET /api/societies/[id]/governance/ticket-approvals — list tickets with optional status filter
 export async function GET(
@@ -43,6 +44,28 @@ export async function GET(
       END
     `;
 
+    const proofMetaCols = await query(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'payment_proofs'
+         AND column_name IN ('transaction_reference', 'student_note')`
+    );
+    const hasProofMetaCols = proofMetaCols.rows.length >= 2;
+
+    const transactionRefExprOuter = hasProofMetaCols
+      ? 'pp.transaction_reference'
+      : `''::TEXT`;
+    const studentNoteExprOuter = hasProofMetaCols
+      ? 'pp.student_note'
+      : 'NULL::TEXT';
+    const transactionRefExprInner = hasProofMetaCols
+      ? 'transaction_reference'
+      : `''::TEXT`;
+    const studentNoteExprInner = hasProofMetaCols
+      ? 'student_note'
+      : 'NULL::TEXT';
+
     let sql = `
       SELECT
         t.id,
@@ -55,6 +78,11 @@ export async function GET(
         COALESCE(e.ticket_price, 0)::TEXT AS amount,
         COALESCE(t.payment_reference::TEXT, '') AS payment_reference,
         pp.proof_url AS payment_proof_url,
+        pp.proof_type,
+        ${transactionRefExprOuter} AS transaction_reference,
+        ${studentNoteExprOuter} AS student_note,
+        pp.created_at AS proof_submitted_at,
+        pp.status AS payment_proof_status,
         ${displayStatusExpr} AS status,
         t.purchased_at,
         pp.verified_at AS reviewed_at,
@@ -63,7 +91,24 @@ export async function GET(
       FROM tickets t
       JOIN events e ON t.event_id = e.id
       JOIN users u ON t.user_id = u.id
-      LEFT JOIN payment_proofs pp ON t.id = pp.ticket_id
+      LEFT JOIN LATERAL (
+        SELECT
+          id,
+          proof_url,
+          proof_type,
+          status,
+          verified_by,
+          verified_at,
+          rejection_reason,
+          created_at,
+          updated_at,
+          ${transactionRefExprInner} AS transaction_reference,
+          ${studentNoteExprInner} AS student_note
+        FROM payment_proofs
+        WHERE ticket_id = t.id
+        ORDER BY updated_at DESC, created_at DESC
+        LIMIT 1
+      ) pp ON TRUE
       LEFT JOIN users reviewer ON reviewer.id = pp.verified_by
       WHERE e.society_id = $1
     `;
@@ -90,8 +135,21 @@ export async function GET(
       [societyId]
     );
 
+    const tickets = result.rows.map((row) => {
+      const rawProofUrl = row.payment_proof_url as string | null;
+      if (!rawProofUrl) return row;
+
+      const blobName = extractBlobName(rawProofUrl, CONTAINERS.EVENT_MEDIA);
+      if (!blobName) return row;
+
+      return {
+        ...row,
+        payment_proof_url: generateReadUrl(CONTAINERS.EVENT_MEDIA, blobName, 24 * 60),
+      };
+    });
+
     return NextResponse.json({
-      tickets: result.rows,
+      tickets,
       stats: {
         pending: Number(stats.rows[0].pending || 0),
         approved: Number(stats.rows[0].approved || 0),

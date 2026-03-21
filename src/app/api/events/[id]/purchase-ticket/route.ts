@@ -65,6 +65,57 @@ export async function POST(
 
     const event = eventResult.rows[0];
 
+    const paymentDetailsResult = await client.query(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'society_settings'
+         AND column_name IN ('payment_provider', 'payment_recipient_name', 'payment_account_number', 'payment_iban', 'payment_instructions')`
+    );
+
+    let paymentDetails: {
+      provider: string | null;
+      recipient_name: string | null;
+      account_number: string | null;
+      iban: string | null;
+      instructions: string | null;
+      configured: boolean;
+    } | null = null;
+
+    if (paymentDetailsResult.rows.length >= 5) {
+      const settingsResult = await client.query(
+        `SELECT
+           payment_provider,
+           payment_recipient_name,
+           payment_account_number,
+           payment_iban,
+           payment_instructions
+         FROM society_settings
+         WHERE society_id = $1`,
+        [event.society_id]
+      );
+      const settings = settingsResult.rows[0] || {};
+      paymentDetails = {
+        provider: settings.payment_provider ?? null,
+        recipient_name: settings.payment_recipient_name ?? null,
+        account_number: settings.payment_account_number ?? null,
+        iban: settings.payment_iban ?? null,
+        instructions: settings.payment_instructions ?? null,
+        configured: !!(settings.payment_provider && settings.payment_recipient_name && (settings.payment_account_number || settings.payment_iban)),
+      };
+    }
+
+    if (!paymentDetails?.configured) {
+      await client.query('ROLLBACK');
+      return NextResponse.json(
+        {
+          error: 'Payment details are not configured for this society. Please ask society leadership to update payment settings first.',
+          code: 'PAYMENT_DETAILS_MISSING',
+        },
+        { status: 409 }
+      );
+    }
+
     // ── Must be paid event ────────────────────────────────────────────
     if (!event.is_paid) {
       await client.query('ROLLBACK');
@@ -164,7 +215,7 @@ export async function POST(
 
     // ── Duplicate check ──────────────────────────────────────────────
     const existingTicket = await client.query(
-      `SELECT id, status FROM tickets WHERE event_id = $1 AND user_id = $2`,
+      `SELECT id, status, payment_reference FROM tickets WHERE event_id = $1 AND user_id = $2`,
       [eventId, user.userId]
     );
     if (existingTicket.rows.length > 0) {
@@ -172,7 +223,16 @@ export async function POST(
       if (t.status === 'PENDING') {
         await client.query('ROLLBACK');
         return NextResponse.json(
-          { error: 'You already have a pending ticket for this event', ticketId: t.id },
+          {
+            error: 'You already have a pending ticket for this event',
+            ticketId: t.id,
+            paymentReference: t.payment_reference,
+            ticket: {
+              id: t.id,
+              status: 'PENDING',
+              paymentReference: t.payment_reference,
+            },
+          },
           { status: 409 }
         );
       }
@@ -192,17 +252,22 @@ export async function POST(
           [t.id]
         );
 
-        await client.query(
-          `INSERT INTO audit_logs (action, performed_by, society_id, target_type, target_id, new_value, metadata)
-           VALUES ('TICKET_PURCHASED', $1, $2, 'ticket', $3, $4, $5)`,
-          [
-            user.userId,
-            event.society_id,
-            updated.rows[0].id,
-            JSON.stringify({ status: 'PENDING', payment_reference: updated.rows[0].payment_reference }),
-            JSON.stringify({ eventTitle: event.title, action: 'ticket_re_purchased' }),
-          ]
-        );
+        try {
+          await client.query(
+            `INSERT INTO audit_logs (action, performed_by, society_id, target_type, target_id, new_value, metadata)
+             VALUES ('TICKET_PURCHASED', $1, $2, 'ticket', $3, $4, $5)`,
+            [
+              user.userId,
+              event.society_id,
+              updated.rows[0].id,
+              JSON.stringify({ status: 'PENDING', payment_reference: updated.rows[0].payment_reference }),
+              JSON.stringify({ eventTitle: event.title, action: 'ticket_re_purchased' }),
+            ]
+          );
+        } catch (auditErr) {
+          // Some deployments have stricter/older audit enums; ticket purchase should still succeed.
+          console.warn('Audit log skipped for ticket re-purchase:', auditErr);
+        }
 
         await client.query('COMMIT');
 
@@ -213,6 +278,7 @@ export async function POST(
             status: 'PENDING',
             paymentReference: updated.rows[0].payment_reference,
           },
+          paymentDetails,
           message: 'Ticket request re-submitted. Pending approval by society.',
         }, { status: 200 });
       }
@@ -229,22 +295,27 @@ export async function POST(
     const ticket = ticketResult.rows[0];
 
     // ── Audit log ─────────────────────────────────────────────────────
-    await client.query(
-      `INSERT INTO audit_logs (action, performed_by, society_id, target_type, target_id, new_value, metadata)
-       VALUES ('TICKET_PURCHASED', $1, $2, 'ticket', $3, $4, $5)`,
-      [
-        user.userId,
-        event.society_id,
-        ticket.id,
-        JSON.stringify({ status: 'PENDING', payment_reference: ticket.payment_reference }),
-        JSON.stringify({
-          eventTitle: event.title,
-          societyName: event.society_name,
-          ticketPrice: event.ticket_price,
-          action: 'ticket_purchased',
-        }),
-      ]
-    );
+    try {
+      await client.query(
+        `INSERT INTO audit_logs (action, performed_by, society_id, target_type, target_id, new_value, metadata)
+         VALUES ('TICKET_PURCHASED', $1, $2, 'ticket', $3, $4, $5)`,
+        [
+          user.userId,
+          event.society_id,
+          ticket.id,
+          JSON.stringify({ status: 'PENDING', payment_reference: ticket.payment_reference }),
+          JSON.stringify({
+            eventTitle: event.title,
+            societyName: event.society_name,
+            ticketPrice: event.ticket_price,
+            action: 'ticket_purchased',
+          }),
+        ]
+      );
+    } catch (auditErr) {
+      // Some deployments have stricter/older audit enums; ticket purchase should still succeed.
+      console.warn('Audit log skipped for ticket purchase:', auditErr);
+    }
 
     // ── Notify society approvers ─────────────────────────────────────
     try {
@@ -286,6 +357,7 @@ export async function POST(
         status: 'PENDING',
         paymentReference: ticket.payment_reference,
       },
+      paymentDetails,
       message: 'Ticket request submitted. Pending approval by society.',
     }, { status: 201 });
   } catch (error) {

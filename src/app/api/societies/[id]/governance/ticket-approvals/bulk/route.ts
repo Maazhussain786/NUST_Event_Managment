@@ -74,6 +74,15 @@ export async function POST(
             [user.userId, ticketId]
           );
 
+          await client.query(
+            `UPDATE payment_proofs
+             SET status = 'VERIFIED', verified_by = $1, verified_at = NOW(), rejection_reason = NULL, updated_at = NOW()
+             WHERE id = (
+               SELECT id FROM payment_proofs WHERE ticket_id = $2 ORDER BY updated_at DESC, created_at DESC LIMIT 1
+             )`,
+            [user.userId, ticketId]
+          );
+
           // ── Generate QR code for approved ticket ──────────────────
           const qrPayload = generateQrPayload({
             type: 'T',
@@ -97,13 +106,14 @@ export async function POST(
             `UPDATE tickets SET status = 'REJECTED', updated_at = NOW() WHERE id = $1`,
             [ticketId]
           );
-          if (reason) {
-            await client.query(
-              `UPDATE payment_proofs SET status = 'REJECTED', rejection_reason = $1, verified_by = $2, verified_at = NOW(), updated_at = NOW()
-               WHERE ticket_id = $3 AND status = 'PENDING'`,
-              [reason, user.userId, ticketId]
-            );
-          }
+          await client.query(
+            `UPDATE payment_proofs
+             SET status = 'REJECTED', rejection_reason = $1, verified_by = $2, verified_at = NOW(), updated_at = NOW()
+             WHERE id = (
+               SELECT id FROM payment_proofs WHERE ticket_id = $3 ORDER BY updated_at DESC, created_at DESC LIMIT 1
+             )`,
+            [reason || 'Payment proof rejected', user.userId, ticketId]
+          );
         }
 
         // Notification to buyer

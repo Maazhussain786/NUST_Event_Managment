@@ -30,6 +30,16 @@ export async function GET() {
       ? 't.ticket_number'
       : `'TICKET-' || SUBSTRING(t.id::text, 1, 8)`;
 
+    const proofMetaCols = await query(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'payment_proofs'
+         AND column_name IN ('transaction_reference', 'student_note')`
+    );
+    const hasProofMetaCols = proofMetaCols.rows.length >= 2;
+    const transactionRefExpr = hasProofMetaCols ? 'pp.transaction_reference' : `''::TEXT`;
+
     // First, fetch paid event tickets.
     let paidTickets = [];
     try {
@@ -37,7 +47,11 @@ export async function GET() {
         `SELECT
           t.id,
           ${ticketNumberExpr} AS ticket_number,
-          t.status,
+          CASE
+            WHEN t.status = 'PENDING' AND pp.status = 'REJECTED' THEN 'NEEDS_REUPLOAD'
+            WHEN t.status = 'PENDING' AND pp.proof_url IS NULL THEN 'PENDING_VERIFICATION'
+            ELSE t.status::TEXT
+          END AS status,
           t.purchased_at,
           e.id AS event_id,
           e.title AS event_title,
@@ -50,11 +64,26 @@ export async function GET() {
           s.name AS society_name,
           s.logo_url AS society_logo,
           CASE WHEN qr.id IS NOT NULL THEN TRUE ELSE FALSE END AS has_qr,
+          pp.proof_url AS payment_proof_url,
+          pp.status AS payment_proof_status,
+          ${transactionRefExpr} AS transaction_reference,
+          pp.rejection_reason,
           'ticket' AS source_type
         FROM tickets t
         JOIN events e ON t.event_id = e.id
         JOIN societies s ON e.society_id = s.id
         LEFT JOIN ticket_qr_codes qr ON qr.ticket_id = t.id AND qr.is_active = TRUE
+        LEFT JOIN LATERAL (
+          SELECT
+            proof_url,
+            status,
+            rejection_reason,
+            ${hasProofMetaCols ? 'transaction_reference' : `''::TEXT AS transaction_reference`}
+          FROM payment_proofs
+          WHERE ticket_id = t.id
+          ORDER BY updated_at DESC, created_at DESC
+          LIMIT 1
+        ) pp ON TRUE
         WHERE t.user_id = $1
           AND t.status != 'CANCELLED'`,
         [user.userId]
@@ -84,6 +113,10 @@ export async function GET() {
           s.name AS society_name,
           s.logo_url AS society_logo,
           CASE WHEN qr.id IS NOT NULL THEN TRUE ELSE FALSE END AS has_qr,
+          NULL::TEXT AS payment_proof_url,
+          NULL::TEXT AS payment_proof_status,
+          ''::TEXT AS transaction_reference,
+          NULL::TEXT AS rejection_reason,
           'registration' AS source_type
         FROM event_registrations er
         JOIN events e ON er.event_id = e.id

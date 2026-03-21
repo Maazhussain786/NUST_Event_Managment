@@ -197,6 +197,63 @@ export default function SettingsPage() {
                 max={168}
               />
             </div>
+
+            <div className="pt-2 border-t border-border space-y-4">
+              <h4 className="text-sm font-semibold text-primary">Manual Payment Details</h4>
+              <p className="text-xs text-muted">
+                Students will see these details before submitting payment proof for paid events.
+              </p>
+
+              <div>
+                <label className="block text-sm text-secondary mb-1">Provider / Method</label>
+                <input
+                  value={settings.payment_provider || ''}
+                  onChange={e => setSettings({ ...settings, payment_provider: e.target.value || null })}
+                  className="input-field text-sm w-full"
+                  placeholder="Bank Transfer, Easypaisa, JazzCash"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm text-secondary mb-1">Recipient Name</label>
+                <input
+                  value={settings.payment_recipient_name || ''}
+                  onChange={e => setSettings({ ...settings, payment_recipient_name: e.target.value || null })}
+                  className="input-field text-sm w-full"
+                  placeholder="NUST Developers Society"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm text-secondary mb-1">Account / Wallet Number</label>
+                <input
+                  value={settings.payment_account_number || ''}
+                  onChange={e => setSettings({ ...settings, payment_account_number: e.target.value || null })}
+                  className="input-field text-sm w-full"
+                  placeholder="03xx-xxxxxxx or bank account number"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm text-secondary mb-1">IBAN (optional)</label>
+                <input
+                  value={settings.payment_iban || ''}
+                  onChange={e => setSettings({ ...settings, payment_iban: e.target.value || null })}
+                  className="input-field text-sm w-full"
+                  placeholder="PKxx xxxx xxxx xxxx xxxx xxxx"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm text-secondary mb-1">Payment Instructions</label>
+                <textarea
+                  value={settings.payment_instructions || ''}
+                  onChange={e => setSettings({ ...settings, payment_instructions: e.target.value || null })}
+                  className="input-field text-sm w-full min-h-[90px]"
+                  placeholder="Transfer exact amount, then upload screenshot with transaction reference."
+                />
+              </div>
+            </div>
           </div>
 
           <TransferPresidencySection societyId={societyId} />

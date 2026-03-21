@@ -14,7 +14,16 @@ interface TicketDetail {
   id: string;
   ticket_number: string;
   status: string;
+  ticket_status?: string;
   purchased_at: string;
+  event_id?: string;
+  amount?: number;
+  payment_reference?: string;
+  payment_proof_url?: string | null;
+  payment_proof_status?: string | null;
+  transaction_reference?: string;
+  student_note?: string | null;
+  proof_submitted_at?: string | null;
   event_title: string;
   event_venue: string;
   event_start: string;
@@ -345,10 +354,12 @@ export default function TicketDetailPage() {
   }
 
   const isCancelled = ticket.is_cancelled || ticket.status === 'CANCELLED' || ticket.status === 'REJECTED';
-  const isPending = ticket.status === 'PENDING';
-  const isApproved = ticket.status === 'APPROVED';
+  const isPending = ticket.status === 'PENDING' || ticket.status === 'PENDING_VERIFICATION' || ticket.status === 'NEEDS_REUPLOAD';
+  const isApproved = (ticket.ticket_status || ticket.status) === 'APPROVED';
+  const isNeedsReupload = ticket.status === 'NEEDS_REUPLOAD';
+  const isPendingVerification = ticket.status === 'PENDING_VERIFICATION';
   const isScanned = !!ticket.scanned_at;
-  const effectiveStatus = isScanned ? 'CHECKED_IN' : ticket.status;
+  const effectiveStatus = isScanned ? 'CHECKED_IN' : ((ticket.ticket_status || ticket.status) as string);
 
   const dateFormatted = new Date(ticket.event_start).toLocaleDateString('en-PK', {
     weekday: 'short', month: 'short', day: 'numeric', year: 'numeric'
@@ -413,6 +424,40 @@ export default function TicketDetailPage() {
             />
           </div>
         </motion.div>
+
+        {ticket.is_paid && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.08 }}
+            className="mb-4 rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-white"
+          >
+            <h3 className="text-sm font-semibold mb-2">Payment Details</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-white/75">
+              <p>Amount: <span className="text-white">Rs. {Number(ticket.amount || 0).toLocaleString()}</span></p>
+              <p>Payment Ref: <span className="text-white">{ticket.payment_reference || 'N/A'}</span></p>
+              <p>Proof Status: <span className="text-white">{ticket.payment_proof_status || 'Not submitted'}</span></p>
+              <p>Txn Ref: <span className="text-white">{ticket.transaction_reference || 'N/A'}</span></p>
+            </div>
+            {ticket.proof_submitted_at && (
+              <p className="text-xs text-white/70 mt-2">Submitted: {new Date(ticket.proof_submitted_at).toLocaleString('en-PK')}</p>
+            )}
+            {ticket.student_note && (
+              <p className="text-xs text-white/70 mt-1">Note: {ticket.student_note}</p>
+            )}
+            {ticket.payment_proof_url && (
+              <a href={ticket.payment_proof_url} target="_blank" rel="noreferrer" className="inline-flex mt-3 text-xs text-brand-300 hover:underline">
+                View submitted screenshot
+              </a>
+            )}
+            {isNeedsReupload && (
+              <p className="text-xs text-amber-300 mt-2">Reupload requested by society. Go back to event page and submit a new screenshot.</p>
+            )}
+            {isPendingVerification && (
+              <p className="text-xs text-amber-300 mt-2">Submit payment proof from event page to start verification.</p>
+            )}
+          </motion.div>
+        )}
 
         {/* Premium Ticket Card */}
         <motion.div
@@ -542,9 +587,15 @@ export default function TicketDetailPage() {
                 <div className="w-20 h-20 rounded-full bg-amber-100 flex items-center justify-center mb-4">
                   <Loader2 className="w-10 h-10 text-amber-500 animate-spin" />
                 </div>
-                <p className="font-semibold text-amber-600 text-base">Awaiting Approval</p>
+                <p className="font-semibold text-amber-600 text-base">
+                  {isNeedsReupload ? 'Reupload Required' : isPendingVerification ? 'Proof Needed' : 'Awaiting Approval'}
+                </p>
                 <p className="mt-1 text-gray-500 text-sm text-center">
-                  Your QR code will appear once approved
+                  {isNeedsReupload
+                    ? 'Upload an updated screenshot from event page'
+                    : isPendingVerification
+                      ? 'Submit your payment screenshot from event page'
+                      : 'Your QR code will appear once approved'}
                 </p>
               </div>
             ) : qrImageUrl ? (

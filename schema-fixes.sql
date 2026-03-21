@@ -57,6 +57,11 @@ CREATE TABLE IF NOT EXISTS society_settings (
     transfer_policy         VARCHAR(20) NOT NULL DEFAULT 'ALLOWED'
                             CHECK (transfer_policy IN ('ALLOWED', 'RESTRICTED', 'DISABLED')),
     transfer_deadline_hours INTEGER NOT NULL DEFAULT 24,
+    payment_provider        VARCHAR(50),
+    payment_recipient_name  VARCHAR(200),
+    payment_account_number  VARCHAR(100),
+    payment_iban            VARCHAR(100),
+    payment_instructions    TEXT,
     created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

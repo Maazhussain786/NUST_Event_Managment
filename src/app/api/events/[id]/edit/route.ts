@@ -51,6 +51,22 @@ export async function PATCH(
     const { id: eventId } = await params;
     const body = await req.json();
     const ip = extractIpAddress(req);
+    const hasTicketPriceInBody = Object.prototype.hasOwnProperty.call(body, 'ticket_price');
+
+    if (hasTicketPriceInBody) {
+      const rawTicketPrice = body.ticket_price;
+      const normalizedTicketPrice =
+        rawTicketPrice === undefined || rawTicketPrice === null || rawTicketPrice === ''
+          ? null
+          : Number(rawTicketPrice);
+
+      if (normalizedTicketPrice !== null && (Number.isNaN(normalizedTicketPrice) || normalizedTicketPrice < 0)) {
+        return ApiErrors.validation('ticket_price must be a non-negative number');
+      }
+
+      body.ticket_price = normalizedTicketPrice;
+      body.is_paid = normalizedTicketPrice !== null && normalizedTicketPrice > 0;
+    }
 
     // ── Version required for optimistic locking ───────────────────────
     if (body.version === undefined || body.version === null) {
@@ -189,7 +205,7 @@ export async function PATCH(
     }
 
     // ── Price change guard (cannot change if approved payments exist) ─
-    if (body.ticket_price !== undefined && body.ticket_price !== event.ticket_price) {
+    if (body.ticket_price !== undefined && Number(body.ticket_price) !== Number(event.ticket_price)) {
       const priceError = await validatePriceChange(eventId, client);
       if (priceError) {
         await client.query('ROLLBACK');

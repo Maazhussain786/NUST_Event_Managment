@@ -63,20 +63,93 @@ export async function GET(
       hasTicket: boolean;
       status?: string;
       ticketId?: string;
+      paymentReference?: string | null;
+      paymentProofStatus?: string | null;
+      paymentRejectionReason?: string | null;
+      hasProof?: boolean;
     } = { hasTicket: false };
+
+    let paymentDetails: {
+      provider: string | null;
+      recipient_name: string | null;
+      account_number: string | null;
+      iban: string | null;
+      instructions: string | null;
+      configured: boolean;
+    } | null = null;
+
+    const paymentSettingCols = await query(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'society_settings'
+         AND column_name IN ('payment_provider', 'payment_recipient_name', 'payment_account_number', 'payment_iban', 'payment_instructions')`
+    );
+    const hasPaymentSettingsCols = paymentSettingCols.rows.length >= 5;
+
+    if (event.is_paid && hasPaymentSettingsCols) {
+      const settings = await query(
+        `SELECT
+           payment_provider,
+           payment_recipient_name,
+           payment_account_number,
+           payment_iban,
+           payment_instructions
+         FROM society_settings
+         WHERE society_id = $1`,
+        [event.society_id]
+      );
+
+      const row = settings.rows[0] || {};
+      paymentDetails = {
+        provider: row.payment_provider ?? null,
+        recipient_name: row.payment_recipient_name ?? null,
+        account_number: row.payment_account_number ?? null,
+        iban: row.payment_iban ?? null,
+        instructions: row.payment_instructions ?? null,
+        configured: !!(row.payment_provider && row.payment_recipient_name && (row.payment_account_number || row.payment_iban)),
+      };
+    }
 
     if (user) {
       if (event.is_paid) {
         // Check for existing ticket
         const ticketCheck = await query(
-          `SELECT id, status FROM tickets WHERE event_id = $1 AND user_id = $2 AND status != 'CANCELLED'`,
+          `SELECT
+             t.id,
+             t.status,
+             t.payment_reference,
+             pp.status AS payment_proof_status,
+             pp.rejection_reason,
+             CASE WHEN pp.id IS NOT NULL THEN TRUE ELSE FALSE END AS has_proof
+           FROM tickets t
+           LEFT JOIN LATERAL (
+             SELECT id, status, rejection_reason
+             FROM payment_proofs
+             WHERE ticket_id = t.id
+             ORDER BY updated_at DESC, created_at DESC
+             LIMIT 1
+           ) pp ON TRUE
+           WHERE t.event_id = $1 AND t.user_id = $2 AND t.status != 'CANCELLED'`,
           [id, user.userId],
         );
         if (ticketCheck.rows.length > 0) {
+          const row = ticketCheck.rows[0];
+          const derivedStatus =
+            row.status === 'PENDING' && !row.has_proof
+              ? 'PENDING_VERIFICATION'
+              : row.status === 'PENDING' && row.payment_proof_status === 'REJECTED'
+                ? 'NEEDS_REUPLOAD'
+                : row.status;
+
           userRegistrationStatus = {
             hasTicket: true,
-            status: ticketCheck.rows[0].status,
-            ticketId: ticketCheck.rows[0].id,
+            status: derivedStatus,
+            ticketId: row.id,
+            paymentReference: row.payment_reference ?? null,
+            paymentProofStatus: row.payment_proof_status ?? null,
+            paymentRejectionReason: row.rejection_reason ?? null,
+            hasProof: !!row.has_proof,
           };
         }
       } else {
@@ -98,6 +171,7 @@ export async function GET(
     return NextResponse.json({
       event,
       userRegistration: userRegistrationStatus,
+      paymentDetails,
     });
   } catch (error: unknown) {
     const message =
