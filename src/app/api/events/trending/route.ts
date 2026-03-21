@@ -1,7 +1,8 @@
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
-import { NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { NextResponse } from "next/server";
+import { query } from "@/lib/db";
+import { CONTAINERS, extractBlobName, generateReadUrl } from "@/lib/blob";
 
 export async function GET() {
   try {
@@ -18,12 +19,34 @@ export async function GET() {
        WHERE e.is_cancelled = FALSE AND e.deleted_at IS NULL AND e.event_end >= NOW()
        GROUP BY e.id, ec.name, s.id
        ORDER BY tickets_sold DESC, e.event_start ASC
-       LIMIT 10`
+       LIMIT 10`,
     );
 
-    return NextResponse.json({ events: result.rows });
+    const events = result.rows.map((row) => {
+      const bannerBlob = row.banner_url
+        ? extractBlobName(row.banner_url, CONTAINERS.EVENT_MEDIA)
+        : null;
+      const logoBlob = row.society_logo
+        ? extractBlobName(row.society_logo, CONTAINERS.SOCIETY_MEDIA)
+        : null;
+
+      return {
+        ...row,
+        banner_url: bannerBlob
+          ? generateReadUrl(CONTAINERS.EVENT_MEDIA, bannerBlob, 24 * 60)
+          : row.banner_url,
+        society_logo: logoBlob
+          ? generateReadUrl(CONTAINERS.SOCIETY_MEDIA, logoBlob, 24 * 60)
+          : row.society_logo,
+      };
+    });
+
+    return NextResponse.json({ events });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Failed to fetch trending events';
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Failed to fetch trending events";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

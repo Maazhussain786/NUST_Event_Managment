@@ -1,9 +1,10 @@
-import { NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { NextResponse } from "next/server";
+import { query } from "@/lib/db";
+import { CONTAINERS, extractBlobName, generateReadUrl } from "@/lib/blob";
 
 export async function GET(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: { id: string } },
 ) {
   try {
     const { id } = params;
@@ -21,11 +22,11 @@ export async function GET(
        LEFT JOIN ratings r ON r.target_type = 'SOCIETY' AND r.target_id = s.id
        WHERE s.id = $1
        GROUP BY s.id, ns.full_name, ns.abbreviation`,
-      [id]
+      [id],
     );
 
     if (result.rows.length === 0) {
-      return NextResponse.json({ error: 'Society not found' }, { status: 404 });
+      return NextResponse.json({ error: "Society not found" }, { status: 404 });
     }
 
     // Fetch upcoming events for this society
@@ -39,22 +40,48 @@ export async function GET(
        GROUP BY e.id
        ORDER BY e.event_start ASC
        LIMIT 10`,
-      [id]
+      [id],
     );
 
     // Fetch wings
     const wingsResult = await query(
       `SELECT w.id, w.name, w.description FROM wings w WHERE w.society_id = $1 ORDER BY w.name`,
-      [id]
+      [id],
     );
 
+    const society = (() => {
+      const row = result.rows[0];
+      const logoBlob = row.logo_url
+        ? extractBlobName(row.logo_url, CONTAINERS.SOCIETY_MEDIA)
+        : null;
+      return {
+        ...row,
+        logo_url: logoBlob
+          ? generateReadUrl(CONTAINERS.SOCIETY_MEDIA, logoBlob, 24 * 60)
+          : row.logo_url,
+      };
+    })();
+
+    const events = eventsResult.rows.map((row) => {
+      const bannerBlob = row.banner_url
+        ? extractBlobName(row.banner_url, CONTAINERS.EVENT_MEDIA)
+        : null;
+      return {
+        ...row,
+        banner_url: bannerBlob
+          ? generateReadUrl(CONTAINERS.EVENT_MEDIA, bannerBlob, 24 * 60)
+          : row.banner_url,
+      };
+    });
+
     return NextResponse.json({
-      society: result.rows[0],
-      events: eventsResult.rows,
+      society,
+      events,
       wings: wingsResult.rows,
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Failed to fetch society';
+    const message =
+      error instanceof Error ? error.message : "Failed to fetch society";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
