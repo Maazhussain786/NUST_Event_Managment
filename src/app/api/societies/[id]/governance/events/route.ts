@@ -30,10 +30,11 @@ export async function GET(
     const status = searchParams.get('status');
 
     let sql = `
-      SELECT e.id, e.title, e.description, e.location, e.venue_details,
+            SELECT e.id, e.title, e.description,
+              e.location AS venue, e.venue_details,
              e.event_start, e.event_end, e.status, e.is_paid, e.ticket_price,
              e.max_participants, e.participants_count, e.banner_url, e.thumbnail_url,
-             e.visibility, e.registration_link, e.created_at,
+              e.visibility, e.registration_link, e.registration_end AS registration_deadline, e.created_at,
              u.full_name AS created_by_name,
              COUNT(DISTINCT t.id) FILTER (WHERE t.status = 'APPROVED') AS tickets_sold,
              COUNT(DISTINCT er.id) FILTER (WHERE er.cancelled_at IS NULL) AS registrations

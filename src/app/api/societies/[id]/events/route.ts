@@ -54,6 +54,8 @@ export async function POST(
     if (rateLimited) return rateLimited;
 
     const body = await req.json();
+    const location = body.location ?? body.venue ?? null;
+    const registrationEnd = body.registration_end ?? body.registration_deadline ?? null;
 
     // ── Required field validation ─────────────────────────────────────
     const { title, event_start, event_end, thumbnail_url } = body;
@@ -82,8 +84,8 @@ export async function POST(
       return NextResponse.json({ error: 'event_end must be >= event_start' }, { status: 400 });
     }
 
-    if (body.registration_end) {
-      const regEnd = new Date(body.registration_end);
+    if (registrationEnd) {
+      const regEnd = new Date(registrationEnd);
       if (isNaN(regEnd.getTime())) {
         return NextResponse.json({ error: 'Invalid date format for registration_end' }, { status: 400 });
       }
@@ -163,7 +165,7 @@ export async function POST(
         body.category_id || null,
         title.trim(),
         body.description || null,
-        body.location || null,
+        location,
         body.venue_details || null,
         body.is_paid ?? false,
         body.ticket_price ?? null,
@@ -172,7 +174,7 @@ export async function POST(
         event_start,
         event_end,
         body.registration_start || null,
-        body.registration_end || null,
+        registrationEnd,
         body.transfer_deadline || null,
         body.banner_url || null,
         thumbnail_url.trim(),
@@ -212,6 +214,27 @@ export async function POST(
     }, { status: 201 });
   } catch (error) {
     await client.query('ROLLBACK');
+
+    const dbError = error as {
+      code?: string;
+      message?: string;
+      detail?: string;
+      constraint?: string;
+    };
+
+    if (dbError.code === '23514') {
+      // CHECK constraint violation
+      return ApiErrors.validation(dbError.detail || dbError.message || 'Event validation failed');
+    }
+    if (dbError.code === '23503') {
+      // FK violation
+      return ApiErrors.validation('Invalid reference provided (category, wing, portfolio, or creator)');
+    }
+    if (dbError.code === '22P02') {
+      // Invalid text representation (e.g., malformed UUID/timestamp)
+      return ApiErrors.validation('Invalid identifier or date format in event payload');
+    }
+
     return ApiErrors.serverError('Create event error:', error);
   } finally {
     client.release();

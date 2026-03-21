@@ -40,6 +40,7 @@ import type {
 
 interface ApiError {
   error: string;
+  detail?: string | null;
   code?: string;
   [key: string]: unknown;
 }
@@ -69,6 +70,14 @@ async function api<T>(path: string, options?: RequestInit): Promise<T> {
     } catch {
       body = { error: `HTTP ${res.status}` };
     }
+
+    if (body.detail && typeof body.detail === 'string') {
+      body.error = `${body.error}: ${body.detail}`;
+    }
+    if (body.code && typeof body.code === 'string') {
+      body.error = `${body.error} (${body.code})`;
+    }
+
     throw new SocietyApiError(res.status, body);
   }
 
@@ -113,17 +122,31 @@ export function createSocietyEvent(
     description?: string;
     event_start: string;
     event_end?: string;
+    location?: string;
+    venue_details?: string;
     venue?: string;
     visibility?: string;
     ticket_price?: number;
     max_participants?: number;
+    registration_end?: string;
     registration_deadline?: string;
     thumbnail_url?: string;
   },
 ): Promise<{ success: boolean; event: { id: string; status: string } }> {
+  const payload = {
+    ...data,
+    location: data.location ?? data.venue,
+    registration_end: data.registration_end ?? data.registration_deadline,
+  };
+
   return api(`${s(societyId)}/events`, {
+<<<<<<< HEAD
     method: "POST",
     body: JSON.stringify(data),
+=======
+    method: 'POST',
+    body: JSON.stringify(payload),
+>>>>>>> main
   });
 }
 
