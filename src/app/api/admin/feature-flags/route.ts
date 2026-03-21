@@ -1,4 +1,4 @@
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
 /**
  * GET   /api/admin/feature-flags — list all feature flags
@@ -8,20 +8,76 @@ export const dynamic = 'force-dynamic';
  * Feature flags are stored as key-value pairs with scope and category.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { query } from '@/lib/db';
-import { getCurrentUser } from '@/lib/auth';
+import { NextRequest, NextResponse } from "next/server";
+import { query } from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth";
 
 // Default feature flags returned when table doesn't exist
 const DEFAULT_FLAGS = [
-  { key: 'event_creation', label: 'Event Creation', description: 'Allow societies to create new events', enabled: true, scope: 'global' as const, category: 'Events' },
-  { key: 'paid_events', label: 'Paid Events', description: 'Allow paid ticket events', enabled: true, scope: 'global' as const, category: 'Events' },
-  { key: 'qr_checkin', label: 'QR Check-in', description: 'Enable QR code attendance scanning', enabled: true, scope: 'global' as const, category: 'Events' },
-  { key: 'society_registration', label: 'Society Registration', description: 'Allow new society registration requests', enabled: true, scope: 'global' as const, category: 'Societies' },
-  { key: 'media_uploads', label: 'Media Uploads', description: 'Allow media uploads to society galleries', enabled: true, scope: 'per_society' as const, category: 'Storage' },
-  { key: 'public_profiles', label: 'Public Profiles', description: 'Enable public user profile pages', enabled: false, scope: 'global' as const, category: 'Users' },
-  { key: 'chat_system', label: 'Chat System', description: 'Enable real-time chat within societies', enabled: true, scope: 'per_society' as const, category: 'Communication' },
-  { key: 'notifications', label: 'Push Notifications', description: 'Enable push notification delivery', enabled: true, scope: 'global' as const, category: 'Communication' },
+  {
+    key: "event_creation",
+    label: "Event Creation",
+    description: "Allow societies to create new events",
+    enabled: true,
+    scope: "global" as const,
+    category: "Events",
+  },
+  {
+    key: "paid_events",
+    label: "Paid Events",
+    description: "Allow paid ticket events",
+    enabled: true,
+    scope: "global" as const,
+    category: "Events",
+  },
+  {
+    key: "qr_checkin",
+    label: "QR Check-in",
+    description: "Enable QR code attendance scanning",
+    enabled: true,
+    scope: "global" as const,
+    category: "Events",
+  },
+  {
+    key: "society_registration",
+    label: "Society Registration",
+    description: "Allow new society registration requests",
+    enabled: true,
+    scope: "global" as const,
+    category: "Societies",
+  },
+  {
+    key: "media_uploads",
+    label: "Media Uploads",
+    description: "Allow media uploads to society galleries",
+    enabled: true,
+    scope: "per_society" as const,
+    category: "Storage",
+  },
+  {
+    key: "public_profiles",
+    label: "Public Profiles",
+    description: "Enable public user profile pages",
+    enabled: false,
+    scope: "global" as const,
+    category: "Users",
+  },
+  {
+    key: "chat_system",
+    label: "Chat System",
+    description: "Enable real-time chat within societies",
+    enabled: true,
+    scope: "per_society" as const,
+    category: "Communication",
+  },
+  {
+    key: "notifications",
+    label: "Push Notifications",
+    description: "Enable push notification delivery",
+    enabled: true,
+    scope: "global" as const,
+    category: "Communication",
+  },
 ];
 
 async function ensureTable() {
@@ -38,14 +94,23 @@ async function ensureTable() {
       )
     `);
     // Seed defaults if empty
-    const count = await query('SELECT COUNT(*) AS c FROM platform_feature_flags');
+    const count = await query(
+      "SELECT COUNT(*) AS c FROM platform_feature_flags",
+    );
     if (parseInt(count.rows[0].c) === 0) {
       for (const flag of DEFAULT_FLAGS) {
         await query(
           `INSERT INTO platform_feature_flags (key, label, description, enabled, scope, category)
            VALUES ($1, $2, $3, $4, $5, $6)
            ON CONFLICT (key) DO NOTHING`,
-          [flag.key, flag.label, flag.description, flag.enabled, flag.scope, flag.category]
+          [
+            flag.key,
+            flag.label,
+            flag.description,
+            flag.enabled,
+            flag.scope,
+            flag.category,
+          ],
         );
       }
     }
@@ -59,8 +124,8 @@ async function ensureTable() {
 export async function GET() {
   try {
     const user = await getCurrentUser();
-    if (!user || user.userType !== 'SUPER_ADMIN') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (!user || user.userType !== "SUPER_ADMIN") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const tableReady = await ensureTable();
@@ -68,30 +133,45 @@ export async function GET() {
       return NextResponse.json(DEFAULT_FLAGS);
     }
 
-    const result = await query('SELECT * FROM platform_feature_flags ORDER BY category, key');
+    const result = await query(
+      "SELECT * FROM platform_feature_flags ORDER BY category, key",
+    );
     return NextResponse.json(result.rows);
   } catch (error) {
-    console.error('Feature flags error:', error);
-    return NextResponse.json({ error: 'Failed to fetch feature flags' }, { status: 500 });
+    console.error("Feature flags error:", error);
+    return NextResponse.json(
+      { error: "Failed to fetch feature flags" },
+      { status: 500 },
+    );
   }
 }
 
 export async function PATCH(req: NextRequest) {
   try {
     const user = await getCurrentUser();
-    if (!user || user.userType !== 'SUPER_ADMIN') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (!user || user.userType !== "SUPER_ADMIN") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const { key, enabled } = await req.json();
-    if (!key || typeof enabled !== 'boolean') {
-      return NextResponse.json({ error: 'key (string) and enabled (boolean) required' }, { status: 400 });
+    if (!key || typeof enabled !== "boolean") {
+      return NextResponse.json(
+        { error: "key (string) and enabled (boolean) required" },
+        { status: 400 },
+      );
     }
 
-    await ensureTable();
+    const tableReady = await ensureTable();
+    if (!tableReady) {
+      return NextResponse.json(
+        { error: "Feature flags store is unavailable" },
+        { status: 500 },
+      );
+    }
+
     await query(
-      'UPDATE platform_feature_flags SET enabled = $1, updated_at = NOW() WHERE key = $2',
-      [enabled, key]
+      "UPDATE platform_feature_flags SET enabled = $1, updated_at = NOW() WHERE key = $2",
+      [enabled, key],
     );
 
     // Audit
@@ -100,15 +180,18 @@ export async function PATCH(req: NextRequest) {
        VALUES ('SUPERADMIN_OVERRIDE', $1, 'FEATURE_FLAG', $2, $3, $4)`,
       [
         user.userId,
-        key,
+        null,
         JSON.stringify({ enabled }),
         JSON.stringify({ flagKey: key, toggledBy: user.email }),
-      ]
+      ],
     );
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Feature flag update error:', error);
-    return NextResponse.json({ error: 'Failed to update feature flag' }, { status: 500 });
+    console.error("Feature flag update error:", error);
+    return NextResponse.json(
+      { error: "Failed to update feature flag" },
+      { status: 500 },
+    );
   }
 }

@@ -177,6 +177,7 @@ export async function POST(req: NextRequest) {
       max_tickets,
       is_pinned,
       priority_rank,
+      society_id,
     } = await req.json();
 
     const resolvedBannerUrl = await resolveBannerUrl(banner_url);
@@ -195,14 +196,36 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Find or use the first approved society as host (NUST-wide)
-    const nustSociety = await query(
-      `SELECT id FROM societies WHERE is_nust_wide = true AND status = 'APPROVED' LIMIT 1`,
-    );
-    const societyId = nustSociety.rows[0]?.id;
+    let societyId: string | null = null;
+
+    if (society_id) {
+      const selectedSociety = await query(
+        `SELECT id
+         FROM societies
+         WHERE id = $1 AND status = 'APPROVED' AND deleted_at IS NULL
+         LIMIT 1`,
+        [society_id],
+      );
+
+      if (!selectedSociety.rows.length) {
+        return NextResponse.json(
+          { error: "Selected society is not available for event creation." },
+          { status: 400 },
+        );
+      }
+
+      societyId = selectedSociety.rows[0].id;
+    } else {
+      // Backward-compatible fallback: first approved NUST-wide society.
+      const nustSociety = await query(
+        `SELECT id FROM societies WHERE is_nust_wide = true AND status = 'APPROVED' LIMIT 1`,
+      );
+      societyId = nustSociety.rows[0]?.id || null;
+    }
+
     if (!societyId) {
       return NextResponse.json(
-        { error: "No NUST-wide society found. Create one first." },
+        { error: "No valid host society found. Select an approved society." },
         { status: 400 },
       );
     }
