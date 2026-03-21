@@ -33,24 +33,45 @@ export async function GET(
     const { searchParams } = new URL(req.url);
     const status = searchParams.get('status');
 
-    // Get tickets with payment proofs for events belonging to this society
+    // Get tickets with payment proofs for events belonging to this society.
+    // Return data in PendingTicket shape expected by src/app/society/types.ts.
+    const displayStatusExpr = `
+      CASE
+        WHEN t.status = 'PENDING' AND pp.status = 'REJECTED' THEN 'NEEDS_REUPLOAD'
+        WHEN t.status = 'PENDING' AND pp.proof_url IS NULL THEN 'PENDING_VERIFICATION'
+        ELSE t.status::TEXT
+      END
+    `;
+
     let sql = `
-      SELECT t.id, t.event_id, t.user_id, t.status, t.purchased_at, t.created_at,
-             e.title AS event_title, e.ticket_price,
-             u.full_name AS buyer_name, u.email AS buyer_email, u.avatar_url AS buyer_avatar,
-             pp.id AS proof_id, pp.proof_url, pp.proof_type, pp.status AS proof_status,
-             pp.rejection_reason
+      SELECT
+        t.id,
+        t.user_id,
+        u.full_name AS user_name,
+        u.email AS user_email,
+        u.avatar_url AS user_avatar,
+        t.event_id,
+        e.title AS event_title,
+        COALESCE(e.ticket_price, 0)::TEXT AS amount,
+        COALESCE(t.payment_reference::TEXT, '') AS payment_reference,
+        pp.proof_url AS payment_proof_url,
+        ${displayStatusExpr} AS status,
+        t.purchased_at,
+        pp.verified_at AS reviewed_at,
+        reviewer.full_name AS reviewed_by_name,
+        pp.rejection_reason
       FROM tickets t
       JOIN events e ON t.event_id = e.id
       JOIN users u ON t.user_id = u.id
       LEFT JOIN payment_proofs pp ON t.id = pp.ticket_id
+      LEFT JOIN users reviewer ON reviewer.id = pp.verified_by
       WHERE e.society_id = $1
     `;
     const qParams: unknown[] = [societyId];
 
     if (status && status !== 'ALL') {
       qParams.push(status);
-      sql += ` AND t.status = $${qParams.length}`;
+      sql += ` AND ${displayStatusExpr} = $${qParams.length}`;
     }
 
     sql += ` ORDER BY t.created_at DESC`;
@@ -71,7 +92,11 @@ export async function GET(
 
     return NextResponse.json({
       tickets: result.rows,
-      stats: stats.rows[0],
+      stats: {
+        pending: Number(stats.rows[0].pending || 0),
+        approved: Number(stats.rows[0].approved || 0),
+        rejected: Number(stats.rows[0].rejected || 0),
+      },
     });
   } catch (error) {
     console.error('Ticket approvals error:', error);

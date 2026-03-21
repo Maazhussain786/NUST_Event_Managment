@@ -41,6 +41,25 @@ export const ApiErrors = {
     NextResponse.json({ error: detail }, { status: 423 }),
   serverError: (logMessage: string, error: unknown) => {
     console.error(logMessage, error);
+    const isDev = process.env.NODE_ENV !== 'production';
+    if (isDev) {
+      const err = error as {
+        message?: string;
+        code?: string;
+        detail?: string;
+        constraint?: string;
+      };
+      return NextResponse.json(
+        {
+          error: 'Internal server error',
+          detail: err?.message || null,
+          code: err?.code || null,
+          constraint: err?.constraint || null,
+        },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   },
 } as const;
@@ -189,14 +208,34 @@ export async function checkSocietyOperational(
   client?: PoolClient
 ): Promise<NextResponse | null> {
   const q = client ? client.query.bind(client) : query;
-  const result = await q(
-    `SELECT s.status, s.deleted_at,
-            COALESCE(ss.emergency_mode, FALSE) AS emergency_mode
-     FROM societies s
-     LEFT JOIN society_settings ss ON ss.society_id = s.id
-     WHERE s.id = $1`,
-    [societyId]
+  // IMPORTANT: avoid error-driven fallbacks inside transactions.
+  // A failed statement marks the transaction aborted (25P02) until ROLLBACK.
+  const emergencyCol = await q(
+    `SELECT 1
+     FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name = 'society_settings'
+       AND column_name = 'emergency_mode'
+     LIMIT 1`
   );
+
+  const hasEmergencyMode = emergencyCol.rows.length > 0;
+
+  const result = hasEmergencyMode
+    ? await q(
+        `SELECT s.status, s.deleted_at,
+                COALESCE(ss.emergency_mode, FALSE) AS emergency_mode
+         FROM societies s
+         LEFT JOIN society_settings ss ON ss.society_id = s.id
+         WHERE s.id = $1`,
+        [societyId]
+      )
+    : await q(
+        `SELECT s.status, s.deleted_at, FALSE AS emergency_mode
+         FROM societies s
+         WHERE s.id = $1`,
+        [societyId]
+      );
 
   if (result.rows.length === 0) {
     return ApiErrors.notFound('Society');
@@ -229,6 +268,22 @@ export async function checkBlackoutPeriod(
   client?: PoolClient
 ): Promise<string | null> {
   const q = client ? client.query.bind(client) : query;
+  // Some environments do not yet have blackout_dates or required columns.
+  // Avoid executing a query that might fail inside a transaction.
+  const cols = await q(
+    `SELECT column_name
+     FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name = 'blackout_dates'
+       AND column_name IN ('title', 'start_date', 'end_date', 'is_active')`
+  );
+
+  const required = new Set(['title', 'start_date', 'end_date', 'is_active']);
+  for (const row of cols.rows) {
+    required.delete(row.column_name);
+  }
+  if (required.size > 0) return null;
+
   const result = await q(
     `SELECT title, start_date, end_date FROM blackout_dates
      WHERE is_active = TRUE

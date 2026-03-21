@@ -30,18 +30,19 @@ export async function GET(
     const eventId = searchParams.get('eventId');
 
     // Build unified query: registrations + ticket holders
-    // Note: Using separate queries and combining in JS is more resilient to schema variations
+    // Keep field names aligned with src/app/society/types.ts (EventParticipant).
     let participants: Array<{
       id: string;
       user_id: string;
       event_id: string;
-      full_name: string;
-      email: string;
-      avatar_url: string | null;
+      user_name: string;
+      user_email: string;
+      user_avatar: string | null;
       event_title: string;
-      type: string;
+      registration_type: 'REGISTRATION' | 'TICKET';
       status: string;
       checked_in: boolean;
+      check_in_time: string | null;
       registered_at: string;
     }> = [];
 
@@ -50,15 +51,19 @@ export async function GET(
       const regSql = `
         SELECT
           er.id, er.user_id, er.event_id,
-          u.full_name, u.email, u.avatar_url,
+          u.full_name AS user_name,
+          u.email AS user_email,
+          u.avatar_url AS user_avatar,
           e.title AS event_title,
-          'REGISTRATION' AS type,
-          CASE WHEN er.cancelled_at IS NOT NULL THEN 'CANCELLED' ELSE 'ACTIVE' END AS status,
-          FALSE AS checked_in,
+          'REGISTRATION' AS registration_type,
+          CASE WHEN er.cancelled_at IS NOT NULL THEN 'CANCELLED' ELSE 'APPROVED' END AS status,
+          (ea.id IS NOT NULL) AS checked_in,
+          ea.checked_in_at AS check_in_time,
           er.registered_at
         FROM event_registrations er
         JOIN users u ON er.user_id = u.id
         JOIN events e ON er.event_id = e.id
+        LEFT JOIN event_attendance ea ON ea.registration_id = er.id
         WHERE e.society_id = $1
         ${eventId ? 'AND er.event_id = $2' : ''}
         ORDER BY er.registered_at DESC
@@ -76,15 +81,19 @@ export async function GET(
       const ticketSql = `
         SELECT
           t.id, t.user_id, t.event_id,
-          u.full_name, u.email, u.avatar_url,
+          u.full_name AS user_name,
+          u.email AS user_email,
+          u.avatar_url AS user_avatar,
           e.title AS event_title,
-          'TICKET' AS type,
+          'TICKET' AS registration_type,
           t.status::TEXT AS status,
-          FALSE AS checked_in,
+          (ea.id IS NOT NULL OR t.checked_in_at IS NOT NULL) AS checked_in,
+          COALESCE(ea.checked_in_at, t.checked_in_at) AS check_in_time,
           t.purchased_at AS registered_at
         FROM tickets t
         JOIN users u ON t.user_id = u.id
         JOIN events e ON t.event_id = e.id
+        LEFT JOIN event_attendance ea ON ea.ticket_id = t.id
         WHERE e.society_id = $1
         ${eventId ? 'AND t.event_id = $2' : ''}
         ORDER BY t.purchased_at DESC
