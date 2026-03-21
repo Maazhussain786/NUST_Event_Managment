@@ -198,10 +198,76 @@ export function patchEvent(
   id: string,
   action: string,
   reason?: string,
-): Promise<{ success: boolean; status: string }> {
+): Promise<{ success: boolean; status?: string; is_pinned?: boolean }> {
   return api(`/api/admin/events/${id}`, {
     method: "PATCH",
     body: JSON.stringify({ action, reason }),
+  });
+}
+
+export function createEvent(data: {
+  title: string;
+  description?: string;
+  event_start: string;
+  event_end: string;
+  location?: string;
+  ticket_price?: number;
+  max_tickets?: number;
+  society_id: string;
+}): Promise<{ success: boolean; id: string }> {
+  return api("/api/admin/events", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteEvent(id: string): Promise<{ success: boolean }> {
+  return api(`/api/admin/events/${id}`, {
+    method: "DELETE",
+  });
+}
+
+export function uploadEventBanner(
+  eventId: string,
+  file: File,
+): Promise<{ success: boolean; data: { url: string } }> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  return fetch(`/api/upload/event-media?eventId=${eventId}&type=banner`, {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  }).then(async (res) => {
+    if (!res.ok) {
+      let body: ApiError;
+      try {
+        body = await res.json();
+      } catch {
+        body = { error: `HTTP ${res.status}` };
+      }
+      throw new PlatformApiError(res.status, body);
+    }
+    return res.json();
+  });
+}
+
+export function updateEvent(
+  id: string,
+  data: {
+    title?: string;
+    description?: string;
+    event_start?: string;
+    event_end?: string;
+    location?: string;
+    ticket_price?: number;
+    max_tickets?: number;
+    banner_url?: string;
+  },
+): Promise<{ success: boolean }> {
+  return api(`/api/admin/events/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
   });
 }
 
@@ -342,6 +408,7 @@ export function createUniversityEvent(data: {
   banner_url?: string;
   ticket_price?: number;
   max_tickets?: number;
+  society_id?: string;
   is_pinned?: boolean;
   priority_rank?: number;
 }): Promise<{ success: boolean; id: string }> {
@@ -440,6 +507,24 @@ export function createNotification(data: {
 }): Promise<{ success: boolean; id: string }> {
   return api("/api/admin/notifications", {
     method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateNotification(
+  id: string,
+  data: {
+    title: string;
+    body: string;
+    priority?: string;
+    target_type?: string;
+    target_id?: string;
+    scheduled_at?: string;
+    expires_at?: string;
+  },
+): Promise<{ success: boolean }> {
+  return api(`/api/admin/notifications/${id}`, {
+    method: "PATCH",
     body: JSON.stringify(data),
   });
 }

@@ -143,6 +143,7 @@ export interface AdminEvent {
   society_logo: string | null;
   created_by_name: string;
   created_at: string;
+  is_pinned?: boolean;
   participant_count?: string;
   waitlist_count?: string;
   revenue?: string;

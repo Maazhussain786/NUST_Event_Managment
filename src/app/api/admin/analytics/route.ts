@@ -1,4 +1,4 @@
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
 /**
  * GET /api/admin/analytics
@@ -7,15 +7,26 @@ export const dynamic = 'force-dynamic';
  * Returns aggregate statistics, trends, and top entities.
  */
 
-import { NextResponse } from 'next/server';
-import { query } from '@/lib/db';
-import { getCurrentUser } from '@/lib/auth';
+import { NextResponse } from "next/server";
+import { query } from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth";
+
+type QueryRows = { rows: Record<string, unknown>[] };
+
+async function safeQuery(sql: string): Promise<QueryRows> {
+  try {
+    return await query(sql);
+  } catch (error) {
+    console.error("Analytics subquery failed:", error);
+    return { rows: [] };
+  }
+}
 
 export async function GET() {
   try {
     const user = await getCurrentUser();
-    if (!user || user.userType !== 'SUPER_ADMIN') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (!user || user.userType !== "SUPER_ADMIN") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const [
@@ -30,7 +41,7 @@ export async function GET() {
       recentActivity,
     ] = await Promise.all([
       // User registrations by month (last 12 months)
-      query(`
+      safeQuery(`
         SELECT
           TO_CHAR(DATE_TRUNC('month', created_at), 'YYYY-MM') AS month,
           COUNT(*) AS count
@@ -41,7 +52,7 @@ export async function GET() {
       `),
 
       // Events created by month (last 12 months)
-      query(`
+      safeQuery(`
         SELECT
           TO_CHAR(DATE_TRUNC('month', created_at), 'YYYY-MM') AS month,
           COUNT(*) AS count
@@ -52,7 +63,7 @@ export async function GET() {
       `),
 
       // Events by status
-      query(`
+      safeQuery(`
         SELECT status, COUNT(*) AS count
         FROM events
         GROUP BY status
@@ -60,7 +71,7 @@ export async function GET() {
       `),
 
       // Societies by status
-      query(`
+      safeQuery(`
         SELECT status, COUNT(*) AS count
         FROM societies
         GROUP BY status
@@ -68,7 +79,7 @@ export async function GET() {
       `),
 
       // Top 10 societies by member count
-      query(`
+      safeQuery(`
         SELECT s.id, s.name, s.logo_url, s.status,
                COUNT(DISTINCT sm.user_id) AS member_count,
                COUNT(DISTINCT e.id) AS event_count
@@ -82,7 +93,7 @@ export async function GET() {
       `),
 
       // Registration stats
-      query(`
+      safeQuery(`
         SELECT
           COUNT(*) AS total_registrations,
           COUNT(CASE WHEN cancelled_at IS NULL THEN 1 END) AS active_registrations,
@@ -92,7 +103,7 @@ export async function GET() {
       `),
 
       // Revenue stats (paid tickets)
-      query(`
+      safeQuery(`
         SELECT
           COUNT(*) AS total_tickets,
           COUNT(CASE WHEN status = 'APPROVED' THEN 1 END) AS approved_tickets,
@@ -103,7 +114,7 @@ export async function GET() {
       `),
 
       // Storage overview from view
-      query(`
+      safeQuery(`
         SELECT
           COUNT(*) AS total_societies,
           SUM(storage_used_bytes) AS total_used_bytes,
@@ -114,7 +125,7 @@ export async function GET() {
       `),
 
       // Recent significant actions (last 20)
-      query(`
+      safeQuery(`
         SELECT al.id, al.action, al.created_at,
                u.full_name AS user_name,
                s.name AS society_name,
@@ -127,19 +138,44 @@ export async function GET() {
       `),
     ]);
 
+    const registrationDefaults = {
+      total_registrations: "0",
+      active_registrations: "0",
+      last_30_days: "0",
+      last_7_days: "0",
+    };
+
+    const revenueDefaults = {
+      total_tickets: "0",
+      approved_tickets: "0",
+      total_revenue: "0",
+      tickets_last_30_days: "0",
+    };
+
+    const storageDefaults = {
+      total_societies: "0",
+      total_used_bytes: "0",
+      total_quota_bytes: "0",
+      max_used_bytes: "0",
+      avg_used_bytes: "0",
+    };
+
     return NextResponse.json({
       userGrowth: userGrowth.rows,
       eventsByMonth: eventsByMonth.rows,
       eventsByStatus: eventsByStatus.rows,
       societiesByStatus: societiesByStatus.rows,
       topSocieties: topSocieties.rows,
-      registrationStats: registrationStats.rows[0],
-      revenueStats: revenueStats.rows[0],
-      storageOverview: storageOverview.rows[0],
+      registrationStats: registrationStats.rows[0] || registrationDefaults,
+      revenueStats: revenueStats.rows[0] || revenueDefaults,
+      storageOverview: storageOverview.rows[0] || storageDefaults,
       recentActivity: recentActivity.rows,
     });
   } catch (error) {
-    console.error('Analytics error:', error);
-    return NextResponse.json({ error: 'Failed to fetch analytics' }, { status: 500 });
+    console.error("Analytics error:", error);
+    return NextResponse.json(
+      { error: "Failed to fetch analytics" },
+      { status: 500 },
+    );
   }
 }

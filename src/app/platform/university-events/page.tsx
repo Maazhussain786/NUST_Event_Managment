@@ -26,13 +26,14 @@ import {
   StatusBadge,
 } from "../_components/Shared";
 import { StatCard } from "../_components/StatCard";
-import type { UniversityEvent } from "../types";
+import type { UniversityEvent, AdminSociety } from "../types";
 import {
   fetchUniversityEvents,
   createUniversityEvent,
   patchUniversityEvent,
   deleteUniversityEvent,
   uploadUniversityEventBanner,
+  fetchSocieties,
 } from "../api";
 
 export default function UniversityEventsPage() {
@@ -43,6 +44,7 @@ export default function UniversityEventsPage() {
   const [form, setForm] = useState({
     title: "",
     description: "",
+    society_id: "",
     event_start: "",
     event_end: "",
     location: "",
@@ -69,6 +71,7 @@ export default function UniversityEventsPage() {
   const [editBannerFile, setEditBannerFile] = useState<File | null>(null);
   const [editBannerPreview, setEditBannerPreview] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [societies, setSocieties] = useState<AdminSociety[]>([]);
 
   useEffect(() => {
     return () => {
@@ -98,10 +101,28 @@ export default function UniversityEventsPage() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    let active = true;
+    fetchSocieties("APPROVED")
+      .then((rows) => {
+        if (!active) return;
+        setSocieties(rows);
+      })
+      .catch(() => {
+        if (!active) return;
+        setSocieties([]);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const resetCreateForm = () => {
     setForm({
       title: "",
       description: "",
+      society_id: "",
       event_start: "",
       event_end: "",
       location: "",
@@ -128,6 +149,7 @@ export default function UniversityEventsPage() {
       const created = await createUniversityEvent({
         title: form.title,
         description: form.description || undefined,
+        society_id: form.society_id || undefined,
         event_start: form.event_start,
         event_end: form.event_end,
         location: form.location || undefined,
@@ -365,6 +387,21 @@ export default function UniversityEventsPage() {
                   setForm({ ...form, description: e.target.value })
                 }
               />
+
+              <select
+                className="input-field w-full"
+                value={form.society_id}
+                onChange={(e) =>
+                  setForm({ ...form, society_id: e.target.value })
+                }
+              >
+                <option value="">Select host society (optional)</option>
+                {societies.map((soc) => (
+                  <option key={soc.id} value={soc.id}>
+                    {soc.name}
+                  </option>
+                ))}
+              </select>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
