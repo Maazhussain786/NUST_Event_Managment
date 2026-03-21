@@ -140,13 +140,8 @@ export function createSocietyEvent(
   };
 
   return api(`${s(societyId)}/events`, {
-<<<<<<< HEAD
     method: "POST",
-    body: JSON.stringify(data),
-=======
-    method: 'POST',
     body: JSON.stringify(payload),
->>>>>>> main
   });
 }
 
