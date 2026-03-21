@@ -2,12 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Calendar, MapPin, Clock, Users, Star, Ticket, Heart, Share2, Loader2 } from 'lucide-react';
+import { ArrowLeft, Calendar, MapPin, Clock, Users, Star, Ticket, Heart, Share2, Loader2, CheckCircle2 } from 'lucide-react';
 import { useRouter, useParams } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
+import { toast } from 'sonner';
 import { useAuth } from '@/components/AuthProvider';
-import { useToast } from '@/components/ToastProvider';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -24,7 +24,10 @@ interface EventDetail {
   event_start: string;
   event_end: string;
   ticket_price: number;
-  max_tickets: number;
+  max_tickets: number | null;
+  max_participants: number | null;
+  participants_count: number;
+  tickets_reserved: number;
   registration_end: string;
   category_name: string;
   society_id: string;
@@ -34,6 +37,12 @@ interface EventDetail {
   avg_rating: number;
   rating_count: number;
   is_cancelled: boolean;
+}
+
+interface UserRegistration {
+  hasTicket: boolean;
+  status?: string;
+  ticketId?: string;
 }
 
 function EventDetailSkeleton() {
@@ -63,8 +72,8 @@ export default function EventDetailPage() {
   const router = useRouter();
   const params = useParams();
   const { requireAuth } = useAuth();
-  const toast = useToast();
   const [event, setEvent] = useState<EventDetail | null>(null);
+  const [userRegistration, setUserRegistration] = useState<UserRegistration>({ hasTicket: false });
   const [loading, setLoading] = useState(true);
   const [isFavorite, setIsFavorite] = useState(false);
   const [registering, setRegistering] = useState(false);
@@ -72,7 +81,12 @@ export default function EventDetailPage() {
   useEffect(() => {
     fetch(`/api/events/${params.id}`)
       .then((r) => r.json())
-      .then((data) => setEvent(data.event))
+      .then((data) => {
+        setEvent(data.event);
+        if (data.userRegistration) {
+          setUserRegistration(data.userRegistration);
+        }
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [params.id]);
@@ -98,17 +112,17 @@ export default function EventDetailPage() {
 
       if (isFreeEvent) {
         if (data.waitlisted) {
-          toast.info('Added to Waitlist', `You're #${data.waitlist?.position} on the waitlist`);
+          toast.info('Added to Waitlist', { description: `You're #${data.waitlist?.position} on the waitlist` });
         } else {
-          toast.success('Registered!', `You're registered for "${event.title}"`);
+          toast.success('Registered!', { description: `You're registered for "${event.title}"` });
         }
       } else {
-        toast.success('Ticket Requested', 'Your ticket is pending approval by the society');
+        toast.success('Ticket Requested', { description: 'Your ticket is pending approval by the society' });
       }
 
       router.push('/tickets');
     } catch {
-      toast.error('Network Error', 'Please check your connection and try again');
+      toast.error('Network Error', { description: 'Please check your connection and try again' });
     } finally {
       setRegistering(false);
     }
@@ -128,9 +142,24 @@ export default function EventDetailPage() {
 
   const startDate = new Date(event.event_start);
   const endDate = new Date(event.event_end);
-  const spotsLeft = event.max_tickets - parseInt(String(event.tickets_sold));
+
+  // Calculate spots left based on event type
+  // For paid events: use max_tickets and tickets_reserved (pending + approved)
+  // For free events: use max_participants and participants_count
   const isFree = !event.is_paid;
+  const maxCapacity = isFree ? event.max_participants : event.max_tickets;
+  const currentCount = isFree
+    ? event.participants_count
+    : parseInt(String(event.tickets_reserved || 0));
+  const spotsLeft = maxCapacity ? maxCapacity - currentCount : null;
+  const isSoldOut = spotsLeft !== null && spotsLeft <= 0;
   const isUpcoming = startDate > new Date();
+
+  // User registration status
+  const hasExistingTicket = userRegistration.hasTicket;
+  const ticketStatus = userRegistration.status;
+  const isTicketPending = ticketStatus === 'PENDING';
+  const isTicketApproved = ticketStatus === 'APPROVED';
 
   const formatDate = (d: Date) =>
     d.toLocaleDateString('en-PK', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
@@ -250,9 +279,9 @@ export default function EventDetailPage() {
             </div>
             <p className={cn(
               'text-body-sm font-semibold',
-              spotsLeft > 0 ? 'text-foreground' : 'text-destructive',
+              spotsLeft === null || spotsLeft > 0 ? 'text-foreground' : 'text-destructive',
             )}>
-              {spotsLeft > 0 ? `${spotsLeft} left` : 'Sold Out'}
+              {spotsLeft === null ? 'Unlimited' : spotsLeft > 0 ? `${spotsLeft} left` : 'Sold Out'}
             </p>
           </div>
         </div>
@@ -288,7 +317,7 @@ export default function EventDetailPage() {
       </div>
 
       {/* ── Fixed bottom CTA ── */}
-      {isUpcoming && spotsLeft > 0 && (
+      {isUpcoming && (
         <motion.footer
           initial={{ y: 100 }}
           animate={{ y: 0 }}
@@ -302,19 +331,51 @@ export default function EventDetailPage() {
                 {isFree ? 'Free' : `Rs. ${event.ticket_price}`}
               </p>
             </div>
-            <Button
-              size="lg"
-              className="rounded-xl px-8"
-              disabled={registering}
-              onClick={handleCTA}
-            >
-              {registering ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <Ticket className="w-5 h-5" />
-              )}
-              {registering ? 'Processing…' : isFree ? 'Register' : 'Get Ticket'}
-            </Button>
+
+            {/* Already registered - show status */}
+            {hasExistingTicket ? (
+              <Button
+                size="lg"
+                className="rounded-xl px-8"
+                variant={isTicketApproved ? 'soft' : 'secondary'}
+                onClick={() => router.push(`/tickets/${userRegistration.ticketId}`)}
+              >
+                {isTicketPending ? (
+                  <>
+                    <Clock className="w-5 h-5" />
+                    Pending Approval
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-5 h-5" />
+                    View Ticket
+                  </>
+                )}
+              </Button>
+            ) : isSoldOut ? (
+              <Button
+                size="lg"
+                className="rounded-xl px-8"
+                variant="secondary"
+                disabled
+              >
+                Sold Out
+              </Button>
+            ) : (
+              <Button
+                size="lg"
+                className="rounded-xl px-8"
+                disabled={registering}
+                onClick={handleCTA}
+              >
+                {registering ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Ticket className="w-5 h-5" />
+                )}
+                {registering ? 'Processing…' : isFree ? 'Register' : 'Get Ticket'}
+              </Button>
+            )}
           </div>
         </motion.footer>
       )}

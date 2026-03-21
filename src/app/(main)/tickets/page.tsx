@@ -232,10 +232,21 @@ export default function TicketsPage() {
 
       try {
         const r = await fetch('/api/tickets');
-        if (!r.ok) throw new Error('Failed to load tickets');
         const data = await r.json();
+
+        if (!r.ok) {
+          // Handle specific error cases
+          if (r.status === 401) {
+            setError('Please sign in to view your tickets');
+          } else {
+            setError(data.error || 'Failed to load tickets');
+          }
+          return;
+        }
+
         setTickets(Array.isArray(data) ? data : []);
       } catch (err: unknown) {
+        console.error('Tickets fetch error:', err);
         try {
           const cached = await getCachedTickets();
           if (cached.length > 0) {
