@@ -1004,18 +1004,17 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION fn_regenerate_qr_on_transfer()
 RETURNS TRIGGER AS $$
 BEGIN
-    -- Deactivate old QR codes
+    -- Deactivate old QR codes for prior owner.
+    -- A fresh signed QR is generated lazily by application APIs using src/lib/qr.ts.
     UPDATE ticket_qr_codes
     SET is_active = FALSE
     WHERE ticket_id = NEW.ticket_id AND is_active = TRUE;
 
-    -- Generate new QR code
-    INSERT INTO ticket_qr_codes (ticket_id, qr_data, is_active)
-    VALUES (NEW.ticket_id, encode(gen_random_bytes(32), 'hex'), TRUE);
-
-    -- Update ticket ownership
+    -- Update ticket ownership; checked_in_at is reset for safety.
     UPDATE tickets
-    SET user_id = NEW.to_user_id, updated_at = NOW()
+    SET user_id = NEW.to_user_id,
+        checked_in_at = NULL,
+        updated_at = NOW()
     WHERE id = NEW.ticket_id;
 
     RETURN NEW;

@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getClient } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
-import { generateQrPayload } from '@/lib/qr';
+import { generateQrPayload, verifyQrPayload } from '@/lib/qr';
 
 /**
  * POST /api/events/[id]/generate-qr
@@ -73,16 +73,33 @@ export async function POST(
          WHERE ticket_id = $1 AND is_active = TRUE`,
         [ticketId]
       );
+
       if (existingQr.rows.length > 0) {
-        await client.query('ROLLBACK');
-        return NextResponse.json({
-          success: true,
-          qr: {
-            id: existingQr.rows[0].id,
-            payload: existingQr.rows[0].qr_data,
-            type: 'TICKET',
-          },
-        });
+        const parsed = verifyQrPayload(existingQr.rows[0].qr_data);
+        const isValid = !!parsed
+          && parsed.type === 'T'
+          && parsed.id === ticketId
+          && parsed.eventId === eventId
+          && parsed.userId === user.userId;
+
+        if (isValid) {
+          await client.query('ROLLBACK');
+          return NextResponse.json({
+            success: true,
+            qr: {
+              id: existingQr.rows[0].id,
+              payload: existingQr.rows[0].qr_data,
+              type: 'TICKET',
+            },
+          });
+        }
+
+        await client.query(
+          `UPDATE ticket_qr_codes
+           SET is_active = FALSE
+           WHERE ticket_id = $1 AND is_active = TRUE`,
+          [ticketId]
+        );
       }
 
       // Generate new QR
@@ -120,8 +137,8 @@ export async function POST(
       );
       if (regResult.rows.length === 0) {
         await client.query('ROLLBACK');
-        return NextResponse.json(
-          { error: 'No active registration found. Register first.' },
+        return NextResponse.json({
+          error: 'No active registration found. Register first.' },
           { status: 404 }
         );
       }
@@ -134,16 +151,33 @@ export async function POST(
          WHERE registration_id = $1 AND is_active = TRUE`,
         [registrationId]
       );
+
       if (existingQr.rows.length > 0) {
-        await client.query('ROLLBACK');
-        return NextResponse.json({
-          success: true,
-          qr: {
-            id: existingQr.rows[0].id,
-            payload: existingQr.rows[0].qr_data,
-            type: 'REGISTRATION',
-          },
-        });
+        const parsed = verifyQrPayload(existingQr.rows[0].qr_data);
+        const isValid = !!parsed
+          && parsed.type === 'R'
+          && parsed.id === registrationId
+          && parsed.eventId === eventId
+          && parsed.userId === user.userId;
+
+        if (isValid) {
+          await client.query('ROLLBACK');
+          return NextResponse.json({
+            success: true,
+            qr: {
+              id: existingQr.rows[0].id,
+              payload: existingQr.rows[0].qr_data,
+              type: 'REGISTRATION',
+            },
+          });
+        }
+
+        await client.query(
+          `UPDATE ticket_qr_codes
+           SET is_active = FALSE
+           WHERE registration_id = $1 AND is_active = TRUE`,
+          [registrationId]
+        );
       }
 
       // Generate new QR

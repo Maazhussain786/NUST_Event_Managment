@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
-import { generateQrPayload } from '@/lib/qr';
+import { generateQrPayload, verifyQrPayload } from '@/lib/qr';
 import { getClient } from '@/lib/db';
 
 /**
@@ -24,7 +24,7 @@ export async function GET(
 
     const { id } = await params;
 
-    // Detect schema drift: older deployments may not have tickets.ticket_number yet.
+    // Detect schema drift: older deployments may not have tickets.ticket_number.
     const ticketNumberColumn = await query(
       `SELECT 1
        FROM information_schema.columns
@@ -39,7 +39,6 @@ export async function GET(
       : `'TICKET-' || SUBSTRING(t.id::text, 1, 8)`;
 
     // First try to find as a paid ticket.
-    // This must not block free-registration fallback if paid-ticket schema differs.
     let result: { rows: any[] } = { rows: [] };
     try {
       result = await query(
@@ -59,6 +58,7 @@ export async function GET(
           s.name AS society_name,
           s.id AS society_id,
           s.logo_url AS society_logo,
+          t.user_id AS owner_user_id,
           u.full_name AS attendee_name,
           u.email AS attendee_email,
           qr.qr_data,
@@ -77,7 +77,7 @@ export async function GET(
     }
 
     let ticket = result.rows[0];
-    let sourceType = 'TICKET';
+    let sourceType: 'ticket' | 'registration' = 'ticket';
 
     // If not found as paid ticket, try as free registration
     if (!ticket) {
@@ -99,20 +99,22 @@ export async function GET(
             s.name AS society_name,
             s.id AS society_id,
             s.logo_url AS society_logo,
+            er.user_id AS owner_user_id,
             u.full_name AS attendee_name,
             u.email AS attendee_email,
-            NULL AS qr_data,
+            qr.qr_data,
             NULL AS scanned_at,
             'registration' AS source_type
           FROM event_registrations er
           JOIN events e ON er.event_id = e.id
           JOIN societies s ON e.society_id = s.id
           JOIN users u ON er.user_id = u.id
+          LEFT JOIN ticket_qr_codes qr ON qr.registration_id = er.id AND qr.is_active = TRUE
           WHERE er.id = $1 AND er.user_id = $2 AND er.cancelled_at IS NULL`,
           [id, user.userId]
         );
         ticket = result.rows[0];
-        sourceType = 'REGISTRATION';
+        sourceType = 'registration';
       } catch (regErr) {
         console.error('Error fetching registration:', regErr);
       }
@@ -122,33 +124,62 @@ export async function GET(
       return NextResponse.json({ error: 'Ticket not found' }, { status: 404 });
     }
 
-    // Auto-generate QR if ticket is approved and no QR exists
-    // Note: QR generation for free registrations requires the registration_id column in ticket_qr_codes
-    if (ticket.status === 'APPROVED' && !ticket.qr_data && sourceType === 'TICKET') {
+    const expectedType = sourceType === 'ticket' ? 'T' : 'R';
+    const shouldHaveQr = ticket.status === 'APPROVED' && !ticket.is_cancelled;
+    const parsedQr = ticket.qr_data ? verifyQrPayload(ticket.qr_data) : null;
+    const isQrValid = !!parsedQr
+      && parsedQr.type === expectedType
+      && parsedQr.id === ticket.id
+      && parsedQr.eventId === ticket.event_id
+      && parsedQr.userId === ticket.owner_user_id;
+
+    // Ensure one valid signed active QR exists for eligible ticket/registration entries.
+    if (shouldHaveQr && !isQrValid) {
       const client = await getClient();
       try {
         await client.query('BEGIN');
 
         const qrPayload = generateQrPayload({
-          type: 'T',
+          type: expectedType,
           id: ticket.id,
           eventId: ticket.event_id,
-          userId: user.userId,
+          userId: ticket.owner_user_id,
         });
 
-        await client.query(
-          `INSERT INTO ticket_qr_codes (ticket_id, qr_data, is_active)
-           VALUES ($1, $2, TRUE)
-           ON CONFLICT DO NOTHING`,
-          [ticket.id, qrPayload]
-        );
+        if (sourceType === 'ticket') {
+          await client.query(
+            `UPDATE ticket_qr_codes
+             SET is_active = FALSE
+             WHERE ticket_id = $1 AND is_active = TRUE`,
+            [ticket.id]
+          );
+
+          await client.query(
+            `INSERT INTO ticket_qr_codes (ticket_id, qr_data, is_active)
+             VALUES ($1, $2, TRUE)`,
+            [ticket.id, qrPayload]
+          );
+        } else {
+          await client.query(
+            `UPDATE ticket_qr_codes
+             SET is_active = FALSE
+             WHERE registration_id = $1 AND is_active = TRUE`,
+            [ticket.id]
+          );
+
+          await client.query(
+            `INSERT INTO ticket_qr_codes (registration_id, qr_data, is_active)
+             VALUES ($1, $2, TRUE)`,
+            [ticket.id, qrPayload]
+          );
+        }
 
         await client.query('COMMIT');
         ticket.qr_data = qrPayload;
       } catch (qrErr) {
         await client.query('ROLLBACK');
         console.error('QR auto-generation error:', qrErr);
-        // Non-fatal — ticket is still returned without QR
+        // Non-fatal: return ticket details even if QR refresh fails.
       } finally {
         client.release();
       }

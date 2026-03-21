@@ -17,13 +17,26 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // First, try to get paid event tickets
+    const ticketNumberColumn = await query(
+      `SELECT 1
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'tickets'
+         AND column_name = 'ticket_number'
+       LIMIT 1`
+    );
+
+    const ticketNumberExpr = ticketNumberColumn.rows.length > 0
+      ? 't.ticket_number'
+      : `'TICKET-' || SUBSTRING(t.id::text, 1, 8)`;
+
+    // First, fetch paid event tickets.
     let paidTickets = [];
     try {
       const ticketsResult = await query(
         `SELECT
           t.id,
-          t.ticket_number,
+          ${ticketNumberExpr} AS ticket_number,
           t.status,
           t.purchased_at,
           e.id AS event_id,
@@ -37,7 +50,7 @@ export async function GET() {
           s.name AS society_name,
           s.logo_url AS society_logo,
           CASE WHEN qr.id IS NOT NULL THEN TRUE ELSE FALSE END AS has_qr,
-          'TICKET' AS source_type
+          'ticket' AS source_type
         FROM tickets t
         JOIN events e ON t.event_id = e.id
         JOIN societies s ON e.society_id = s.id
@@ -51,7 +64,7 @@ export async function GET() {
       console.error('Error fetching paid tickets:', ticketErr);
     }
 
-    // Then, try to get free event registrations
+    // Then, fetch free event registrations and their QR status.
     let freeRegistrations = [];
     try {
       const regResult = await query(
@@ -70,11 +83,12 @@ export async function GET() {
           e.is_cancelled,
           s.name AS society_name,
           s.logo_url AS society_logo,
-          FALSE AS has_qr,
-          'REGISTRATION' AS source_type
+          CASE WHEN qr.id IS NOT NULL THEN TRUE ELSE FALSE END AS has_qr,
+          'registration' AS source_type
         FROM event_registrations er
         JOIN events e ON er.event_id = e.id
         JOIN societies s ON e.society_id = s.id
+        LEFT JOIN ticket_qr_codes qr ON qr.registration_id = er.id AND qr.is_active = TRUE
         WHERE er.user_id = $1
           AND er.cancelled_at IS NULL`,
         [user.userId]

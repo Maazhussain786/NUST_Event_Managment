@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getClient } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { generateQrPayload } from '@/lib/qr';
 
 /**
  * POST /api/events/[id]/register
@@ -214,6 +215,32 @@ export async function POST(
         [eventId, user.userId]
       );
       registrationId = newReg.rows[0].id;
+    }
+
+    // Ensure active signed QR exists for free registration entry flow.
+    try {
+      const qrPayload = generateQrPayload({
+        type: 'R',
+        id: registrationId,
+        eventId,
+        userId: user.userId,
+      });
+
+      await client.query(
+        `UPDATE ticket_qr_codes
+         SET is_active = FALSE
+         WHERE registration_id = $1 AND is_active = TRUE`,
+        [registrationId]
+      );
+
+      await client.query(
+        `INSERT INTO ticket_qr_codes (registration_id, qr_data, is_active)
+         VALUES ($1, $2, TRUE)`,
+        [registrationId, qrPayload]
+      );
+    } catch (qrErr) {
+      // Registration itself remains valid even if QR persistence fails.
+      console.error('Free registration QR generation error:', qrErr);
     }
 
     // ── Audit log ─────────────────────────────────────────────────────
