@@ -1,14 +1,16 @@
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
-import { NextResponse } from 'next/server';
-import { query } from '@/lib/db';
-import { getCurrentUser } from '@/lib/auth';
+import { NextResponse } from "next/server";
+import { query } from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth";
+import { CONTAINERS, extractBlobName, generateReadUrl } from "@/lib/blob";
 
 // GET /api/my-societies — societies where current user has an active role + pending registrations
 export async function GET() {
   try {
     const user = await getCurrentUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!user)
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     // 1) Societies where user has an active membership (approved societies)
     const memberResult = await query(
@@ -26,7 +28,7 @@ export async function GET() {
        WHERE sm.user_id = $1 AND sm.is_active = TRUE AND s.status = 'APPROVED'
        GROUP BY s.id, r.name, r.hierarchy_level, sm.wing_id, w.name, sm.portfolio_id, p.name
        ORDER BY r.hierarchy_level DESC`,
-      [user.userId]
+      [user.userId],
     );
 
     // 2) Societies created by user that are still PENDING or REJECTED (not yet in memberships)
@@ -40,15 +42,28 @@ export async function GET() {
        FROM societies s
        WHERE s.created_by = $1 AND s.status IN ('PENDING', 'REJECTED')
        ORDER BY s.created_at DESC`,
-      [user.userId]
+      [user.userId],
     );
 
     // Combine: pending registrations first, then active memberships
-    const combined = [...pendingResult.rows, ...memberResult.rows];
+    const combined = [...pendingResult.rows, ...memberResult.rows].map(
+      (row) => {
+        const logoBlob = row.logo_url
+          ? extractBlobName(row.logo_url, CONTAINERS.SOCIETY_MEDIA)
+          : null;
+
+        return {
+          ...row,
+          logo_url: logoBlob
+            ? generateReadUrl(CONTAINERS.SOCIETY_MEDIA, logoBlob, 24 * 60)
+            : row.logo_url,
+        };
+      },
+    );
 
     return NextResponse.json(combined);
   } catch (error) {
-    console.error('My societies error:', error);
-    return NextResponse.json({ error: 'Failed' }, { status: 500 });
+    console.error("My societies error:", error);
+    return NextResponse.json({ error: "Failed" }, { status: 500 });
   }
 }

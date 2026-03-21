@@ -1,12 +1,13 @@
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
-import { NextResponse } from 'next/server';
-import { query } from '@/lib/db';
-import { getCurrentUser } from '@/lib/auth';
+import { NextResponse } from "next/server";
+import { query } from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth";
+import { CONTAINERS, extractBlobName, generateReadUrl } from "@/lib/blob";
 
 export async function GET(
   req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const { id } = await params;
@@ -32,24 +33,44 @@ export async function GET(
        LEFT JOIN ratings r ON r.target_type = 'EVENT' AND r.target_id = e.id
        WHERE e.id = $1 AND e.deleted_at IS NULL
        GROUP BY e.id, ec.name, s.id`,
-      [id]
+      [id],
     );
 
     if (result.rows.length === 0) {
-      return NextResponse.json({ error: 'Event not found' }, { status: 404 });
+      return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
 
-    const event = result.rows[0];
+    const rawEvent = result.rows[0];
+    const bannerBlob = rawEvent.banner_url
+      ? extractBlobName(rawEvent.banner_url, CONTAINERS.EVENT_MEDIA)
+      : null;
+    const logoBlob = rawEvent.society_logo
+      ? extractBlobName(rawEvent.society_logo, CONTAINERS.SOCIETY_MEDIA)
+      : null;
+
+    const event = {
+      ...rawEvent,
+      banner_url: bannerBlob
+        ? generateReadUrl(CONTAINERS.EVENT_MEDIA, bannerBlob, 24 * 60)
+        : rawEvent.banner_url,
+      society_logo: logoBlob
+        ? generateReadUrl(CONTAINERS.SOCIETY_MEDIA, logoBlob, 24 * 60)
+        : rawEvent.society_logo,
+    };
 
     // Check if current user already has a ticket/registration
-    let userRegistrationStatus: { hasTicket: boolean; status?: string; ticketId?: string } = { hasTicket: false };
+    let userRegistrationStatus: {
+      hasTicket: boolean;
+      status?: string;
+      ticketId?: string;
+    } = { hasTicket: false };
 
     if (user) {
       if (event.is_paid) {
         // Check for existing ticket
         const ticketCheck = await query(
           `SELECT id, status FROM tickets WHERE event_id = $1 AND user_id = $2 AND status != 'CANCELLED'`,
-          [id, user.userId]
+          [id, user.userId],
         );
         if (ticketCheck.rows.length > 0) {
           userRegistrationStatus = {
@@ -62,12 +83,12 @@ export async function GET(
         // Check for existing registration (free event)
         const regCheck = await query(
           `SELECT id FROM event_registrations WHERE event_id = $1 AND user_id = $2 AND cancelled_at IS NULL`,
-          [id, user.userId]
+          [id, user.userId],
         );
         if (regCheck.rows.length > 0) {
           userRegistrationStatus = {
             hasTicket: true,
-            status: 'APPROVED',
+            status: "APPROVED",
             ticketId: regCheck.rows[0].id,
           };
         }
@@ -79,7 +100,8 @@ export async function GET(
       userRegistration: userRegistrationStatus,
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Failed to fetch event';
+    const message =
+      error instanceof Error ? error.message : "Failed to fetch event";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

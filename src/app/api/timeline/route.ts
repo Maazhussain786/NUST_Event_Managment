@@ -1,11 +1,13 @@
-import { NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { NextResponse } from "next/server";
+import { query } from "@/lib/db";
+import { CONTAINERS, extractBlobName, generateReadUrl } from "@/lib/blob";
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const from = searchParams.get('from') || new Date().toISOString().split('T')[0];
-    const days = parseInt(searchParams.get('days') || '30');
+    const from =
+      searchParams.get("from") || new Date().toISOString().split("T")[0];
+    const days = parseInt(searchParams.get("days") || "30");
 
     const toDate = new Date(from);
     toDate.setDate(toDate.getDate() + days);
@@ -23,14 +25,33 @@ export async function GET(req: Request) {
          AND DATE(e.event_start) >= $1
          AND DATE(e.event_start) <= $2
        ORDER BY e.event_start ASC`,
-      [from, toDate.toISOString().split('T')[0]]
+      [from, toDate.toISOString().split("T")[0]],
     );
+
+    const signedRows = result.rows.map((row) => {
+      const bannerBlob = row.banner_url
+        ? extractBlobName(row.banner_url, CONTAINERS.EVENT_MEDIA)
+        : null;
+      const logoBlob = row.society_logo
+        ? extractBlobName(row.society_logo, CONTAINERS.SOCIETY_MEDIA)
+        : null;
+
+      return {
+        ...row,
+        banner_url: bannerBlob
+          ? generateReadUrl(CONTAINERS.EVENT_MEDIA, bannerBlob, 24 * 60)
+          : row.banner_url,
+        society_logo: logoBlob
+          ? generateReadUrl(CONTAINERS.SOCIETY_MEDIA, logoBlob, 24 * 60)
+          : row.society_logo,
+      };
+    });
 
     // Group events by date
     const grouped: Record<string, typeof result.rows> = {};
     const dates: string[] = [];
 
-    result.rows.forEach((event) => {
+    signedRows.forEach((event) => {
       const date = event.event_date;
       if (!grouped[date]) {
         grouped[date] = [];
@@ -39,9 +60,14 @@ export async function GET(req: Request) {
       grouped[date].push(event);
     });
 
-    return NextResponse.json({ dates, events: grouped, total: result.rows.length });
+    return NextResponse.json({
+      dates,
+      events: grouped,
+      total: signedRows.length,
+    });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Failed to fetch timeline';
+    const message =
+      error instanceof Error ? error.message : "Failed to fetch timeline";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

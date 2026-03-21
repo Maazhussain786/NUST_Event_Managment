@@ -1,12 +1,36 @@
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
-import { NextRequest, NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { NextRequest, NextResponse } from "next/server";
+import { query } from "@/lib/db";
+import { CONTAINERS, extractBlobName, generateReadUrl } from "@/lib/blob";
+
+function signMediaUrl(
+  url: string | null | undefined,
+): string | null | undefined {
+  if (!url) return url;
+
+  const candidates = [
+    CONTAINERS.EVENT_MEDIA,
+    CONTAINERS.SOCIETY_MEDIA,
+    CONTAINERS.PROFILE_PICTURES,
+    CONTAINERS.POST_ATTACHMENTS,
+    CONTAINERS.NOTE_ATTACHMENTS,
+  ];
+
+  for (const container of candidates) {
+    const blobName = extractBlobName(url, container);
+    if (blobName) {
+      return generateReadUrl(container, blobName, 24 * 60);
+    }
+  }
+
+  return url;
+}
 
 // GET /api/societies/[id]/public — public society profile (no auth)
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { id: string } },
 ) {
   try {
     const { id } = params;
@@ -25,11 +49,11 @@ export async function GET(
        LEFT JOIN ratings r ON r.target_type = 'SOCIETY' AND r.target_id = s.id
        WHERE s.id = $1 AND s.status = 'APPROVED'
        GROUP BY s.id, ns.full_name, ns.abbreviation`,
-      [id]
+      [id],
     );
 
     if (societyResult.rows.length === 0) {
-      return NextResponse.json({ error: 'Society not found' }, { status: 404 });
+      return NextResponse.json({ error: "Society not found" }, { status: 404 });
     }
 
     // Profile branding (may not exist yet)
@@ -38,14 +62,22 @@ export async function GET(
               contact_email, contact_phone, office_location, social_links,
               primary_color, accent_color, pin_announcement, featured_event_id, is_public
        FROM society_profiles WHERE society_id = $1`,
-      [id]
+      [id],
     );
 
-    const profile = profileResult.rows[0] || null;
+    const profile = profileResult.rows[0]
+      ? {
+          ...profileResult.rows[0],
+          cover_url: signMediaUrl(profileResult.rows[0].cover_url),
+        }
+      : null;
 
     // If profile exists and is_public = false, deny access
     if (profile && profile.is_public === false) {
-      return NextResponse.json({ error: 'This society page is private' }, { status: 403 });
+      return NextResponse.json(
+        { error: "This society page is private" },
+        { status: 403 },
+      );
     }
 
     // Upcoming public events (max 12)
@@ -60,7 +92,7 @@ export async function GET(
        GROUP BY e.id
        ORDER BY e.event_start DESC
        LIMIT 12`,
-      [id]
+      [id],
     );
 
     // Team — public members (leadership roles only for public display)
@@ -75,7 +107,7 @@ export async function GET(
        LEFT JOIN portfolios p ON sm.portfolio_id = p.id
        WHERE sm.society_id = $1 AND sm.is_active = TRUE AND r.hierarchy_level >= 3
        ORDER BY r.hierarchy_level DESC, u.full_name ASC`,
-      [id]
+      [id],
     );
 
     // Gallery — public content
@@ -87,7 +119,7 @@ export async function GET(
        WHERE c.society_id = $1 AND c.scope = 'SOCIETY'
        ORDER BY c.created_at DESC
        LIMIT 24`,
-      [id]
+      [id],
     );
 
     // Wings
@@ -99,19 +131,42 @@ export async function GET(
        WHERE w.society_id = $1
        GROUP BY w.id
        ORDER BY w.name`,
-      [id]
+      [id],
     );
 
+    const society = {
+      ...societyResult.rows[0],
+      logo_url: signMediaUrl(societyResult.rows[0].logo_url),
+    };
+
+    const events = eventsResult.rows.map((row) => ({
+      ...row,
+      banner_url: signMediaUrl(row.banner_url),
+    }));
+
+    const team = teamResult.rows.map((row) => ({
+      ...row,
+      avatar_url: signMediaUrl(row.avatar_url),
+    }));
+
+    const gallery = galleryResult.rows.map((row) => ({
+      ...row,
+      file_url: signMediaUrl(row.file_url),
+    }));
+
     return NextResponse.json({
-      society: societyResult.rows[0],
+      society,
       profile,
-      events: eventsResult.rows,
-      team: teamResult.rows,
-      gallery: galleryResult.rows,
+      events,
+      team,
+      gallery,
       wings: wingsResult.rows,
     });
   } catch (error: unknown) {
-    console.error('Public society fetch error:', error);
-    return NextResponse.json({ error: 'Failed to fetch society' }, { status: 500 });
+    console.error("Public society fetch error:", error);
+    return NextResponse.json(
+      { error: "Failed to fetch society" },
+      { status: 500 },
+    );
   }
 }
