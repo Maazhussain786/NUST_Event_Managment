@@ -3,6 +3,28 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { CONTAINERS, extractBlobName, generateReadUrl } from '@/lib/blob';
+
+function signMediaUrl(url: string | null | undefined): string | null | undefined {
+  if (!url) return url;
+
+  const candidates = [
+    CONTAINERS.SOCIETY_MEDIA,
+    CONTAINERS.EVENT_MEDIA,
+    CONTAINERS.POST_ATTACHMENTS,
+    CONTAINERS.NOTE_ATTACHMENTS,
+    CONTAINERS.PROFILE_PICTURES,
+  ];
+
+  for (const container of candidates) {
+    const blobName = extractBlobName(url, container);
+    if (blobName) {
+      return generateReadUrl(container, blobName, 24 * 60);
+    }
+  }
+
+  return url;
+}
 
 // GET /api/societies/[id]/governance/storage — storage usage + media list
 export async function GET(
@@ -74,10 +96,11 @@ export async function GET(
       percent_used: quota > 0 ? Number(((Number(used) / Number(quota)) * 100).toFixed(1)) : 0,
       media_items: allMedia.map((m: any) => ({
         id: m.id,
-        file_url: m.file_url,
+        file_url: signMediaUrl(m.file_url),
         file_name: m.file_name || '',
         file_size: Number(m.file_size_bytes || 0),
         media_type: m.mime_type || '',
+        media_table: m.source === 'event' ? 'event_media' : 'society_media',
         uploaded_by_name: m.uploaded_by_name || 'Unknown',
         uploaded_at: m.created_at,
         category: m.category || 'gallery',

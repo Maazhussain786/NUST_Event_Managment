@@ -4,6 +4,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
+async function safeQuery(sql: string, params: unknown[]) {
+  try {
+    return await query(sql, params);
+  } catch (error) {
+    console.warn('Analytics subquery failed; using fallback:', error);
+    return { rows: [] as any[] };
+  }
+}
+
 // GET /api/societies/[id]/governance/analytics — society analytics dashboard
 export async function GET(
   req: NextRequest,
@@ -30,18 +39,10 @@ export async function GET(
       return NextResponse.json({ error: 'Insufficient privileges' }, { status: 403 });
     }
 
-    // Run all analytics queries in parallel
-    const [
-      memberGrowth,
-      eventsByMonth,
-      eventsByStatus,
-      topEvents,
-      registrationStats,
-      revenueByMonth,
-      checkInStats
-    ] = await Promise.all([
-      // Member growth (last 12 months)
-      query(
+    // Run analytics queries with safe fallbacks so one schema mismatch
+    // does not fail the whole page.
+    const [memberGrowth, eventsByMonth, registrationStats, revenueByMonth, checkInStats] = await Promise.all([
+      safeQuery(
         `SELECT TO_CHAR(assigned_at, 'Mon YY') AS month,
                 COUNT(*) AS count
          FROM society_memberships
@@ -51,8 +52,7 @@ export async function GET(
          ORDER BY DATE_TRUNC('month', assigned_at) ASC`,
         [societyId]
       ),
-      // Events by month (last 12 months)
-      query(
+      safeQuery(
         `SELECT TO_CHAR(event_start, 'Mon YY') AS month,
                 COUNT(*) AS count
          FROM events
@@ -62,30 +62,7 @@ export async function GET(
          ORDER BY DATE_TRUNC('month', event_start) ASC`,
         [societyId]
       ),
-      // Events by status
-      query(
-        `SELECT status, COUNT(*) AS count
-         FROM events WHERE society_id = $1
-         GROUP BY status ORDER BY count DESC`,
-        [societyId]
-      ),
-      // Top 10 events by participation
-      query(
-        `SELECT e.id, e.title,
-                COALESCE(e.participants_count, 0) AS participants,
-                COALESCE(SUM(CASE WHEN t.status = 'APPROVED' THEN e.ticket_price ELSE 0 END), 0) AS revenue,
-                COALESCE(AVG(ra.rating), 0) AS rating
-         FROM events e
-         LEFT JOIN tickets t ON e.id = t.event_id
-         LEFT JOIN ratings ra ON e.id = ra.event_id
-         WHERE e.society_id = $1
-         GROUP BY e.id, e.title, e.participants_count
-         ORDER BY participants DESC
-         LIMIT 10`,
-        [societyId]
-      ),
-      // Registration stats
-      query(
+      safeQuery(
         `SELECT
            COUNT(DISTINCT er.user_id) AS total,
            COUNT(DISTINCT er.user_id) FILTER (WHERE er.cancelled_at IS NULL) AS active,
@@ -97,8 +74,7 @@ export async function GET(
          WHERE e.society_id = $1`,
         [societyId]
       ),
-      // Revenue by month
-      query(
+      safeQuery(
         `SELECT TO_CHAR(t.approved_at, 'Mon YY') AS month,
                 SUM(e.ticket_price) AS revenue
          FROM tickets t
@@ -109,8 +85,7 @@ export async function GET(
          ORDER BY DATE_TRUNC('month', t.approved_at) ASC`,
         [societyId]
       ),
-      // Check-in rate
-      query(
+      safeQuery(
         `SELECT
            COUNT(DISTINCT ea.user_id) AS checked_in,
            GREATEST(
@@ -125,6 +100,67 @@ export async function GET(
         [societyId]
       ),
     ]);
+
+    // Events by status: try status column first, then derive from dates.
+    let eventsByStatus = await safeQuery(
+      `SELECT status, COUNT(*) AS count
+       FROM events WHERE society_id = $1
+       GROUP BY status ORDER BY count DESC`,
+      [societyId]
+    );
+
+    if (eventsByStatus.rows.length === 0) {
+      eventsByStatus = await safeQuery(
+        `SELECT
+           CASE
+             WHEN is_cancelled = TRUE THEN 'CANCELLED'
+             WHEN NOW() < event_start THEN 'UPCOMING'
+             WHEN NOW() BETWEEN event_start AND event_end THEN 'ONGOING'
+             ELSE 'COMPLETED'
+           END AS status,
+           COUNT(*) AS count
+         FROM events
+         WHERE society_id = $1
+         GROUP BY 1
+         ORDER BY count DESC`,
+        [societyId]
+      );
+    }
+
+    // Top events: avoid dependency on participants_count and ratings table.
+    let topEvents = await safeQuery(
+      `SELECT e.id, e.title,
+              (
+                COALESCE((SELECT COUNT(*) FROM event_registrations er WHERE er.event_id = e.id AND er.cancelled_at IS NULL), 0)
+                +
+                COALESCE((SELECT COUNT(*) FROM tickets t2 WHERE t2.event_id = e.id AND t2.status = 'APPROVED'), 0)
+              ) AS participants,
+              COALESCE((SELECT SUM(e.ticket_price) FROM tickets t3 WHERE t3.event_id = e.id AND t3.status = 'APPROVED'), 0) AS revenue,
+              COALESCE((SELECT AVG(ra.rating) FROM ratings ra WHERE ra.event_id = e.id), 0) AS rating
+       FROM events e
+       WHERE e.society_id = $1
+       ORDER BY participants DESC
+       LIMIT 10`,
+      [societyId]
+    );
+
+    if (topEvents.rows.length === 0) {
+      topEvents = await safeQuery(
+        `SELECT e.id, e.title,
+                (
+                  COALESCE((SELECT COUNT(*) FROM event_registrations er WHERE er.event_id = e.id AND er.cancelled_at IS NULL), 0)
+                  +
+                  COALESCE((SELECT COUNT(*) FROM tickets t2 WHERE t2.event_id = e.id AND t2.status = 'APPROVED'), 0)
+                ) AS participants,
+                COALESCE((SELECT SUM(e.ticket_price) FROM tickets t3 WHERE t3.event_id = e.id AND t3.status = 'APPROVED'), 0) AS revenue,
+                0 AS rating
+         FROM events e
+         WHERE e.society_id = $1
+         ORDER BY participants DESC
+         LIMIT 10`,
+        [societyId]
+      );
+    }
 
     const checkIn = checkInStats.rows[0];
     const checkInRate = Number(checkIn.total_registrations) > 0

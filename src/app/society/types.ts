@@ -248,6 +248,7 @@ export interface MediaItem {
   file_name: string;
   file_size: number;
   media_type: string;
+  media_table: 'society_media' | 'event_media' | 'post_attachments' | 'event_note_attachments';
   uploaded_by_name: string;
   uploaded_at: string;
   category: 'logo' | 'cover' | 'gallery' | 'event' | 'post' | 'note';

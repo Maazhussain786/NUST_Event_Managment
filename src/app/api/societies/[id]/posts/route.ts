@@ -3,6 +3,30 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { query, getClient } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { CONTAINERS, extractBlobName, generateReadUrl } from "@/lib/blob";
+
+function signMediaUrl(
+  url: string | null | undefined,
+): string | null | undefined {
+  if (!url) return url;
+
+  const candidates = [
+    CONTAINERS.SOCIETY_MEDIA,
+    CONTAINERS.EVENT_MEDIA,
+    CONTAINERS.POST_ATTACHMENTS,
+    CONTAINERS.NOTE_ATTACHMENTS,
+    CONTAINERS.PROFILE_PICTURES,
+  ];
+
+  for (const container of candidates) {
+    const blobName = extractBlobName(url, container);
+    if (blobName) {
+      return generateReadUrl(container, blobName, 24 * 60);
+    }
+  }
+
+  return url;
+}
 
 /**
  * GET /api/societies/[id]/posts?page=1&limit=20
@@ -63,7 +87,10 @@ export async function GET(
       );
       for (const img of imgResult.rows) {
         if (!images[img.post_id]) images[img.post_id] = [];
-        images[img.post_id].push(img);
+        images[img.post_id].push({
+          ...img,
+          file_url: signMediaUrl(img.file_url),
+        });
       }
     }
 
@@ -75,6 +102,8 @@ export async function GET(
 
     const posts = postsResult.rows.map((p) => ({
       ...p,
+      author_avatar: signMediaUrl(p.author_avatar),
+      shared_event_banner: signMediaUrl(p.shared_event_banner),
       images: images[p.id] || [],
     }));
 

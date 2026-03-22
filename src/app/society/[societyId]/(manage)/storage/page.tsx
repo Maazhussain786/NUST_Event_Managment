@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
-  HardDrive, Trash2, Image, File, AlertTriangle,
+  HardDrive, Trash2, File, AlertTriangle, LayoutGrid, List,
 } from 'lucide-react';
 import { fetchStorage, deleteMedia, SocietyApiError } from '../../../api';
 import { PageLoader, ErrorState, EmptyState, ConfirmDialog } from '../../../_components/Shared';
@@ -27,6 +27,9 @@ export default function StoragePage() {
   const [deleting, setDeleting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>('');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -53,9 +56,10 @@ export default function StoragePage() {
     if (!deleteTarget) return;
     try {
       setDeleting(true);
-      await deleteMedia(deleteTarget.id);
+      await deleteMedia(deleteTarget.id, deleteTarget.media_table);
       setToast('File deleted');
       setDeleteTarget(null);
+      setSelectedIds((prev) => prev.filter((id) => id !== deleteTarget.id));
       load();
     } catch (err) {
       if (err instanceof SocietyApiError) setToast(err.message);
@@ -63,6 +67,31 @@ export default function StoragePage() {
     } finally {
       setDeleting(false);
     }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!data || selectedIds.length === 0) return;
+
+    try {
+      setDeleting(true);
+      const selectedItems = data.media_items.filter((item) => selectedIds.includes(item.id));
+      await Promise.all(selectedItems.map((item) => deleteMedia(item.id, item.media_table)));
+      setToast(`${selectedItems.length} file(s) deleted`);
+      setConfirmBulkDelete(false);
+      setSelectedIds([]);
+      load();
+    } catch (err) {
+      if (err instanceof SocietyApiError) setToast(err.message);
+      else setToast('Bulk delete failed');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
   };
 
   useEffect(() => {
@@ -76,6 +105,19 @@ export default function StoragePage() {
   const filtered = categoryFilter
     ? data.media_items.filter(m => m.category === categoryFilter)
     : data.media_items;
+
+  const filteredIds = filtered.map((item) => item.id);
+  const allFilteredSelected =
+    filteredIds.length > 0 && filteredIds.every((id) => selectedIds.includes(id));
+
+  const toggleSelectAllFiltered = () => {
+    setSelectedIds((prev) => {
+      if (allFilteredSelected) {
+        return prev.filter((id) => !filteredIds.includes(id));
+      }
+      return Array.from(new Set([...prev, ...filteredIds]));
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -127,41 +169,98 @@ export default function StoragePage() {
         ))}
       </div>
 
+      {/* View + Selection Controls */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1 rounded-lg border border-themed p-1">
+          <button
+            onClick={() => setViewMode('grid')}
+            className={`btn-ghost px-2 py-1 text-xs ${viewMode === 'grid' ? 'bg-secondary' : ''}`}
+            title="Tiles view"
+          >
+            <LayoutGrid size={14} />
+          </button>
+          <button
+            onClick={() => setViewMode('list')}
+            className={`btn-ghost px-2 py-1 text-xs ${viewMode === 'list' ? 'bg-secondary' : ''}`}
+            title="List view"
+          >
+            <List size={14} />
+          </button>
+        </div>
+
+        <button
+          onClick={toggleSelectAllFiltered}
+          className="btn-ghost text-xs px-3 py-2"
+        >
+          {allFilteredSelected ? 'Unselect All' : 'Select All'}
+        </button>
+
+        {selectedIds.length > 0 && (
+          <button
+            onClick={() => setConfirmBulkDelete(true)}
+            className="bg-red-500 hover:bg-red-600 text-white text-xs px-3 py-2 rounded-lg font-medium"
+          >
+            Delete Selected ({selectedIds.length})
+          </button>
+        )}
+      </div>
+
       {/* Media list */}
       {filtered.length === 0 ? (
         <EmptyState message="No media files" />
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className={viewMode === 'grid' ? 'grid gap-3 sm:grid-cols-2 lg:grid-cols-3' : 'space-y-3'}>
           {filtered.map(item => (
-            <div key={item.id} className="card p-3">
-              {/* Preview */}
-              {item.media_type.startsWith('image') ? (
-                <div className="h-32 rounded-lg overflow-hidden mb-3 bg-secondary">
-                  <img src={item.file_url} alt={item.file_name} className="h-full w-full object-cover" />
+            <div key={item.id} className={`card p-3 ${viewMode === 'list' ? 'flex items-start gap-3' : ''}`}>
+              <div className="pt-1">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.includes(item.id)}
+                  onChange={() => toggleSelect(item.id)}
+                  className="h-4 w-4 rounded border-themed bg-transparent"
+                  aria-label={`Select ${item.file_name}`}
+                />
+              </div>
+
+              <div className={viewMode === 'list' ? 'w-28 flex-shrink-0' : 'w-full'}>
+                {item.media_type.startsWith('image') ? (
+                  <div className="h-32 rounded-lg overflow-hidden mb-3 bg-secondary">
+                    <img
+                      src={item.file_url}
+                      alt={item.file_name}
+                      className="h-full w-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.src = '/placeholder-event.jpg';
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div className="h-32 rounded-lg bg-secondary flex items-center justify-center mb-3">
+                    <File size={32} className="text-muted" />
+                  </div>
+                )}
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-primary truncate">{item.file_name}</p>
+                    <p className="text-xs text-muted">
+                      {formatBytes(item.file_size)} • {item.category}
+                    </p>
+                    <p className="text-xs text-muted">
+                      by {item.uploaded_by_name} •{' '}
+                      {new Date(item.uploaded_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setDeleteTarget(item)}
+                    className="btn-ghost text-xs px-2 py-1.5 text-red-500 hover:bg-red-500/10 flex-shrink-0"
+                    title="Delete"
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
-              ) : (
-                <div className="h-32 rounded-lg bg-secondary flex items-center justify-center mb-3">
-                  <File size={32} className="text-muted" />
-                </div>
-              )}
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-primary truncate">{item.file_name}</p>
-                  <p className="text-xs text-muted">
-                    {formatBytes(item.file_size)} • {item.category}
-                  </p>
-                  <p className="text-xs text-muted">
-                    by {item.uploaded_by_name} •{' '}
-                    {new Date(item.uploaded_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                  </p>
-                </div>
-                <button
-                  onClick={() => setDeleteTarget(item)}
-                  className="btn-ghost text-xs px-2 py-1.5 text-red-500 hover:bg-red-500/10 flex-shrink-0"
-                  title="Delete"
-                >
-                  <Trash2 size={14} />
-                </button>
               </div>
             </div>
           ))}
@@ -178,6 +277,17 @@ export default function StoragePage() {
         loading={deleting}
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
+      />
+
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        title="Delete Selected Files"
+        message={`Delete ${selectedIds.length} selected file(s)? This action cannot be undone.`}
+        confirmText="Delete Selected"
+        variant="danger"
+        loading={deleting}
+        onConfirm={handleBulkDelete}
+        onCancel={() => setConfirmBulkDelete(false)}
       />
 
       {/* Toast */}
