@@ -65,7 +65,11 @@ export default function SocietyEventsPage() {
   const [creating, setCreating] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [canCreateEvents, setCanCreateEvents] = useState(false);
-  const [isMemberView, setIsMemberView] = useState(true);
+  const [canEditEvents, setCanEditEvents] = useState(false);
+  const [canCancelEvents, setCanCancelEvents] = useState(false);
+  const [canDeleteEvents, setCanDeleteEvents] = useState(false);
+  const [canUploadMedia, setCanUploadMedia] = useState(false);
+  const [canScanQr, setCanScanQr] = useState(false);
   const [permissionsLoading, setPermissionsLoading] = useState(true);
 
   // Create form state
@@ -95,6 +99,7 @@ export default function SocietyEventsPage() {
     visibility: "PUBLIC",
     ticket_price: "",
     max_participants: "",
+    thumbnail_url: "",
     banner_url: "",
   });
   const [savingEdit, setSavingEdit] = useState(false);
@@ -141,11 +146,18 @@ export default function SocietyEventsPage() {
         setPermissionsLoading(true);
         const perms = await fetchMyPermissions(societyId);
         setCanCreateEvents(Boolean(perms.can_create_event));
-        setIsMemberView((perms.role_name || "").toLowerCase() === "member");
+        setCanEditEvents(Boolean(perms.can_edit_event));
+        setCanCancelEvents(Boolean(perms.can_cancel_event));
+        setCanDeleteEvents(Boolean(perms.can_delete_event));
+        setCanUploadMedia(Boolean(perms.can_upload_media));
+        setCanScanQr(Boolean(perms.can_scan_qr));
       } catch {
         setCanCreateEvents(false);
-        // Fail closed to member-safe view to avoid briefly exposing organizer controls.
-        setIsMemberView(true);
+        setCanEditEvents(false);
+        setCanCancelEvents(false);
+        setCanDeleteEvents(false);
+        setCanUploadMedia(false);
+        setCanScanQr(false);
       } finally {
         setPermissionsLoading(false);
       }
@@ -154,11 +166,14 @@ export default function SocietyEventsPage() {
     loadPermissions();
   }, [societyId]);
 
+  const canManageEvents =
+    canCreateEvents || canEditEvents || canCancelEvents || canDeleteEvents;
+
   useEffect(() => {
-    if (isMemberView && (filter === "PENDING" || filter === "CANCELLED")) {
+    if (!canManageEvents && (filter === "PENDING" || filter === "CANCELLED")) {
       setFilter("ALL");
     }
-  }, [isMemberView, filter]);
+  }, [canManageEvents, filter]);
 
   const handleCreate = async () => {
     if (!form.title || !form.event_start) {
@@ -236,6 +251,7 @@ export default function SocietyEventsPage() {
       max_participants: evt.max_participants
         ? String(evt.max_participants)
         : "",
+      thumbnail_url: evt.thumbnail_url || "",
       banner_url: evt.banner_url || "",
     });
     setMenuEvent(null);
@@ -320,7 +336,9 @@ export default function SocietyEventsPage() {
       const result = await uploadSocietyMedia(societyId, "gallery", file);
       setEditForm((prev) => ({ ...prev, banner_url: result.url }));
     } catch (err) {
-      setToast("Failed to upload banner");
+      setToast(
+        err instanceof SocietyApiError ? err.message : "Failed to upload banner",
+      );
     } finally {
       setUploadingBanner(false);
     }
@@ -339,20 +357,26 @@ export default function SocietyEventsPage() {
         banner_url: result.url,
         thumbnail_url: result.url,
       }));
-    } catch {
-      setToast("Failed to upload image");
+    } catch (err) {
+      setToast(
+        err instanceof SocietyApiError ? err.message : "Failed to upload image",
+      );
     } finally {
       setUploadingCreateBanner(false);
     }
   };
 
-  const visibleEvents = isMemberView
-    ? events.filter(
+  const visibleEvents = canManageEvents
+    ? events
+    : events.filter(
         (event) => event.status !== "PENDING" && event.status !== "CANCELLED",
-      )
-    : events;
+      );
 
-  const statusTabs = isMemberView ? MEMBER_STATUS_TABS : STATUS_TABS;
+  const statusTabs = canManageEvents ? STATUS_TABS : MEMBER_STATUS_TABS;
+
+  const canShowActionMenu = canEditEvents || canCancelEvents || canDeleteEvents;
+
+  const canUploadImages = canUploadMedia || canCreateEvents || canEditEvents;
 
   return (
     <div className="space-y-4">
@@ -443,7 +467,7 @@ export default function SocietyEventsPage() {
                     )}
                   </div>
                 </div>
-                {!isMemberView &&
+                {canScanQr &&
                   (event.status === "ONGOING" ||
                     event.status === "UPCOMING") && (
                     <button
@@ -457,7 +481,7 @@ export default function SocietyEventsPage() {
                       <ScanLine size={14} /> Entry
                     </button>
                   )}
-                {!isMemberView && (
+                {canManageEvents && (
                   <>
                     <button
                       onClick={() =>
@@ -469,7 +493,7 @@ export default function SocietyEventsPage() {
                     >
                       <Eye size={14} /> View
                     </button>
-                    <div className="relative">
+                    {canShowActionMenu && <div className="relative">
                       <button
                         onClick={() =>
                           setMenuEvent(menuEvent === event.id ? null : event.id)
@@ -485,13 +509,15 @@ export default function SocietyEventsPage() {
                             onClick={() => setMenuEvent(null)}
                           />
                           <div className="absolute right-0 top-8 z-50 w-36 rounded-lg border border-themed bg-card shadow-xl py-1">
-                            <button
-                              onClick={() => openEdit(event)}
-                              className="w-full text-left px-3 py-2 text-xs text-secondary hover:bg-secondary flex items-center gap-2"
-                            >
-                              <Edit3 size={12} /> Edit
-                            </button>
-                            {event.status !== "CANCELLED" && (
+                            {canEditEvents && (
+                              <button
+                                onClick={() => openEdit(event)}
+                                className="w-full text-left px-3 py-2 text-xs text-secondary hover:bg-secondary flex items-center gap-2"
+                              >
+                                <Edit3 size={12} /> Edit
+                              </button>
+                            )}
+                            {canCancelEvents && event.status !== "CANCELLED" && (
                               <button
                                 onClick={() => {
                                   setConfirmCancel(event);
@@ -502,19 +528,21 @@ export default function SocietyEventsPage() {
                                 <XCircle size={12} /> Cancel
                               </button>
                             )}
-                            <button
-                              onClick={() => {
-                                setConfirmDelete(event);
-                                setMenuEvent(null);
-                              }}
-                              className="w-full text-left px-3 py-2 text-xs text-red-500 hover:bg-red-500/5 flex items-center gap-2"
-                            >
-                              <Trash2 size={12} /> Delete
-                            </button>
+                            {canDeleteEvents && (
+                              <button
+                                onClick={() => {
+                                  setConfirmDelete(event);
+                                  setMenuEvent(null);
+                                }}
+                                className="w-full text-left px-3 py-2 text-xs text-red-500 hover:bg-red-500/5 flex items-center gap-2"
+                              >
+                                <Trash2 size={12} /> Delete
+                              </button>
+                            )}
                           </div>
                         </>
                       )}
-                    </div>
+                    </div>}
                   </>
                 )}
               </div>
@@ -560,9 +588,20 @@ export default function SocietyEventsPage() {
                 {form.banner_url ? (
                   <div className="relative group rounded-lg overflow-hidden">
                     <img
-                      src={form.banner_url}
+                      src={form.banner_url || form.thumbnail_url}
                       alt=""
                       className="w-full h-32 object-cover"
+                      onError={(e) => {
+                        const currentSrc = e.currentTarget.src;
+                        if (
+                          form.thumbnail_url &&
+                          !currentSrc.includes(form.thumbnail_url)
+                        ) {
+                          e.currentTarget.src = form.thumbnail_url;
+                          return;
+                        }
+                        e.currentTarget.src = "/placeholder-event.jpg";
+                      }}
                     />
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
                       <label className="cursor-pointer px-3 py-1.5 rounded-lg bg-white/90 text-gray-800 text-xs font-medium hover:bg-white flex items-center gap-1.5">
@@ -572,7 +611,7 @@ export default function SocietyEventsPage() {
                           accept="image/*"
                           className="hidden"
                           onChange={handleCreateBannerUpload}
-                          disabled={uploadingCreateBanner}
+                          disabled={uploadingCreateBanner || !canUploadImages}
                         />
                       </label>
                       <button
@@ -598,14 +637,14 @@ export default function SocietyEventsPage() {
                     )}
                   </div>
                 ) : (
-                  <label className="flex flex-col items-center justify-center h-24 rounded-lg border-2 border-dashed border-themed cursor-pointer hover:border-brand-500/50">
+                  <label className={`flex flex-col items-center justify-center h-24 rounded-lg border-2 border-dashed border-themed ${canUploadImages ? "cursor-pointer hover:border-brand-500/50" : "opacity-60 cursor-not-allowed"}`}>
                     {uploadingCreateBanner ? (
                       <Loader2 size={20} className="animate-spin text-muted" />
                     ) : (
                       <>
                         <Upload size={18} className="text-muted mb-1" />
                         <span className="text-xs text-muted">
-                          Upload event image
+                          {canUploadImages ? "Upload event image" : "No media upload permission"}
                         </span>
                       </>
                     )}
@@ -614,7 +653,7 @@ export default function SocietyEventsPage() {
                       accept="image/*"
                       className="hidden"
                       onChange={handleCreateBannerUpload}
-                      disabled={uploadingCreateBanner}
+                      disabled={uploadingCreateBanner || !canUploadImages}
                     />
                   </label>
                 )}
@@ -832,9 +871,20 @@ export default function SocietyEventsPage() {
                 {editForm.banner_url ? (
                   <div className="relative group rounded-lg overflow-hidden">
                     <img
-                      src={editForm.banner_url}
+                      src={editForm.banner_url || editForm.thumbnail_url}
                       alt=""
                       className="w-full h-32 object-cover"
+                      onError={(e) => {
+                        const currentSrc = e.currentTarget.src;
+                        if (
+                          editForm.thumbnail_url &&
+                          !currentSrc.includes(editForm.thumbnail_url)
+                        ) {
+                          e.currentTarget.src = editForm.thumbnail_url;
+                          return;
+                        }
+                        e.currentTarget.src = "/placeholder-event.jpg";
+                      }}
                     />
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
                       <label className="cursor-pointer px-3 py-1.5 rounded-lg bg-white/90 text-gray-800 text-xs font-medium hover:bg-white flex items-center gap-1.5">
@@ -849,7 +899,11 @@ export default function SocietyEventsPage() {
                       </label>
                       <button
                         onClick={() =>
-                          setEditForm({ ...editForm, banner_url: "" })
+                          setEditForm({
+                            ...editForm,
+                            banner_url: "",
+                            thumbnail_url: "",
+                          })
                         }
                         className="px-3 py-1.5 rounded-lg bg-red-500/90 text-white text-xs font-medium hover:bg-red-600"
                       >

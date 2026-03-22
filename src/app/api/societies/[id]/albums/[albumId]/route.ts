@@ -10,6 +10,7 @@ import {
   writeAuditLog,
   checkSocietyOperational,
   decrementStorageUsed,
+  resolveEffectiveSocietyPrivilege,
 } from '@/lib/api-utils';
 
 function signMediaUrl(url: string | null | undefined): string | null | undefined {
@@ -107,11 +108,11 @@ export async function PATCH(
     const societyCheck = await checkSocietyOperational(societyId, client);
     if (societyCheck) { await client.query('ROLLBACK'); return societyCheck; }
 
-    const privCheck = await client.query(
-      `SELECT fn_has_privilege($1, $2, 'MANAGE_CONTENT') AS allowed`,
-      [user.userId, societyId]
-    );
-    if (!privCheck.rows[0].allowed && user.userType !== 'SUPER_ADMIN') {
+      const effectiveManageContent = await resolveEffectiveSocietyPrivilege(
+        { userId: user.userId, societyId, privilegeName: 'MANAGE_CONTENT' },
+        client,
+      );
+      if (!effectiveManageContent.allowed && user.userType !== 'SUPER_ADMIN') {
       await client.query('ROLLBACK');
       return ApiErrors.forbidden('You do not have MANAGE_CONTENT privilege');
     }
@@ -229,11 +230,11 @@ export async function DELETE(
     const societyCheck = await checkSocietyOperational(societyId, client);
     if (societyCheck) { await client.query('ROLLBACK'); return societyCheck; }
 
-    const privCheck = await client.query(
-      `SELECT fn_has_privilege($1, $2, 'MANAGE_CONTENT') AS allowed`,
-      [user.userId, societyId]
-    );
-    if (!privCheck.rows[0].allowed && user.userType !== 'SUPER_ADMIN') {
+      const effectiveManageContent = await resolveEffectiveSocietyPrivilege(
+        { userId: user.userId, societyId, privilegeName: 'MANAGE_CONTENT' },
+        client,
+      );
+      if (!effectiveManageContent.allowed && user.userType !== 'SUPER_ADMIN') {
       await client.query('ROLLBACK');
       return ApiErrors.forbidden('You do not have MANAGE_CONTENT privilege');
     }

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { query, getClient } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { CONTAINERS, extractBlobName, generateReadUrl } from "@/lib/blob";
+import { resolveEffectiveSocietyPrivilege } from "@/lib/api-utils";
 
 function signMediaUrl(
   url: string | null | undefined,
@@ -158,43 +159,21 @@ export async function POST(
 
     await client.query("BEGIN");
 
-    // Auth check: President/VP fallback + privilege checks (if function available).
-    let canCreate = user.userType === "SUPER_ADMIN";
-
-    if (!canCreate) {
-      const memberRole = await client.query(
-        `SELECT r.hierarchy_level
-         FROM society_memberships sm
-         JOIN roles r ON r.id = sm.role_id
-         WHERE sm.user_id = $1
-           AND sm.society_id = $2
-           AND sm.is_active = TRUE
-           AND sm.suspended_at IS NULL
-         ORDER BY r.hierarchy_level DESC
-         LIMIT 1`,
-        [user.userId, societyId],
-      );
-
-      const hierarchyLevel = Number(memberRole.rows[0]?.hierarchy_level || 0);
-      if (hierarchyLevel >= 8) {
-        canCreate = true;
-      }
-    }
-
-    if (!canCreate) {
-      try {
-        const privCheck = await client.query(
-          `SELECT fn_has_privilege($1, $2, 'MANAGE_CONTENT') AS has_manage,
-                  fn_has_privilege($1, $2, 'CREATE_POST') AS has_create`,
-          [user.userId, societyId],
-        );
-        canCreate =
-          Boolean(privCheck.rows[0]?.has_manage) ||
-          Boolean(privCheck.rows[0]?.has_create);
-      } catch {
-        // Keep fallback-only behavior if privilege function/config is unavailable.
-      }
-    }
+    // Auth check: effective privileges support role grants and member overrides.
+    const canCreate =
+      user.userType === "SUPER_ADMIN" ||
+      (
+        await resolveEffectiveSocietyPrivilege(
+          { userId: user.userId, societyId, privilegeName: "MANAGE_CONTENT" },
+          client,
+        )
+      ).allowed ||
+      (
+        await resolveEffectiveSocietyPrivilege(
+          { userId: user.userId, societyId, privilegeName: "CREATE_POST" },
+          client,
+        )
+      ).allowed;
 
     if (!canCreate) {
       await client.query("ROLLBACK");

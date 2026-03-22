@@ -40,6 +40,7 @@ import {
   generateBlobPath,
   LIMITS,
 } from "@/lib/upload";
+import { resolveEffectiveSocietyPrivilege } from "@/lib/api-utils";
 
 type MediaType = "thumbnail" | "banner" | "gallery" | "document";
 
@@ -82,15 +83,20 @@ export async function POST(request: NextRequest) {
     }
     const event = eventResult.rows[0];
 
-    // 4. Permission check: must be SuperAdmin OR have UPLOAD_MEDIA / CREATE_EVENT privilege
+    // 4. Permission check: must be SuperAdmin OR have effective UPLOAD_MEDIA / CREATE_EVENT privilege
     if (user.userType !== "SUPER_ADMIN") {
-      const permCheck = await query(
-        `SELECT fn_has_privilege($1, $2, 'UPLOAD_MEDIA') AS has_upload,
-                fn_has_privilege($1, $2, 'CREATE_EVENT') AS has_create`,
-        [user.userId, event.society_id],
-      );
-      const perms = permCheck.rows[0];
-      if (!perms.has_upload && !perms.has_create) {
+      const effectiveUploadMedia = await resolveEffectiveSocietyPrivilege({
+        userId: user.userId,
+        societyId: event.society_id,
+        privilegeName: "UPLOAD_MEDIA",
+      });
+      const effectiveCreateEvent = await resolveEffectiveSocietyPrivilege({
+        userId: user.userId,
+        societyId: event.society_id,
+        privilegeName: "CREATE_EVENT",
+      });
+
+      if (!effectiveUploadMedia.allowed && !effectiveCreateEvent.allowed) {
         return NextResponse.json(
           { error: "You do not have permission to upload media to this event" },
           { status: 403 },
