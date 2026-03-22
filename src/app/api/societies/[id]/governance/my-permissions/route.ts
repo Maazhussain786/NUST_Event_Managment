@@ -20,18 +20,15 @@ export async function GET(
     if (user.userType === "SUPER_ADMIN") {
       return NextResponse.json({
         can_create_event: true,
+        can_edit_event: true,
+        can_cancel_event: true,
+        can_delete_event: true,
         can_manage_content: true,
         can_upload_media: true,
+        can_scan_qr: true,
+        can_manage_events: true,
       });
     }
-
-    const roleLevelMap: Record<string, number> = {
-      President: 10,
-      "Vice President": 8,
-      Director: 5,
-      "Deputy Director": 3,
-      Member: 1,
-    };
 
     const roleData = await query(
       `SELECT r.name AS role_name,
@@ -65,6 +62,30 @@ export async function GET(
       privilegeName: "CREATE_EVENT",
     });
 
+    const editEventPriv = await resolveEffectiveSocietyPrivilege({
+      userId: user.userId,
+      societyId,
+      privilegeName: "EDIT_EVENT",
+    });
+
+    const cancelEventPriv = await resolveEffectiveSocietyPrivilege({
+      userId: user.userId,
+      societyId,
+      privilegeName: "CANCEL_EVENT",
+    });
+
+    const scanQrPriv = await resolveEffectiveSocietyPrivilege({
+      userId: user.userId,
+      societyId,
+      privilegeName: "SCAN_QR",
+    });
+
+    const deleteContentPriv = await resolveEffectiveSocietyPrivilege({
+      userId: user.userId,
+      societyId,
+      privilegeName: "DELETE_CONTENT",
+    });
+
     const manageContentPriv = await resolveEffectiveSocietyPrivilege({
       userId: user.userId,
       societyId,
@@ -83,31 +104,30 @@ export async function GET(
       privilegeName: "UPLOAD_CONTENT",
     });
 
-    const meetsEventRole =
-      (roleLevelMap[myRole] || 0) >= (roleLevelMap[eventCreationRole] || 5);
-    const meetsContentRole =
-      (roleLevelMap[myRole] || 0) >= (roleLevelMap[contentUploadRole] || 3);
-
-    const canCreateEvent =
-      eventPriv.source === "override"
-        ? eventPriv.allowed
-        : eventPriv.allowed && meetsEventRole;
+    const canCreateEvent = eventPriv.allowed;
+    const canEditEvent = editEventPriv.allowed;
+    const canCancelEvent = cancelEventPriv.allowed;
+    const canDeleteEvent = deleteContentPriv.allowed;
+    const canScanQr = scanQrPriv.allowed;
 
     const canManageContent =
-      (manageContentPriv.source === "override"
-        ? manageContentPriv.allowed
-        : manageContentPriv.allowed && meetsContentRole) ||
-      (uploadMediaPriv.source === "override"
-        ? uploadMediaPriv.allowed
-        : uploadMediaPriv.allowed && meetsContentRole) ||
-      (uploadContentPriv.source === "override"
-        ? uploadContentPriv.allowed
-        : uploadContentPriv.allowed && meetsContentRole);
+      manageContentPriv.allowed ||
+      uploadMediaPriv.allowed ||
+      uploadContentPriv.allowed;
+
+    const canManageEvents =
+      canCreateEvent || canEditEvent || canCancelEvent || canDeleteEvent;
 
     return NextResponse.json({
       can_create_event: canCreateEvent,
+      can_edit_event: canEditEvent,
+      can_cancel_event: canCancelEvent,
+      can_delete_event: canDeleteEvent,
       can_manage_content: canManageContent,
-      can_upload_media: canManageContent,
+      can_upload_media:
+        uploadMediaPriv.allowed || uploadContentPriv.allowed || canCreateEvent,
+      can_scan_qr: canScanQr,
+      can_manage_events: canManageEvents,
       role_name: myRole,
       required_event_role: eventCreationRole,
       required_content_role: contentUploadRole,

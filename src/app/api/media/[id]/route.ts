@@ -22,6 +22,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { getClient } from '@/lib/db';
 import { deleteBlob, extractBlobName, CONTAINERS, ContainerName } from '@/lib/blob';
+import { resolveEffectiveSocietyPrivilege } from '@/lib/api-utils';
 
 type MediaTable = 'society_media' | 'event_media' | 'post_attachments' | 'event_note_attachments';
 
@@ -97,11 +98,15 @@ export async function DELETE(
 
     // Permission check
     if (user.userType !== 'SUPER_ADMIN' && media.uploaded_by !== user.userId) {
-      const permCheck = await client.query(
-        `SELECT fn_has_privilege($1, $2, 'UPLOAD_MEDIA') AS has_perm`,
-        [user.userId, media.society_id]
+      const effectiveUploadMedia = await resolveEffectiveSocietyPrivilege(
+        { userId: user.userId, societyId: media.society_id, privilegeName: 'UPLOAD_MEDIA' },
+        client,
       );
-      if (!permCheck.rows[0]?.has_perm) {
+      const effectiveDeleteContent = await resolveEffectiveSocietyPrivilege(
+        { userId: user.userId, societyId: media.society_id, privilegeName: 'DELETE_CONTENT' },
+        client,
+      );
+      if (!effectiveUploadMedia.allowed && !effectiveDeleteContent.allowed) {
         await client.query('ROLLBACK');
         return NextResponse.json({ error: 'No permission to delete this media' }, { status: 403 });
       }
@@ -240,11 +245,15 @@ export async function PATCH(
 
     // Permission check
     if (user.userType !== 'SUPER_ADMIN' && media.uploaded_by !== user.userId) {
-      const permCheck = await client.query(
-        `SELECT fn_has_privilege($1, $2, 'UPLOAD_MEDIA') AS has_perm`,
-        [user.userId, media.society_id]
+      const effectiveUploadMedia = await resolveEffectiveSocietyPrivilege(
+        { userId: user.userId, societyId: media.society_id, privilegeName: 'UPLOAD_MEDIA' },
+        client,
       );
-      if (!permCheck.rows[0]?.has_perm) {
+      const effectiveDeleteContent = await resolveEffectiveSocietyPrivilege(
+        { userId: user.userId, societyId: media.society_id, privilegeName: 'DELETE_CONTENT' },
+        client,
+      );
+      if (!effectiveUploadMedia.allowed && !effectiveDeleteContent.allowed) {
         await client.query('ROLLBACK');
         return NextResponse.json({ error: 'No permission to restore this media' }, { status: 403 });
       }

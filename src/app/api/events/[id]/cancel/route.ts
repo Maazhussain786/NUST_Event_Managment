@@ -7,6 +7,7 @@ import {
   ApiErrors,
   extractIpAddress,
   writeAuditLog,
+  resolveEffectiveSocietyPrivilege,
 } from '@/lib/api-utils';
 
 /**
@@ -82,12 +83,18 @@ export async function POST(
       return ApiErrors.conflict('Cannot cancel a completed or archived event');
     }
 
-    // ── Authorization: fn_has_privilege ────────────────────────────────
-    const privCheck = await client.query(
-      `SELECT fn_has_privilege($1, $2, 'CANCEL_EVENT', $3, $4) AS allowed`,
-      [user.userId, event.society_id, event.wing_id, event.portfolio_id]
+    // ── Authorization: effective privilege (role grant or member override) ─
+    const effectiveCancelPrivilege = await resolveEffectiveSocietyPrivilege(
+      {
+        userId: user.userId,
+        societyId: event.society_id,
+        privilegeName: 'CANCEL_EVENT',
+        wingId: event.wing_id,
+        portfolioId: event.portfolio_id,
+      },
+      client,
     );
-    if (!privCheck.rows[0].allowed && user.userType !== 'SUPER_ADMIN') {
+    if (!effectiveCancelPrivilege.allowed && user.userType !== 'SUPER_ADMIN') {
       await client.query('ROLLBACK');
       return ApiErrors.forbidden('You do not have CANCEL_EVENT privilege');
     }

@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getClient } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { resolveEffectiveSocietyPrivilege } from '@/lib/api-utils';
 
 /**
  * PATCH /api/societies/[id]/albums/[albumId]/photos/[photoId]
@@ -22,11 +23,11 @@ export async function PATCH(
 
     await client.query('BEGIN');
 
-    const privCheck = await client.query(
-      `SELECT fn_has_privilege($1, $2, 'MANAGE_CONTENT') AS allowed`,
-      [user.userId, societyId]
+    const effectiveManageContent = await resolveEffectiveSocietyPrivilege(
+      { userId: user.userId, societyId, privilegeName: 'MANAGE_CONTENT' },
+      client,
     );
-    if (!privCheck.rows[0].allowed) {
+    if (!effectiveManageContent.allowed && user.userType !== 'SUPER_ADMIN') {
       await client.query('ROLLBACK');
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
@@ -111,11 +112,11 @@ export async function DELETE(
 
     await client.query('BEGIN');
 
-    const privCheck = await client.query(
-      `SELECT fn_has_privilege($1, $2, 'MANAGE_CONTENT') AS allowed`,
-      [user.userId, societyId]
+    const effectiveManageContent = await resolveEffectiveSocietyPrivilege(
+      { userId: user.userId, societyId, privilegeName: 'MANAGE_CONTENT' },
+      client,
     );
-    if (!privCheck.rows[0].allowed) {
+    if (!effectiveManageContent.allowed && user.userType !== 'SUPER_ADMIN') {
       await client.query('ROLLBACK');
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }

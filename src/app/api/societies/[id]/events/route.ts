@@ -159,7 +159,7 @@ export async function POST(
       return societyCheck;
     }
 
-    // ── Authorization: effective privilege + society role threshold ────────
+    // ── Authorization: effective privilege (role grant or member override) ──
     const effectivePrivilege = await resolveEffectiveSocietyPrivilege(
       {
         userId: user.userId,
@@ -171,44 +171,7 @@ export async function POST(
       client,
     );
 
-    let meetsRoleThreshold = user.userType === "SUPER_ADMIN";
-    if (!meetsRoleThreshold) {
-      const roleLevelMap: Record<string, number> = {
-        President: 10,
-        "Vice President": 8,
-        Director: 5,
-        "Deputy Director": 3,
-        Member: 1,
-      };
-
-      const roleGateCheck = await client.query(
-        `SELECT r.name AS role_name,
-                ss.event_creation_role
-         FROM society_memberships sm
-         JOIN roles r ON r.id = sm.role_id
-         LEFT JOIN society_settings ss ON ss.society_id = sm.society_id
-         WHERE sm.user_id = $1
-           AND sm.society_id = $2
-           AND sm.is_active = TRUE
-           AND sm.suspended_at IS NULL
-         ORDER BY r.hierarchy_level DESC
-         LIMIT 1`,
-        [user.userId, societyId],
-      );
-
-      if (roleGateCheck.rows.length > 0) {
-        const myRole = roleGateCheck.rows[0].role_name as string;
-        const requiredRole =
-          (roleGateCheck.rows[0].event_creation_role as string) || "Director";
-        meetsRoleThreshold =
-          (roleLevelMap[myRole] || 0) >= (roleLevelMap[requiredRole] || 5);
-      }
-    }
-
-    const allowedByPolicy =
-      effectivePrivilege.source === "override"
-        ? effectivePrivilege.allowed
-        : effectivePrivilege.allowed && meetsRoleThreshold;
+    const allowedByPolicy = effectivePrivilege.allowed;
 
     if (!allowedByPolicy && user.userType !== "SUPER_ADMIN") {
       await client.query("ROLLBACK");

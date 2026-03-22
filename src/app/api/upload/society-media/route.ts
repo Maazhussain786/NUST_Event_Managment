@@ -112,46 +112,16 @@ export async function POST(request: NextRequest) {
         privilegeName: "UPLOAD_CONTENT",
       });
 
-      const roleLevelMap: Record<string, number> = {
-        President: 10,
-        "Vice President": 8,
-        Director: 5,
-        "Deputy Director": 3,
-        Member: 1,
-      };
-
-      const roleGateCheck = await query(
-        `SELECT r.name AS role_name,
-                ss.content_upload_role
-         FROM society_memberships sm
-         JOIN roles r ON r.id = sm.role_id
-         LEFT JOIN society_settings ss ON ss.society_id = sm.society_id
-         WHERE sm.user_id = $1
-           AND sm.society_id = $2
-           AND sm.is_active = TRUE
-           AND sm.suspended_at IS NULL
-         ORDER BY r.hierarchy_level DESC
-         LIMIT 1`,
-        [user.userId, societyId],
-      );
-
-      const myRole = roleGateCheck.rows[0]?.role_name as string | undefined;
-      const requiredRole =
-        (roleGateCheck.rows[0]?.content_upload_role as string | undefined) ||
-        "Deputy Director";
-      const meetsRoleThreshold =
-        (roleLevelMap[myRole || ""] || 0) >= (roleLevelMap[requiredRole] || 3);
-
-      const hasAnyPrivilege =
-        effectiveUploadMedia.allowed || effectiveUploadContent.allowed;
-      const hasOverrideGrant =
-        (effectiveUploadMedia.source === "override" &&
-          effectiveUploadMedia.allowed) ||
-        (effectiveUploadContent.source === "override" &&
-          effectiveUploadContent.allowed);
+      const effectiveCreateEvent = await resolveEffectiveSocietyPrivilege({
+        userId: user.userId,
+        societyId,
+        privilegeName: "CREATE_EVENT",
+      });
 
       const canUpload =
-        hasOverrideGrant || (hasAnyPrivilege && meetsRoleThreshold);
+        effectiveUploadMedia.allowed ||
+        effectiveUploadContent.allowed ||
+        effectiveCreateEvent.allowed;
 
       if (!canUpload) {
         return NextResponse.json(

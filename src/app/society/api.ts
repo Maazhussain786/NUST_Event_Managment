@@ -108,8 +108,13 @@ export function fetchMyRole(
 
 export function fetchMyPermissions(societyId: string): Promise<{
   can_create_event: boolean;
+  can_edit_event?: boolean;
+  can_cancel_event?: boolean;
+  can_delete_event?: boolean;
   can_manage_content: boolean;
   can_upload_media: boolean;
+  can_scan_qr?: boolean;
+  can_manage_events?: boolean;
   role_name?: string;
   required_event_role?: string;
   required_content_role?: string;
@@ -254,7 +259,7 @@ export interface SocietyInvite {
   token: string;
   role_name: string;
   invited_email: string;
-  status: 'PENDING' | 'ACCEPTED' | 'EXPIRED' | 'REVOKED';
+  status: "PENDING" | "ACCEPTED" | "EXPIRED" | "REVOKED";
   wing_id: string | null;
   portfolio_id: string | null;
   wing_name: string | null;
@@ -264,15 +269,27 @@ export interface SocietyInvite {
   created_at: string;
 }
 
-export function fetchSocietyInvites(societyId: string): Promise<SocietyInvite[]> {
+export function fetchSocietyInvites(
+  societyId: string,
+): Promise<SocietyInvite[]> {
   return api<SocietyInvite[]>(`/api/invites?societyId=${societyId}`);
 }
 
-export function createSocietyInvite(
-  data: { societyId: string; email: string; roleName: string; wingId?: string; portfolioId?: string },
-): Promise<{ token: string; inviteLink: string; roleName: string; email: string; expiresAt: string }> {
-  return api('/api/invites', {
-    method: 'POST',
+export function createSocietyInvite(data: {
+  societyId: string;
+  email: string;
+  roleName: string;
+  wingId?: string;
+  portfolioId?: string;
+}): Promise<{
+  token: string;
+  inviteLink: string;
+  roleName: string;
+  email: string;
+  expiresAt: string;
+}> {
+  return api("/api/invites", {
+    method: "POST",
     body: JSON.stringify(data),
   });
 }
@@ -376,7 +393,12 @@ export function fetchRolePrivileges(
 
 export function updatePrivilege(
   societyId: string,
-  data: { membershipId?: string; roleId?: string; privilegeKey: string; granted: boolean },
+  data: {
+    membershipId?: string;
+    roleId?: string;
+    privilegeKey: string;
+    granted: boolean;
+  },
 ): Promise<{ success: boolean }> {
   return api(`${s(societyId)}/governance/privileges`, {
     method: "PATCH",
@@ -413,7 +435,11 @@ export function fetchStorage(societyId: string): Promise<SocietyStorageInfo> {
 
 export function deleteMedia(
   mediaId: string,
-  table: "society_media" | "event_media" | "post_attachments" | "event_note_attachments",
+  table:
+    | "society_media"
+    | "event_media"
+    | "post_attachments"
+    | "event_note_attachments",
   hard?: boolean,
 ): Promise<{ success: boolean }> {
   const params = new URLSearchParams({ table });

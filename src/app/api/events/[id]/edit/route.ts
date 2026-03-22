@@ -1,5 +1,14 @@
 export const dynamic = 'force-dynamic';
 
+const CORE_FIELDS = new Set([
+  'title',
+  'event_start',
+  'event_end',
+  'is_paid',
+  'ticket_price',
+  'max_tickets',
+]);
+
 import { NextRequest, NextResponse } from 'next/server';
 import { getClient } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
@@ -12,6 +21,7 @@ import {
   validateCapacityReduction,
   validatePriceChange,
   validateTimeChangeAfterCheckIn,
+  resolveEffectiveSocietyPrivilege,
 } from '@/lib/api-utils';
 
 /**
@@ -34,10 +44,6 @@ import {
  *   Body must include `version` matching current DB version.
  *   On success, version is incremented.
  */
-
-const CORE_FIELDS = new Set([
-  'title', 'event_start', 'event_end', 'is_paid', 'ticket_price', 'max_tickets',
-]);
 
 export async function PATCH(
   req: NextRequest,
@@ -133,42 +139,20 @@ export async function PATCH(
       return societyCheck;
     }
 
-    // ── Authorization: fn_has_privilege ────────────────────────────────
-    const privCheck = await client.query(
-      `SELECT fn_has_privilege($1, $2, 'EDIT_EVENT', $3, $4) AS allowed`,
-      [user.userId, event.society_id, event.wing_id, event.portfolio_id]
+    // ── Authorization: effective privilege (role grant or member override) ─
+    const effectiveEditPrivilege = await resolveEffectiveSocietyPrivilege(
+      {
+        userId: user.userId,
+        societyId: event.society_id,
+        privilegeName: 'EDIT_EVENT',
+        wingId: event.wing_id,
+        portfolioId: event.portfolio_id,
+      },
+      client,
     );
-    if (!privCheck.rows[0].allowed && user.userType !== 'SUPER_ADMIN') {
+    if (!effectiveEditPrivilege.allowed && user.userType !== 'SUPER_ADMIN') {
       await client.query('ROLLBACK');
       return ApiErrors.forbidden('You do not have EDIT_EVENT privilege');
-    }
-
-    // ── Determine if any core fields are being modified ───────────────
-    const submittedFields = Object.keys(body).filter(k => k !== 'version');
-    const hasCoreFieldChanges = submittedFields.some(f => CORE_FIELDS.has(f));
-
-    if (hasCoreFieldChanges) {
-      // Need hierarchy_level >= 8 (President or VP)
-      const roleCheck = await client.query(
-        `SELECT MAX(r.hierarchy_level) as max_level
-         FROM society_memberships sm
-         JOIN roles r ON sm.role_id = r.id
-         WHERE sm.user_id = $1 AND sm.society_id = $2
-           AND sm.is_active = TRUE AND sm.suspended_at IS NULL`,
-        [user.userId, event.society_id]
-      );
-
-      const maxLevel = user.userType === 'SUPER_ADMIN'
-        ? 999
-        : (roleCheck.rows[0]?.max_level ?? 0);
-
-      if (maxLevel < 8) {
-        await client.query('ROLLBACK');
-        return NextResponse.json(
-          { error: 'Core fields (title, dates, pricing) can only be edited by President or VP' },
-          { status: 403 }
-        );
-      }
     }
 
     // ── Date validations (if dates are being changed) ─────────────────
@@ -295,6 +279,9 @@ export async function PATCH(
     }
 
     const updated = updateResult.rows[0];
+    const hasCoreFieldChanges = Object.keys(newValues).some((field) =>
+      CORE_FIELDS.has(field),
+    );
 
     // ── Audit log with IP ──────────────────────────────────────────────
     await writeAuditLog(

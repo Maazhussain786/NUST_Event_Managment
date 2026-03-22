@@ -2,7 +2,15 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Search, UserMinus, Crown, ArrowUpDown, Pencil, Send, X } from "lucide-react";
+import {
+  Search,
+  UserMinus,
+  Crown,
+  ArrowUpDown,
+  Pencil,
+  Send,
+  X,
+} from "lucide-react";
 import {
   fetchMembers,
   fetchMyRole,
@@ -13,7 +21,13 @@ import {
   SocietyApiError,
   type SocietyInvite,
 } from "../../../api";
-import { PageLoader, ErrorState, EmptyState, StatusBadge, ConfirmDialog } from "../../../_components/Shared";
+import {
+  PageLoader,
+  ErrorState,
+  EmptyState,
+  StatusBadge,
+  ConfirmDialog,
+} from "../../../_components/Shared";
 import { RoleEditDialog } from "../../../_components/RoleEditDialog";
 import type { SocietyMember, RoleName, MyRole, Wing } from "../../../types";
 
@@ -38,8 +52,12 @@ export default function MembersPage() {
   const [editTarget, setEditTarget] = useState<SocietyMember | null>(null);
   const [removing, setRemoving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState<"hierarchy" | "name" | "date">("hierarchy");
-  const [avatarLoadFailed, setAvatarLoadFailed] = useState<Record<string, boolean>>({});
+  const [sortBy, setSortBy] = useState<"hierarchy" | "name" | "date">(
+    "hierarchy",
+  );
+  const [avatarLoadFailed, setAvatarLoadFailed] = useState<
+    Record<string, boolean>
+  >({});
 
   const [wings, setWings] = useState<Wing[]>([]);
   const [invites, setInvites] = useState<SocietyInvite[]>([]);
@@ -59,7 +77,10 @@ export default function MembersPage() {
     try {
       setLoading(true);
       setError(null);
-      const [data, roleData] = await Promise.all([fetchMembers(societyId), fetchMyRole(societyId)]);
+      const [data, roleData] = await Promise.all([
+        fetchMembers(societyId),
+        fetchMyRole(societyId),
+      ]);
       setMembers(data);
       setMyRole(roleData.role);
 
@@ -139,8 +160,13 @@ export default function MembersPage() {
       return;
     }
 
-    if ((inviteRole === "Director" || inviteRole === "Deputy Director") && (!inviteWingId || !invitePortfolioId)) {
-      setInviteError("Director/Deputy Director invite requires wing and portfolio.");
+    if (
+      (inviteRole === "Director" || inviteRole === "Deputy Director") &&
+      (!inviteWingId || !invitePortfolioId)
+    ) {
+      setInviteError(
+        "Director/Deputy Director invite requires wing and portfolio.",
+      );
       return;
     }
 
@@ -191,18 +217,26 @@ export default function MembersPage() {
 
   let filtered = members.filter((m) => {
     const q = search.toLowerCase();
-    const matchesSearch = !q || m.full_name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q);
+    const matchesSearch =
+      !q ||
+      m.full_name.toLowerCase().includes(q) ||
+      m.email.toLowerCase().includes(q);
     const matchesRole = !roleFilter || m.role_name === roleFilter;
     return matchesSearch && matchesRole;
   });
 
-  if (sortBy === "name") filtered.sort((a, b) => a.full_name.localeCompare(b.full_name));
+  if (sortBy === "name")
+    filtered.sort((a, b) => a.full_name.localeCompare(b.full_name));
   else if (sortBy === "date") {
-    filtered.sort((a, b) => new Date(b.assigned_at).getTime() - new Date(a.assigned_at).getTime());
+    filtered.sort(
+      (a, b) =>
+        new Date(b.assigned_at).getTime() - new Date(a.assigned_at).getTime(),
+    );
   }
 
   const roles = Array.from(new Set(members.map((m) => m.role_name)));
-  const invitePortfolios = wings.find((w) => w.id === inviteWingId)?.portfolios || [];
+  const invitePortfolios =
+    wings.find((w) => w.id === inviteWingId)?.portfolios || [];
 
   useEffect(() => {
     if (toast) {
@@ -215,7 +249,10 @@ export default function MembersPage() {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row">
         <div className="relative flex-1">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+          <Search
+            size={16}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-muted"
+          />
           <input
             className="input-field pl-9"
             placeholder="Search members..."
@@ -236,7 +273,11 @@ export default function MembersPage() {
               <Send size={14} /> Invite Member
             </button>
           )}
-          <select className="input-field text-sm" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
+          <select
+            className="input-field text-sm"
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+          >
             <option value="">All Roles</option>
             {roles.map((r) => (
               <option key={r} value={r}>
@@ -245,17 +286,31 @@ export default function MembersPage() {
             ))}
           </select>
           <button
-            onClick={() => setSortBy(sortBy === "hierarchy" ? "name" : sortBy === "name" ? "date" : "hierarchy")}
+            onClick={() =>
+              setSortBy(
+                sortBy === "hierarchy"
+                  ? "name"
+                  : sortBy === "name"
+                    ? "date"
+                    : "hierarchy",
+              )
+            }
             className="btn-ghost flex items-center gap-1 px-3 py-2 text-sm"
             title={`Sort by ${sortBy}`}
           >
-            <ArrowUpDown size={14} /> {sortBy === "hierarchy" ? "Rank" : sortBy === "name" ? "Name" : "Date"}
+            <ArrowUpDown size={14} />{" "}
+            {sortBy === "hierarchy"
+              ? "Rank"
+              : sortBy === "name"
+                ? "Name"
+                : "Date"}
           </button>
         </div>
       </div>
 
       <p className="text-xs text-muted">
-        {filtered.length} member{filtered.length !== 1 ? "s" : ""} {roleFilter ? `(${roleFilter})` : ""}
+        {filtered.length} member{filtered.length !== 1 ? "s" : ""}{" "}
+        {roleFilter ? `(${roleFilter})` : ""}
       </p>
 
       {canManageAssignments && (
@@ -266,13 +321,20 @@ export default function MembersPage() {
           ) : (
             <div className="space-y-2">
               {invites.slice(0, 5).map((invite) => (
-                <div key={invite.id} className="flex items-center justify-between text-xs">
+                <div
+                  key={invite.id}
+                  className="flex items-center justify-between text-xs"
+                >
                   <div className="min-w-0">
-                    <p className="truncate text-primary">{invite.invited_email}</p>
+                    <p className="truncate text-primary">
+                      {invite.invited_email}
+                    </p>
                     <p className="text-muted">
                       {invite.role_name}
                       {invite.wing_name ? ` • ${invite.wing_name}` : ""}
-                      {invite.portfolio_name ? ` • ${invite.portfolio_name}` : ""}
+                      {invite.portfolio_name
+                        ? ` • ${invite.portfolio_name}`
+                        : ""}
                     </p>
                   </div>
                   <StatusBadge status={invite.status} />
@@ -294,13 +356,17 @@ export default function MembersPage() {
           {filtered.map((member) => (
             <div key={member.membership_id} className="card p-4">
               <div className="flex items-center gap-3">
-                {member.avatar_url && !avatarLoadFailed[member.membership_id] ? (
+                {member.avatar_url &&
+                !avatarLoadFailed[member.membership_id] ? (
                   <img
                     src={member.avatar_url}
                     alt=""
                     className="h-10 w-10 flex-shrink-0 rounded-full object-cover"
                     onError={() => {
-                      setAvatarLoadFailed((prev) => ({ ...prev, [member.membership_id]: true }));
+                      setAvatarLoadFailed((prev) => ({
+                        ...prev,
+                        [member.membership_id]: true,
+                      }));
                     }}
                   />
                 ) : (
@@ -315,18 +381,29 @@ export default function MembersPage() {
 
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <p className="truncate text-sm font-semibold text-primary">{member.full_name}</p>
-                    {member.role_name === "President" && <Crown size={14} className="flex-shrink-0 text-amber-500" />}
+                    <p className="truncate text-sm font-semibold text-primary">
+                      {member.full_name}
+                    </p>
+                    {member.role_name === "President" && (
+                      <Crown
+                        size={14}
+                        className="flex-shrink-0 text-amber-500"
+                      />
+                    )}
                   </div>
                   <p className="text-xs text-muted">{member.email}</p>
                   <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
-                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${ROLE_COLORS[member.role_name] || ROLE_COLORS.Member}`}>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${ROLE_COLORS[member.role_name] || ROLE_COLORS.Member}`}
+                    >
                       {member.role_name}
                     </span>
                     {member.wing_name && (
                       <span className="text-[11px] text-muted">
                         {member.wing_name}
-                        {member.portfolio_name ? ` → ${member.portfolio_name}` : ""}
+                        {member.portfolio_name
+                          ? ` → ${member.portfolio_name}`
+                          : ""}
                       </span>
                     )}
                   </div>
@@ -389,7 +466,9 @@ export default function MembersPage() {
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-lg space-y-3 rounded-xl border border-surface-300 bg-surface-0 p-4 dark:border-surface-700 dark:bg-surface-900">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-primary">Invite Member</h3>
+              <h3 className="text-sm font-semibold text-primary">
+                Invite Member
+              </h3>
               <button
                 onClick={() => {
                   setShowInviteModal(false);
@@ -404,7 +483,9 @@ export default function MembersPage() {
 
             <div className="space-y-3">
               <div>
-                <label className="mb-1 block text-xs font-medium text-primary">Email</label>
+                <label className="mb-1 block text-xs font-medium text-primary">
+                  Email
+                </label>
                 <input
                   type="email"
                   className="input-field"
@@ -415,14 +496,19 @@ export default function MembersPage() {
               </div>
 
               <div>
-                <label className="mb-1 block text-xs font-medium text-primary">Role</label>
+                <label className="mb-1 block text-xs font-medium text-primary">
+                  Role
+                </label>
                 <select
                   className="input-field"
                   value={inviteRole}
                   onChange={(e) => {
                     const nextRole = e.target.value as RoleName | "";
                     setInviteRole(nextRole);
-                    if (nextRole !== "Director" && nextRole !== "Deputy Director") {
+                    if (
+                      nextRole !== "Director" &&
+                      nextRole !== "Deputy Director"
+                    ) {
                       setInvitePortfolioId("");
                     }
                   }}
@@ -435,7 +521,10 @@ export default function MembersPage() {
                 </select>
               </div>
 
-              {(inviteRole === "Vice President" || inviteRole === "Director" || inviteRole === "Deputy Director" || inviteRole === "Member") && (
+              {(inviteRole === "Vice President" ||
+                inviteRole === "Director" ||
+                inviteRole === "Deputy Director" ||
+                inviteRole === "Member") && (
                 <div>
                   <label className="mb-1 block text-xs font-medium text-primary">
                     Wing{inviteRole === "Member" ? " (optional)" : ""}
@@ -448,7 +537,9 @@ export default function MembersPage() {
                       setInvitePortfolioId("");
                     }}
                   >
-                    <option value="">{inviteRole === "Member" ? "No wing" : "Select wing..."}</option>
+                    <option value="">
+                      {inviteRole === "Member" ? "No wing" : "Select wing..."}
+                    </option>
                     {wings.map((wing) => (
                       <option key={wing.id} value={wing.id}>
                         {wing.name}
@@ -458,21 +549,33 @@ export default function MembersPage() {
                 </div>
               )}
 
-              {(inviteRole === "Director" || inviteRole === "Deputy Director") && inviteWingId && (
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-primary">Portfolio</label>
-                  <select className="input-field" value={invitePortfolioId} onChange={(e) => setInvitePortfolioId(e.target.value)}>
-                    <option value="">Select portfolio...</option>
-                    {invitePortfolios.map((portfolio) => (
-                      <option key={portfolio.id} value={portfolio.id}>
-                        {portfolio.name}
-                      </option>
-                    ))}
-                  </select>
+              {(inviteRole === "Director" ||
+                inviteRole === "Deputy Director") &&
+                inviteWingId && (
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-primary">
+                      Portfolio
+                    </label>
+                    <select
+                      className="input-field"
+                      value={invitePortfolioId}
+                      onChange={(e) => setInvitePortfolioId(e.target.value)}
+                    >
+                      <option value="">Select portfolio...</option>
+                      {invitePortfolios.map((portfolio) => (
+                        <option key={portfolio.id} value={portfolio.id}>
+                          {portfolio.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+              {inviteError && (
+                <div className="rounded-md bg-red-500/10 px-2 py-1.5 text-xs text-red-500">
+                  {inviteError}
                 </div>
               )}
-
-              {inviteError && <div className="rounded-md bg-red-500/10 px-2 py-1.5 text-xs text-red-500">{inviteError}</div>}
 
               <div className="flex justify-end gap-2 pt-1">
                 <button
@@ -488,7 +591,9 @@ export default function MembersPage() {
                 <button
                   className="btn-primary px-3 py-2 text-xs"
                   onClick={handleCreateInvite}
-                  disabled={inviteSubmitting || !inviteEmail.trim() || !inviteRole}
+                  disabled={
+                    inviteSubmitting || !inviteEmail.trim() || !inviteRole
+                  }
                 >
                   {inviteSubmitting ? "Sending..." : "Send Invite"}
                 </button>
