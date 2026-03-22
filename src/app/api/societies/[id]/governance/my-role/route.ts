@@ -18,13 +18,13 @@ export async function GET(
     if (user.userType === 'SUPER_ADMIN') {
       return NextResponse.json({
         role: {
-          membershipId: 'super-admin',
-          roleName: 'President',
-          hierarchyLevel: 10,
-          wingId: null,
-          wingName: null,
-          portfolioId: null,
-          portfolioName: null,
+          membership_id: 'super-admin',
+          role_name: 'President',
+          hierarchy_level: 10,
+          wing_id: null,
+          wing_name: null,
+          portfolio_id: null,
+          portfolio_name: null,
         }
       });
     }
@@ -50,13 +50,13 @@ export async function GET(
     const row = result.rows[0];
     return NextResponse.json({
       role: {
-        membershipId: row.membership_id,
-        roleName: row.role_name,
-        hierarchyLevel: row.hierarchy_level,
-        wingId: row.wing_id,
-        wingName: row.wing_name,
-        portfolioId: row.portfolio_id,
-        portfolioName: row.portfolio_name,
+        membership_id: row.membership_id,
+        role_name: row.role_name,
+        hierarchy_level: row.hierarchy_level,
+        wing_id: row.wing_id,
+        wing_name: row.wing_name,
+        portfolio_id: row.portfolio_id,
+        portfolio_name: row.portfolio_name,
       }
     });
   } catch (error) {

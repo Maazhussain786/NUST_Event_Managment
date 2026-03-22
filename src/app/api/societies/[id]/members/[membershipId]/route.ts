@@ -23,7 +23,7 @@ export async function PATCH(
 
     await client.query('BEGIN');
 
-    // Get requester's hierarchy level
+    // Get requester's role in this society
     const myMembership = await client.query(
       `SELECT r.hierarchy_level, r.name as role_name
        FROM society_memberships sm
@@ -34,11 +34,12 @@ export async function PATCH(
     );
 
     const myLevel = user.userType === 'SUPER_ADMIN' ? 999 : (myMembership.rows[0]?.hierarchy_level || 0);
+    const myRoleName = myMembership.rows[0]?.role_name || null;
 
-    // VP+ (level >= 8) required for role changes
-    if (myLevel < 8 && user.userType !== 'SUPER_ADMIN') {
+    // Only President (or SUPER_ADMIN) can reassign society roles.
+    if (user.userType !== 'SUPER_ADMIN' && myRoleName !== 'President') {
       await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'VP+ required for role changes' }, { status: 403 });
+      return NextResponse.json({ error: 'Only President can change member roles' }, { status: 403 });
     }
 
     // Get target membership details
@@ -46,13 +47,13 @@ export async function PATCH(
       `SELECT sm.*, r.hierarchy_level, r.name as role_name, r.id as current_role_id
        FROM society_memberships sm
        JOIN roles r ON sm.role_id = r.id
-       WHERE sm.id = $1 AND sm.society_id = $2`,
+       WHERE sm.id = $1 AND sm.society_id = $2 AND sm.is_active = TRUE`,
       [membershipId, societyId]
     );
 
     if (target.rows.length === 0) {
       await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'Membership not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Active membership not found' }, { status: 404 });
     }
 
     const targetMember = target.rows[0];
@@ -97,7 +98,22 @@ export async function PATCH(
     // Validate wing/portfolio requirements based on role
     const newRoleName = newRoleData.name;
     const finalWingId = wingId || null;
-    const finalPortfolioId = portfolioId || null;
+    let finalPortfolioId = portfolioId || null;
+
+    if (newRoleName === 'Member') {
+      // Member is society-wide by default; optional wing is allowed and portfolio must be cleared.
+      finalPortfolioId = null;
+    }
+
+    if (newRoleName === 'Vice President' && finalPortfolioId) {
+      await client.query('ROLLBACK');
+      return NextResponse.json({ error: `${newRoleName} cannot be assigned a portfolio` }, { status: 400 });
+    }
+
+    if (newRoleName === 'Member' && finalPortfolioId) {
+      await client.query('ROLLBACK');
+      return NextResponse.json({ error: 'Member cannot be directly assigned a portfolio' }, { status: 400 });
+    }
 
     if (newRoleName === 'Vice President' && !finalWingId) {
       await client.query('ROLLBACK');
@@ -212,14 +228,24 @@ export async function PATCH(
 
     // Record in audit log
     await client.query(
-      `INSERT INTO audit_logs (user_id, society_id, action, target_type, target_id, details)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
+      `INSERT INTO audit_logs (action, performed_by, society_id, target_type, target_id, old_value, new_value, metadata)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [
+        'ROLE_UPDATED',
         user.userId,
         societyId,
-        'ROLE_UPDATED',
-        'membership',
+        'society_membership',
         membershipId,
+        JSON.stringify({
+          role: targetMember.role_name,
+          wing_id: targetMember.wing_id,
+          portfolio_id: targetMember.portfolio_id,
+        }),
+        JSON.stringify({
+          role: newRoleName,
+          wing_id: finalWingId,
+          portfolio_id: finalPortfolioId,
+        }),
         JSON.stringify({
           member_user_id: targetMember.user_id,
           old_role: targetMember.role_name,

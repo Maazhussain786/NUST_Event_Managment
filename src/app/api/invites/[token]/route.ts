@@ -93,11 +93,45 @@ export async function POST(
 
       // Get the role id
       const roleResult = await client.query(
-        `SELECT id FROM roles WHERE society_id = $1 AND name = $2`,
+        `SELECT id, name FROM roles WHERE society_id = $1 AND name = $2`,
         [invite.society_id, invite.role_name]
       );
       if (roleResult.rows.length === 0) {
         throw new Error(`Role "${invite.role_name}" not found for this society`);
+      }
+
+      const roleName = roleResult.rows[0].name as string;
+
+      if (roleName === 'Vice President' && !invite.wing_id) {
+        throw new Error('Invalid invite scope: Vice President requires a wing');
+      }
+
+      if ((roleName === 'Director' || roleName === 'Deputy Director') && (!invite.wing_id || !invite.portfolio_id)) {
+        throw new Error('Invalid invite scope: Director/Deputy Director requires wing and portfolio');
+      }
+
+      if ((roleName === 'Member' || roleName === 'Vice President') && invite.portfolio_id) {
+        throw new Error(`Invalid invite scope: ${roleName} cannot include portfolio`);
+      }
+
+      if (invite.wing_id) {
+        const wingCheck = await client.query(
+          `SELECT id FROM wings WHERE id = $1 AND society_id = $2 AND deleted_at IS NULL`,
+          [invite.wing_id, invite.society_id]
+        );
+        if (wingCheck.rows.length === 0) {
+          throw new Error('Invalid invite scope: wing is missing or deleted');
+        }
+      }
+
+      if (invite.portfolio_id) {
+        const portfolioCheck = await client.query(
+          `SELECT id FROM portfolios WHERE id = $1 AND wing_id = $2 AND deleted_at IS NULL`,
+          [invite.portfolio_id, invite.wing_id]
+        );
+        if (portfolioCheck.rows.length === 0) {
+          throw new Error('Invalid invite scope: portfolio does not belong to selected wing');
+        }
       }
 
       // Deactivate any existing membership for this user in this society with same scope
@@ -110,10 +144,34 @@ export async function POST(
       );
 
       // Create new membership
-      await client.query(
+      const createdMembership = await client.query(
         `INSERT INTO society_memberships (user_id, society_id, role_id, wing_id, portfolio_id, is_active, assigned_by)
-         VALUES ($1, $2, $3, $4, $5, TRUE, $6)`,
+         VALUES ($1, $2, $3, $4, $5, TRUE, $6)
+         RETURNING id`,
         [user.userId, invite.society_id, roleResult.rows[0].id, invite.wing_id, invite.portfolio_id, invite.invited_by]
+      );
+
+      await client.query(
+        `INSERT INTO audit_logs (action, performed_by, society_id, target_type, target_id, new_value, metadata)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          'ROLE_ASSIGNED',
+          invite.invited_by,
+          invite.society_id,
+          'society_membership',
+          createdMembership.rows[0].id,
+          JSON.stringify({
+            role: roleName,
+            wing_id: invite.wing_id,
+            portfolio_id: invite.portfolio_id,
+          }),
+          JSON.stringify({
+            invited_email: invite.invited_email,
+            accepted_by: user.userId,
+            accepted_at: new Date().toISOString(),
+            source: 'invite_acceptance',
+          }),
+        ]
       );
 
       // Mark invite as accepted

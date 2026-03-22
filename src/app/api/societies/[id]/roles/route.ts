@@ -29,6 +29,20 @@ export async function GET(
       }
     }
 
+    // Backfill missing system roles for legacy societies that were approved
+    // before all five governance roles were consistently seeded.
+    await query(
+      `INSERT INTO roles (society_id, name, description, hierarchy_level, is_system_role)
+       VALUES
+         ($1, 'President', 'Society President — full control', 10, TRUE),
+         ($1, 'Vice President', 'Wing VP', 8, TRUE),
+         ($1, 'Director', 'Portfolio Director', 5, TRUE),
+         ($1, 'Deputy Director', 'Deputy Portfolio Director', 3, TRUE),
+         ($1, 'Member', 'General member', 1, TRUE)
+       ON CONFLICT (society_id, name) DO NOTHING`,
+      [societyId]
+    );
+
     const result = await query(
       `SELECT id, name, description, hierarchy_level, is_system_role, created_at
        FROM roles

@@ -227,6 +227,34 @@ export function updateMemberRole(
   });
 }
 
+export interface SocietyInvite {
+  id: string;
+  token: string;
+  role_name: string;
+  invited_email: string;
+  status: 'PENDING' | 'ACCEPTED' | 'EXPIRED' | 'REVOKED';
+  wing_id: string | null;
+  portfolio_id: string | null;
+  wing_name: string | null;
+  portfolio_name: string | null;
+  invited_by_name: string;
+  expires_at: string;
+  created_at: string;
+}
+
+export function fetchSocietyInvites(societyId: string): Promise<SocietyInvite[]> {
+  return api<SocietyInvite[]>(`/api/invites?societyId=${societyId}`);
+}
+
+export function createSocietyInvite(
+  data: { societyId: string; email: string; roleName: string; wingId?: string; portfolioId?: string },
+): Promise<{ token: string; inviteLink: string; roleName: string; email: string; expiresAt: string }> {
+  return api('/api/invites', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
 // ─── Roles ───────────────────────────────────────────────────────────────────
 
 export interface Role {
@@ -261,7 +289,7 @@ export function fetchPortfolios(societyId: string, wingId: string): Promise<Port
 // ─── Wings & Portfolios ────────────────────────────────────────────────────
 
 export function fetchWings(societyId: string): Promise<Wing[]> {
-  return api<any[]>(`${s(societyId)}/wings`).then(async (wings) => {
+  return api<Wing[]>(`${s(societyId)}/wings`).then(async (wings) => {
     const wingList = Array.isArray(wings) ? wings : [];
 
     const wingsWithPortfolios = await Promise.all(
