@@ -8,17 +8,18 @@ import {
 } from 'lucide-react';
 import {
   fetchWings, createWing, deleteWing, createPortfolio,
-  fetchRolePrivileges, updatePrivilege, fetchMembers,
+  fetchRoles, fetchRolePermissionSettings, updatePrivilege,
   SocietyApiError,
+  type Role,
 } from '../../../api';
 import { PageLoader, ErrorState, EmptyState, ConfirmDialog } from '../../../_components/Shared';
-import type { Wing, RolePrivileges, SocietyMember } from '../../../types';
+import type { Wing, RolePermissionSettings } from '../../../types';
 
 export default function WingsPortfoliosPage() {
   const { societyId } = useParams<{ societyId: string }>();
   const router = useRouter();
   const [wings, setWings] = useState<Wing[]>([]);
-  const [members, setMembers] = useState<SocietyMember[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedWings, setExpandedWings] = useState<Set<string>>(new Set());
@@ -39,7 +40,7 @@ export default function WingsPortfoliosPage() {
   const [deleting, setDeleting] = useState(false);
 
   // Privileges
-  const [privilegeView, setPrivilegeView] = useState<RolePrivileges | null>(null);
+  const [privilegeView, setPrivilegeView] = useState<RolePermissionSettings | null>(null);
   const [privilegeLoading, setPrivilegeLoading] = useState(false);
   const [togglingPrivilege, setTogglingPrivilege] = useState<string | null>(null);
 
@@ -52,10 +53,14 @@ export default function WingsPortfoliosPage() {
       setError(null);
       const [wingsData, membersData] = await Promise.all([
         fetchWings(societyId),
-        fetchMembers(societyId),
+        fetchRoles(societyId),
       ]);
       setWings(wingsData);
-      setMembers(membersData);
+      setRoles(
+        membersData
+          .filter((r) => r.name !== 'President')
+          .sort((a, b) => b.hierarchy_level - a.hierarchy_level)
+      );
     } catch (err) {
       if (err instanceof SocietyApiError) {
         if (err.status === 401) { router.push('/login'); return; }
@@ -132,10 +137,10 @@ export default function WingsPortfoliosPage() {
     }
   };
 
-  const loadPrivileges = async (membershipId: string) => {
+  const loadPrivileges = async (roleId: string) => {
     try {
       setPrivilegeLoading(true);
-      const data = await fetchRolePrivileges(societyId, membershipId);
+      const data = await fetchRolePermissionSettings(societyId, roleId);
       setPrivilegeView(data);
     } catch (err) {
       if (err instanceof SocietyApiError) setToast(err.message);
@@ -150,7 +155,7 @@ export default function WingsPortfoliosPage() {
     try {
       setTogglingPrivilege(privilegeKey);
       await updatePrivilege(societyId, {
-        membershipId: privilegeView.membership_id,
+        roleId: privilegeView.role_id,
         privilegeKey,
         granted: !granted,
       });
@@ -278,24 +283,22 @@ export default function WingsPortfoliosPage() {
       ) : (
         /* Permissions tab */
         <div className="space-y-3">
-          <p className="text-xs text-muted">Select a member to view and manage their privileges.</p>
+          <p className="text-xs text-muted">Select a role to view and manage detailed permissions.</p>
           <div className="grid gap-2">
-            {members
-              .filter(m => m.role_name !== 'President') // President has all privileges
-              .map(member => (
+            {roles.map((role) => (
                 <button
-                  key={member.membership_id}
-                  onClick={() => loadPrivileges(member.membership_id)}
+                  key={role.id}
+                  onClick={() => loadPrivileges(role.id)}
                   className={`card p-3 text-left transition-colors hover:border-brand-500/30
-                    ${privilegeView?.membership_id === member.membership_id ? 'border-brand-500' : ''}`}
+                    ${privilegeView?.role_id === role.id ? 'border-brand-500' : ''}`}
                 >
                   <div className="flex items-center gap-3">
                     <div className="h-8 w-8 rounded-full bg-brand-500/10 text-brand-500 flex items-center justify-center text-xs font-bold">
-                      {member.full_name[0]}
+                      {role.name[0]}
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-primary">{member.full_name}</p>
-                      <p className="text-xs text-muted">{member.role_name}</p>
+                      <p className="text-sm font-medium text-primary">{role.name}</p>
+                      <p className="text-xs text-muted">Hierarchy level {role.hierarchy_level}</p>
                     </div>
                   </div>
                 </button>
@@ -308,7 +311,7 @@ export default function WingsPortfoliosPage() {
           ) : privilegeView ? (
             <div className="card p-4">
               <h3 className="text-sm font-semibold text-primary mb-3">
-                Privileges for {privilegeView.user_name} ({privilegeView.role_name})
+                Privileges for {privilegeView.role_name}
               </h3>
               <div className="space-y-2">
                 {privilegeView.privileges.map(priv => (

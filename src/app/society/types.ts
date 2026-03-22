@@ -197,6 +197,13 @@ export interface RolePrivileges {
   privileges: PrivilegeEntry[];
 }
 
+export interface RolePermissionSettings {
+  role_id: string;
+  role_name: string;
+  hierarchy_level: number;
+  privileges: PrivilegeEntry[];
+}
+
 // ─── Finance ────────────────────────────────────────────────────────────────
 
 export interface SocietyFinance {

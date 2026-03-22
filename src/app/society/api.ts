@@ -27,6 +27,7 @@ import type {
   ChatChannel,
   ChatMessage,
   MyRole,
+  RolePermissionSettings,
   SocietyPost,
   SocietyAlbum,
   AlbumPhoto,
@@ -346,12 +347,21 @@ export function fetchRolePrivileges(
 
 export function updatePrivilege(
   societyId: string,
-  data: { membershipId: string; privilegeKey: string; granted: boolean },
+  data: { membershipId?: string; roleId?: string; privilegeKey: string; granted: boolean },
 ): Promise<{ success: boolean }> {
   return api(`${s(societyId)}/governance/privileges`, {
     method: "PATCH",
     body: JSON.stringify(data),
   });
+}
+
+export function fetchRolePermissionSettings(
+  societyId: string,
+  roleId: string,
+): Promise<RolePermissionSettings> {
+  return api<RolePermissionSettings>(
+    `${s(societyId)}/governance/privileges/roles/${roleId}`,
+  );
 }
 
 // ─── Finance ────────────────────────────────────────────────────────────────
