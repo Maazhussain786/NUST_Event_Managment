@@ -49,6 +49,7 @@ export async function POST(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const societyId = searchParams.get('societyId');
     const mediaType = searchParams.get('type') as SocietyMediaType;
+    const albumId = searchParams.get('albumId');
 
     if (!societyId) {
       return NextResponse.json({ error: 'societyId is required' }, { status: 400 });
@@ -69,6 +70,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Society not found' }, { status: 404 });
     }
     const society = societyResult.rows[0];
+
+    if (albumId && mediaType !== 'gallery') {
+      return NextResponse.json({ error: 'albumId can only be used with gallery uploads' }, { status: 400 });
+    }
+
+    if (albumId) {
+      const albumResult = await query(
+        `SELECT id FROM society_albums
+         WHERE id = $1 AND society_id = $2 AND is_deleted = FALSE AND deleted_at IS NULL`,
+        [albumId, societyId]
+      );
+      if (albumResult.rows.length === 0) {
+        return NextResponse.json({ error: 'Album not found' }, { status: 404 });
+      }
+    }
 
     // 4. Permission check
     if (user.userType !== 'SUPER_ADMIN') {
@@ -119,7 +135,17 @@ export async function POST(request: NextRequest) {
     }
 
     // 9. Gallery count limit
-    if (mediaType === 'gallery') {
+    if (mediaType === 'gallery' && albumId) {
+      const countError = await checkEntityMediaCount(
+        'society_album_photos',
+        'album_id',
+        albumId,
+        LIMITS.SOCIETY_GALLERY_MAX
+      );
+      if (countError) {
+        return NextResponse.json({ error: countError }, { status: 400 });
+      }
+    } else if (mediaType === 'gallery') {
       const countError = await checkEntityMediaCount(
         'society_media',
         'society_id',
@@ -195,13 +221,40 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Insert new media record
-      await client.query(
-        `INSERT INTO society_media
-           (society_id, media_type, file_url, file_name, file_size_bytes, mime_type, caption, uploaded_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [societyId, dbMediaType, result.url, file.name, result.sizeBytes, processed.mimeType, caption || null, user.userId]
-      );
+      // Insert media in the right table.
+      if (albumId && mediaType === 'gallery') {
+        const nextOrderResult = await client.query(
+          `SELECT COALESCE(MAX(display_order), -1) + 1 AS next_order
+           FROM society_album_photos
+           WHERE album_id = $1 AND society_id = $2 AND is_deleted = FALSE`,
+          [albumId, societyId]
+        );
+        const nextOrder = Number(nextOrderResult.rows[0]?.next_order || 0);
+
+        const photoResult = await client.query(
+          `INSERT INTO society_album_photos
+             (album_id, society_id, file_url, file_name, file_size_bytes, mime_type, caption, uploaded_by, display_order)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           RETURNING id`,
+          [albumId, societyId, result.url, file.name, result.sizeBytes, processed.mimeType, caption || null, user.userId, nextOrder]
+        );
+
+        await client.query(
+          `UPDATE society_albums
+           SET photo_count = photo_count + 1,
+               cover_photo_id = COALESCE(cover_photo_id, $1),
+               updated_at = NOW()
+           WHERE id = $2 AND society_id = $3`,
+          [photoResult.rows[0].id, albumId, societyId]
+        );
+      } else {
+        await client.query(
+          `INSERT INTO society_media
+             (society_id, media_type, file_url, file_name, file_size_bytes, mime_type, caption, uploaded_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [societyId, dbMediaType, result.url, file.name, result.sizeBytes, processed.mimeType, caption || null, user.userId]
+        );
+      }
 
       // Atomic storage increment
       await updateSocietyStorageUsedTx(client, societyId, result.sizeBytes);

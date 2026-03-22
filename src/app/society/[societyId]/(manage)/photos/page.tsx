@@ -10,7 +10,7 @@ import {
 import {
   fetchAlbums, createAlbum, updateAlbum, deleteAlbum,
   fetchAlbumPhotos, deleteAlbumPhoto, setFeaturedPhoto,
-  uploadSocietyMedia, SocietyApiError,
+  uploadAlbumPhoto, SocietyApiError,
 } from '../../../api';
 import { PageLoader, ErrorState, EmptyState } from '../../../_components/Shared';
 import type { SocietyAlbum, AlbumPhoto, AlbumCategory } from '../../../types';
@@ -181,7 +181,7 @@ export default function SocietyPhotosPage() {
           setToast(`Skipped ${file.name}: must be image under 8MB`);
           continue;
         }
-        await uploadSocietyMedia(societyId, 'gallery', file);
+        await uploadAlbumPhoto(societyId, selectedAlbum.id, file);
         done++;
         setUploadProgress(Math.round((done / total) * 100));
       }
