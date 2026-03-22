@@ -1,9 +1,9 @@
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
-import { NextRequest, NextResponse } from 'next/server';
-import { getClient } from '@/lib/db';
-import { getCurrentUser } from '@/lib/auth';
-import crypto from 'crypto';
+import { NextRequest, NextResponse } from "next/server";
+import { getClient } from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth";
+import crypto from "crypto";
 import {
   ApiErrors,
   extractIpAddress,
@@ -11,7 +11,8 @@ import {
   checkApiRateLimit,
   checkSocietyOperational,
   checkBlackoutPeriod,
-} from '@/lib/api-utils';
+  resolveEffectiveSocietyPrivilege,
+} from "@/lib/api-utils";
 
 /**
  * POST /api/societies/[id]/events
@@ -39,7 +40,7 @@ import {
  */
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { id: string } },
 ) {
   const client = await getClient();
   try {
@@ -50,38 +51,57 @@ export async function POST(
     const ip = extractIpAddress(req);
 
     // Rate limit: max 5 event creations per minute per user
-    const rateLimited = checkApiRateLimit(user.userId, 'create-event', 5);
+    const rateLimited = checkApiRateLimit(user.userId, "create-event", 5);
     if (rateLimited) return rateLimited;
 
     const body = await req.json();
     const location = body.location ?? body.venue ?? null;
-    const registrationEnd = body.registration_end ?? body.registration_deadline ?? null;
+    const registrationEnd =
+      body.registration_end ?? body.registration_deadline ?? null;
     const rawTicketPrice = body.ticket_price;
     const normalizedTicketPrice =
-      rawTicketPrice === undefined || rawTicketPrice === null || rawTicketPrice === ''
+      rawTicketPrice === undefined ||
+      rawTicketPrice === null ||
+      rawTicketPrice === ""
         ? null
         : Number(rawTicketPrice);
 
-    if (normalizedTicketPrice !== null && (Number.isNaN(normalizedTicketPrice) || normalizedTicketPrice < 0)) {
-      return NextResponse.json({ error: 'ticket_price must be a non-negative number' }, { status: 400 });
+    if (
+      normalizedTicketPrice !== null &&
+      (Number.isNaN(normalizedTicketPrice) || normalizedTicketPrice < 0)
+    ) {
+      return NextResponse.json(
+        { error: "ticket_price must be a non-negative number" },
+        { status: 400 },
+      );
     }
 
-    const derivedIsPaid = normalizedTicketPrice !== null && normalizedTicketPrice > 0;
+    const derivedIsPaid =
+      normalizedTicketPrice !== null && normalizedTicketPrice > 0;
 
     // ── Required field validation ─────────────────────────────────────
     const { title, event_start, event_end, thumbnail_url } = body;
 
     if (!title || !title.trim()) {
-      return NextResponse.json({ error: 'title is required' }, { status: 400 });
+      return NextResponse.json({ error: "title is required" }, { status: 400 });
     }
     if (!event_start) {
-      return NextResponse.json({ error: 'event_start is required' }, { status: 400 });
+      return NextResponse.json(
+        { error: "event_start is required" },
+        { status: 400 },
+      );
     }
     if (!event_end) {
-      return NextResponse.json({ error: 'event_end is required' }, { status: 400 });
+      return NextResponse.json(
+        { error: "event_end is required" },
+        { status: 400 },
+      );
     }
     if (!thumbnail_url || !thumbnail_url.trim()) {
-      return NextResponse.json({ error: 'thumbnail_url is required' }, { status: 400 });
+      return NextResponse.json(
+        { error: "thumbnail_url is required" },
+        { status: 400 },
+      );
     }
 
     // ── Date validations ──────────────────────────────────────────────
@@ -89,68 +109,140 @@ export async function POST(
     const endDate = new Date(event_end);
 
     if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-      return NextResponse.json({ error: 'Invalid date format for event_start or event_end' }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid date format for event_start or event_end" },
+        { status: 400 },
+      );
     }
     if (endDate < startDate) {
-      return NextResponse.json({ error: 'event_end must be >= event_start' }, { status: 400 });
+      return NextResponse.json(
+        { error: "event_end must be >= event_start" },
+        { status: 400 },
+      );
     }
 
     if (registrationEnd) {
       const regEnd = new Date(registrationEnd);
       if (isNaN(regEnd.getTime())) {
-        return NextResponse.json({ error: 'Invalid date format for registration_end' }, { status: 400 });
+        return NextResponse.json(
+          { error: "Invalid date format for registration_end" },
+          { status: 400 },
+        );
       }
       if (regEnd > startDate) {
-        return NextResponse.json({ error: 'registration_end must be <= event_start' }, { status: 400 });
+        return NextResponse.json(
+          { error: "registration_end must be <= event_start" },
+          { status: 400 },
+        );
       }
     }
 
     // ── max_participants validation ───────────────────────────────────
     if (body.max_participants !== undefined && body.max_participants !== null) {
-      if (!Number.isInteger(body.max_participants) || body.max_participants < 1) {
-        return NextResponse.json({ error: 'max_participants must be an integer >= 1' }, { status: 400 });
+      if (
+        !Number.isInteger(body.max_participants) ||
+        body.max_participants < 1
+      ) {
+        return NextResponse.json(
+          { error: "max_participants must be an integer >= 1" },
+          { status: 400 },
+        );
       }
     }
 
-    await client.query('BEGIN');
+    await client.query("BEGIN");
 
     // ── Society operational check ─────────────────────────────────────
     const societyCheck = await checkSocietyOperational(societyId, client);
-    if (societyCheck) { await client.query('ROLLBACK'); return societyCheck; }
+    if (societyCheck) {
+      await client.query("ROLLBACK");
+      return societyCheck;
+    }
 
-    // ── Authorization: fn_has_privilege ────────────────────────────────
-    const privCheck = await client.query(
-      `SELECT fn_has_privilege($1, $2, 'CREATE_EVENT', $3, $4) AS allowed`,
-      [user.userId, societyId, body.wing_id || null, body.portfolio_id || null]
+    // ── Authorization: effective privilege + society role threshold ────────
+    const effectivePrivilege = await resolveEffectiveSocietyPrivilege(
+      {
+        userId: user.userId,
+        societyId,
+        privilegeName: "CREATE_EVENT",
+        wingId: body.wing_id || null,
+        portfolioId: body.portfolio_id || null,
+      },
+      client,
     );
-    if (!privCheck.rows[0].allowed && user.userType !== 'SUPER_ADMIN') {
-      await client.query('ROLLBACK');
-      return ApiErrors.forbidden('You do not have CREATE_EVENT privilege for this society');
+
+    let meetsRoleThreshold = user.userType === "SUPER_ADMIN";
+    if (!meetsRoleThreshold) {
+      const roleLevelMap: Record<string, number> = {
+        President: 10,
+        "Vice President": 8,
+        Director: 5,
+        "Deputy Director": 3,
+        Member: 1,
+      };
+
+      const roleGateCheck = await client.query(
+        `SELECT r.name AS role_name,
+                ss.event_creation_role
+         FROM society_memberships sm
+         JOIN roles r ON r.id = sm.role_id
+         LEFT JOIN society_settings ss ON ss.society_id = sm.society_id
+         WHERE sm.user_id = $1
+           AND sm.society_id = $2
+           AND sm.is_active = TRUE
+           AND sm.suspended_at IS NULL
+         ORDER BY r.hierarchy_level DESC
+         LIMIT 1`,
+        [user.userId, societyId],
+      );
+
+      if (roleGateCheck.rows.length > 0) {
+        const myRole = roleGateCheck.rows[0].role_name as string;
+        const requiredRole =
+          (roleGateCheck.rows[0].event_creation_role as string) || "Director";
+        meetsRoleThreshold =
+          (roleLevelMap[myRole] || 0) >= (roleLevelMap[requiredRole] || 5);
+      }
+    }
+
+    const allowedByPolicy =
+      effectivePrivilege.source === "override"
+        ? effectivePrivilege.allowed
+        : effectivePrivilege.allowed && meetsRoleThreshold;
+
+    if (!allowedByPolicy && user.userType !== "SUPER_ADMIN") {
+      await client.query("ROLLBACK");
+      return ApiErrors.forbidden(
+        "You are not allowed to create events for this society",
+      );
     }
 
     // ── Blackout period check ─────────────────────────────────────────
     const blackoutError = await checkBlackoutPeriod(startDate, endDate, client);
     if (blackoutError) {
-      await client.query('ROLLBACK');
+      await client.query("ROLLBACK");
       return ApiErrors.conflict(blackoutError);
     }
 
     // ── Verify society exists & is APPROVED (double-check) ────────────
     const society = await client.query(
       `SELECT id, name, status FROM societies WHERE id = $1`,
-      [societyId]
+      [societyId],
     );
     if (society.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return ApiErrors.notFound('Society');
+      await client.query("ROLLBACK");
+      return ApiErrors.notFound("Society");
     }
-    if (society.rows[0].status !== 'APPROVED' && user.userType !== 'SUPER_ADMIN') {
-      await client.query('ROLLBACK');
-      return ApiErrors.conflict('Society is not active');
+    if (
+      society.rows[0].status !== "APPROVED" &&
+      user.userType !== "SUPER_ADMIN"
+    ) {
+      await client.query("ROLLBACK");
+      return ApiErrors.conflict("Society is not active");
     }
 
     // ── Auto-generate registration link ───────────────────────────────
-    const registrationLink = `evt-${crypto.randomBytes(12).toString('hex')}`;
+    const registrationLink = `evt-${crypto.randomBytes(12).toString("hex")}`;
 
     // ── Insert event ──────────────────────────────────────────────────
     const insertResult = await client.query(
@@ -189,10 +281,10 @@ export async function POST(
         body.transfer_deadline || null,
         body.banner_url || null,
         thumbnail_url.trim(),
-        body.visibility || 'PUBLIC',
+        body.visibility || "PUBLIC",
         registrationLink,
         user.userId,
-      ]
+      ],
     );
 
     const newEvent = insertResult.rows[0];
@@ -200,31 +292,39 @@ export async function POST(
     // ── Audit log with IP ─────────────────────────────────────────────
     await writeAuditLog(
       {
-        action: 'EVENT_CREATED',
+        action: "EVENT_CREATED",
         performedBy: user.userId,
         societyId,
-        targetType: 'event',
+        targetType: "event",
         targetId: newEvent.id,
-        newValue: { title: title.trim(), event_start, event_end, status: newEvent.status },
+        newValue: {
+          title: title.trim(),
+          event_start,
+          event_end,
+          status: newEvent.status,
+        },
         metadata: { createdBy: user.fullName, registrationLink },
         ipAddress: ip,
       },
-      client
+      client,
     );
 
-    await client.query('COMMIT');
+    await client.query("COMMIT");
 
-    return NextResponse.json({
-      success: true,
-      event: {
-        id: newEvent.id,
-        status: newEvent.status,
-        registration_link: newEvent.registration_link,
-        version: newEvent.version,
+    return NextResponse.json(
+      {
+        success: true,
+        event: {
+          id: newEvent.id,
+          status: newEvent.status,
+          registration_link: newEvent.registration_link,
+          version: newEvent.version,
+        },
       },
-    }, { status: 201 });
+      { status: 201 },
+    );
   } catch (error) {
-    await client.query('ROLLBACK');
+    await client.query("ROLLBACK");
 
     const dbError = error as {
       code?: string;
@@ -233,20 +333,26 @@ export async function POST(
       constraint?: string;
     };
 
-    if (dbError.code === '23514') {
+    if (dbError.code === "23514") {
       // CHECK constraint violation
-      return ApiErrors.validation(dbError.detail || dbError.message || 'Event validation failed');
+      return ApiErrors.validation(
+        dbError.detail || dbError.message || "Event validation failed",
+      );
     }
-    if (dbError.code === '23503') {
+    if (dbError.code === "23503") {
       // FK violation
-      return ApiErrors.validation('Invalid reference provided (category, wing, portfolio, or creator)');
+      return ApiErrors.validation(
+        "Invalid reference provided (category, wing, portfolio, or creator)",
+      );
     }
-    if (dbError.code === '22P02') {
+    if (dbError.code === "22P02") {
       // Invalid text representation (e.g., malformed UUID/timestamp)
-      return ApiErrors.validation('Invalid identifier or date format in event payload');
+      return ApiErrors.validation(
+        "Invalid identifier or date format in event payload",
+      );
     }
 
-    return ApiErrors.serverError('Create event error:', error);
+    return ApiErrors.serverError("Create event error:", error);
   } finally {
     client.release();
   }

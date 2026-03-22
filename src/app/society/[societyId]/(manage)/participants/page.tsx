@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
   UserCheck, Search, Download, Filter, Calendar,
@@ -14,8 +14,10 @@ export default function ParticipantsPage() {
   const { societyId } = useParams<{ societyId: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const initialEventId = searchParams.get('eventId') || '';
   const [events, setEvents] = useState<SocietyEvent[]>([]);
-  const [selectedEvent, setSelectedEvent] = useState(searchParams.get('eventId') || '');
+  const [selectedEvent, setSelectedEvent] = useState(initialEventId);
+  const initializedSelectionRef = useRef(false);
   const [participants, setParticipants] = useState<EventParticipant[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -27,10 +29,25 @@ export default function ParticipantsPage() {
     fetchSocietyEvents(societyId)
       .then(evts => {
         setEvents(evts);
-        if (!selectedEvent && evts.length > 0) setSelectedEvent(evts[0].id);
+        if (!initializedSelectionRef.current) {
+          if (initialEventId && evts.some((evt) => evt.id === initialEventId)) {
+            setSelectedEvent(initialEventId);
+          } else {
+            // Default should remain "All Events".
+            setSelectedEvent('');
+          }
+          initializedSelectionRef.current = true;
+        }
       })
       .catch((err) => console.error('Failed to fetch society events:', err));
-  }, [societyId, selectedEvent]);
+  }, [societyId, initialEventId]);
+
+  // If currently selected event disappears from list, fall back to All Events.
+  useEffect(() => {
+    if (selectedEvent && events.length > 0 && !events.some((evt) => evt.id === selectedEvent)) {
+      setSelectedEvent('');
+    }
+  }, [events, selectedEvent]);
 
   const load = useCallback(async () => {
     try {

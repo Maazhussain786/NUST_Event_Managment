@@ -72,10 +72,10 @@ async function api<T>(path: string, options?: RequestInit): Promise<T> {
       body = { error: `HTTP ${res.status}` };
     }
 
-    if (body.detail && typeof body.detail === 'string') {
+    if (body.detail && typeof body.detail === "string") {
       body.error = `${body.error}: ${body.detail}`;
     }
-    if (body.code && typeof body.code === 'string') {
+    if (body.code && typeof body.code === "string") {
       body.error = `${body.error} (${body.code})`;
     }
 
@@ -104,6 +104,17 @@ export function fetchMyRole(
   societyId: string,
 ): Promise<{ role: MyRole | null }> {
   return api<{ role: MyRole | null }>(`${s(societyId)}/governance/my-role`);
+}
+
+export function fetchMyPermissions(societyId: string): Promise<{
+  can_create_event: boolean;
+  can_manage_content: boolean;
+  can_upload_media: boolean;
+  role_name?: string;
+  required_event_role?: string;
+  required_content_role?: string;
+}> {
+  return api(`${s(societyId)}/governance/my-permissions`);
 }
 
 // ─── Events ─────────────────────────────────────────────────────────────────
@@ -220,8 +231,18 @@ export function removeMember(
 export function updateMemberRole(
   societyId: string,
   membershipId: string,
-  data: { roleId: string; wingId?: string; portfolioId?: string; reason?: string },
-): Promise<{ success: boolean; message?: string; previousRole?: string; newRole?: string }> {
+  data: {
+    roleId: string;
+    wingId?: string;
+    portfolioId?: string;
+    reason?: string;
+  },
+): Promise<{
+  success: boolean;
+  message?: string;
+  previousRole?: string;
+  newRole?: string;
+}> {
   return api(`${s(societyId)}/members/${membershipId}`, {
     method: "PATCH",
     body: JSON.stringify(data),
@@ -283,7 +304,10 @@ export interface Portfolio {
   director_name?: string | null;
 }
 
-export function fetchPortfolios(societyId: string, wingId: string): Promise<Portfolio[]> {
+export function fetchPortfolios(
+  societyId: string,
+  wingId: string,
+): Promise<Portfolio[]> {
   return api<Portfolio[]>(`${s(societyId)}/wings/${wingId}/portfolios`);
 }
 
@@ -296,12 +320,17 @@ export function fetchWings(societyId: string): Promise<Wing[]> {
     const wingsWithPortfolios = await Promise.all(
       wingList.map(async (wing) => {
         try {
-          const portfolios = await api<Portfolio[]>(`${s(societyId)}/wings/${wing.id}/portfolios`);
-          return { ...wing, portfolios: Array.isArray(portfolios) ? portfolios : [] };
+          const portfolios = await api<Portfolio[]>(
+            `${s(societyId)}/wings/${wing.id}/portfolios`,
+          );
+          return {
+            ...wing,
+            portfolios: Array.isArray(portfolios) ? portfolios : [],
+          };
         } catch {
           return { ...wing, portfolios: [] };
         }
-      })
+      }),
     );
 
     return wingsWithPortfolios as Wing[];
