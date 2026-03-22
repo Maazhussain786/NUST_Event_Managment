@@ -39,7 +39,7 @@ export default function SocietyEventsPage() {
   const [form, setForm] = useState({
     title: '', description: '', event_start: '', event_end: '',
     venue: '', visibility: 'PUBLIC', ticket_price: '',
-    max_participants: '', registration_deadline: '', thumbnail_url: '',
+    max_participants: '', registration_deadline: '', thumbnail_url: '', banner_url: '',
   });
 
   // Edit/Delete/Cancel state
@@ -57,6 +57,7 @@ export default function SocietyEventsPage() {
   const [confirmDelete, setConfirmDelete] = useState<SocietyEvent | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [uploadingBanner, setUploadingBanner] = useState(false);
+  const [uploadingCreateBanner, setUploadingCreateBanner] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -97,14 +98,15 @@ export default function SocietyEventsPage() {
         is_paid: (form.ticket_price === '' ? 0 : Number(form.ticket_price)) > 0,
         max_participants: form.max_participants ? Number(form.max_participants) : undefined,
         registration_deadline: form.registration_deadline || undefined,
-        thumbnail_url: form.thumbnail_url || '/placeholder-event.jpg',
+        banner_url: form.banner_url || undefined,
+        thumbnail_url: form.thumbnail_url || form.banner_url || '/placeholder-event.jpg',
       });
       setToast('Event created successfully');
       setShowCreate(false);
       setForm({
         title: '', description: '', event_start: '', event_end: '',
         venue: '', visibility: 'PUBLIC', ticket_price: '',
-        max_participants: '', registration_deadline: '', thumbnail_url: '',
+        max_participants: '', registration_deadline: '', thumbnail_url: '', banner_url: '',
       });
       load();
     } catch (err) {
@@ -211,6 +213,24 @@ export default function SocietyEventsPage() {
       setToast('Failed to upload banner');
     } finally {
       setUploadingBanner(false);
+    }
+  };
+
+  const handleCreateBannerUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setUploadingCreateBanner(true);
+      const result = await uploadSocietyMedia(societyId, 'gallery', file);
+      setForm(prev => ({
+        ...prev,
+        banner_url: result.url,
+        thumbnail_url: result.url,
+      }));
+    } catch {
+      setToast('Failed to upload image');
+    } finally {
+      setUploadingCreateBanner(false);
     }
   };
 
@@ -351,6 +371,41 @@ export default function SocietyEventsPage() {
               <div>
                 <label className="text-xs font-medium text-muted mb-1 block">Description</label>
                 <textarea className="input-field min-h-[80px]" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted mb-1 block">Event Image</label>
+                {form.banner_url ? (
+                  <div className="relative group rounded-lg overflow-hidden">
+                    <img src={form.banner_url} alt="" className="w-full h-32 object-cover" />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
+                      <label className="cursor-pointer px-3 py-1.5 rounded-lg bg-white/90 text-gray-800 text-xs font-medium hover:bg-white flex items-center gap-1.5">
+                        <Upload size={12} /> Replace
+                        <input type="file" accept="image/*" className="hidden" onChange={handleCreateBannerUpload} disabled={uploadingCreateBanner} />
+                      </label>
+                      <button
+                        onClick={() => setForm(prev => ({ ...prev, banner_url: '', thumbnail_url: '' }))}
+                        className="px-3 py-1.5 rounded-lg bg-red-500/90 text-white text-xs font-medium hover:bg-red-600"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    {uploadingCreateBanner && (
+                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                        <Loader2 size={20} className="animate-spin text-white" />
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <label className="flex flex-col items-center justify-center h-24 rounded-lg border-2 border-dashed border-themed cursor-pointer hover:border-brand-500/50">
+                    {uploadingCreateBanner ? <Loader2 size={20} className="animate-spin text-muted" /> : (
+                      <>
+                        <Upload size={18} className="text-muted mb-1" />
+                        <span className="text-xs text-muted">Upload event image</span>
+                      </>
+                    )}
+                    <input type="file" accept="image/*" className="hidden" onChange={handleCreateBannerUpload} disabled={uploadingCreateBanner} />
+                  </label>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>

@@ -3,6 +3,28 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { CONTAINERS, extractBlobName, generateReadUrl } from '@/lib/blob';
+
+function signMediaUrl(url: string | null | undefined): string | null | undefined {
+  if (!url) return url;
+
+  const candidates = [
+    CONTAINERS.EVENT_MEDIA,
+    CONTAINERS.SOCIETY_MEDIA,
+    CONTAINERS.PROFILE_PICTURES,
+    CONTAINERS.POST_ATTACHMENTS,
+    CONTAINERS.NOTE_ATTACHMENTS,
+  ];
+
+  for (const container of candidates) {
+    const blobName = extractBlobName(url, container);
+    if (blobName) {
+      return generateReadUrl(container, blobName, 24 * 60);
+    }
+  }
+
+  return url;
+}
 
 // GET /api/societies/[id]/governance/events — list society events with optional status filter
 export async function GET(
@@ -54,7 +76,13 @@ export async function GET(
     sql += ` GROUP BY e.id, u.full_name ORDER BY e.event_start DESC`;
 
     const result = await query(sql, qParams);
-    return NextResponse.json(result.rows);
+    const rows = result.rows.map((row) => ({
+      ...row,
+      banner_url: signMediaUrl(row.banner_url),
+      thumbnail_url: signMediaUrl(row.thumbnail_url),
+    }));
+
+    return NextResponse.json(rows);
   } catch (error) {
     console.error('Governance events error:', error);
     return NextResponse.json({ error: 'Failed' }, { status: 500 });

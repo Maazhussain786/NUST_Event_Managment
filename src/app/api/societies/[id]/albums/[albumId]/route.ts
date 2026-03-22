@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { query, getClient } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { CONTAINERS, extractBlobName, generateReadUrl } from '@/lib/blob';
 import {
   ApiErrors,
   extractIpAddress,
@@ -10,6 +11,27 @@ import {
   checkSocietyOperational,
   decrementStorageUsed,
 } from '@/lib/api-utils';
+
+function signMediaUrl(url: string | null | undefined): string | null | undefined {
+  if (!url) return url;
+
+  const candidates = [
+    CONTAINERS.SOCIETY_MEDIA,
+    CONTAINERS.EVENT_MEDIA,
+    CONTAINERS.POST_ATTACHMENTS,
+    CONTAINERS.NOTE_ATTACHMENTS,
+    CONTAINERS.PROFILE_PICTURES,
+  ];
+
+  for (const container of candidates) {
+    const blobName = extractBlobName(url, container);
+    if (blobName) {
+      return generateReadUrl(container, blobName, 24 * 60);
+    }
+  }
+
+  return url;
+}
 
 /**
  * GET /api/societies/[id]/albums/[albumId]
@@ -47,9 +69,14 @@ export async function GET(
       [albumId, societyId]
     );
 
+    const photos = photosResult.rows.map((row) => ({
+      ...row,
+      file_url: signMediaUrl(row.file_url),
+    }));
+
     return NextResponse.json({
       album: albumResult.rows[0],
-      photos: photosResult.rows,
+      photos,
     });
   } catch (error) {
     return ApiErrors.serverError('Fetch album details error:', error);

@@ -12,7 +12,7 @@ export async function GET(
   try {
     const { wingId } = params;
     const result = await query(
-      `SELECT p.id, p.name, p.description, p.created_at,
+      `SELECT p.id, p.wing_id, p.name, p.description, p.created_at,
               u.full_name AS created_by_name,
               COUNT(DISTINCT sm.user_id) FILTER (WHERE sm.is_active = TRUE AND sm.portfolio_id = p.id) AS member_count,
               (SELECT full_name FROM users u2

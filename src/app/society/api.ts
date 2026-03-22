@@ -131,6 +131,7 @@ export function createSocietyEvent(
     max_participants?: number;
     registration_end?: string;
     registration_deadline?: string;
+    banner_url?: string;
     thumbnail_url?: string;
   },
 ): Promise<{ success: boolean; event: { id: string; status: string } }> {
@@ -229,7 +230,22 @@ export function updateMemberRole(
 // ─── Wings & Portfolios ────────────────────────────────────────────────────
 
 export function fetchWings(societyId: string): Promise<Wing[]> {
-  return api<Wing[]>(`${s(societyId)}/wings`);
+  return api<any[]>(`${s(societyId)}/wings`).then(async (wings) => {
+    const wingList = Array.isArray(wings) ? wings : [];
+
+    const wingsWithPortfolios = await Promise.all(
+      wingList.map(async (wing) => {
+        try {
+          const portfolios = await api<Portfolio[]>(`${s(societyId)}/wings/${wing.id}/portfolios`);
+          return { ...wing, portfolios: Array.isArray(portfolios) ? portfolios : [] };
+        } catch {
+          return { ...wing, portfolios: [] };
+        }
+      })
+    );
+
+    return wingsWithPortfolios as Wing[];
+  });
 }
 
 export function createWing(
