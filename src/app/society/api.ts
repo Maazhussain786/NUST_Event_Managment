@@ -269,6 +269,99 @@ export interface SocietyInvite {
   created_at: string;
 }
 
+export interface SocietyJoinRequest {
+  id: string;
+  status:
+    | "PENDING"
+    | "INTERVIEW_SCHEDULED"
+    | "APPROVED"
+    | "REJECTED"
+    | "WITHDRAWN";
+  application_data: Record<string, unknown>;
+  review_notes: string | null;
+  reviewed_by: string | null;
+  reviewed_by_name?: string | null;
+  reviewed_at: string | null;
+  interview_scheduled_at: string | null;
+  interview_mode: string | null;
+  interview_location: string | null;
+  interview_meeting_link: string | null;
+  interview_notes: string | null;
+  created_at: string;
+  updated_at: string;
+  user_id?: string;
+  full_name?: string;
+  email?: string;
+  avatar_url?: string | null;
+}
+
+export function submitJoinRequest(
+  societyId: string,
+  data: {
+    phone?: string;
+    department?: string;
+    year_of_study?: string;
+    preferred_wing_id?: string;
+    preferred_portfolio_id?: string;
+    skills?: string[];
+    availability?: string;
+    motivation: string;
+    prior_experience?: string;
+    expected_contribution?: string;
+  },
+): Promise<{
+  success: boolean;
+  request: { id: string; status: string; created_at: string };
+}> {
+  return api(`${s(societyId)}/join-requests`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function fetchMyJoinRequestStatus(societyId: string): Promise<{
+  is_member: boolean;
+  role_name?: string;
+  request: SocietyJoinRequest | null;
+}> {
+  return api(`${s(societyId)}/join-requests/me`);
+}
+
+export function fetchJoinRequests(
+  societyId: string,
+  status:
+    | "OPEN"
+    | "PENDING"
+    | "INTERVIEW_SCHEDULED"
+    | "APPROVED"
+    | "REJECTED"
+    | "WITHDRAWN" = "OPEN",
+): Promise<{ requests: SocietyJoinRequest[] }> {
+  return api(`${s(societyId)}/join-requests?status=${status}`);
+}
+
+export function reviewJoinRequest(
+  societyId: string,
+  requestId: string,
+  data:
+    | { action: "APPROVE"; review_notes?: string }
+    | { action: "REJECT"; review_notes?: string }
+    | {
+        action: "SCHEDULE_INTERVIEW";
+        interview_scheduled_at: string;
+        interview_mode?: string;
+        interview_location?: string;
+        interview_meeting_link?: string;
+        interview_notes?: string;
+        review_notes?: string;
+      },
+): Promise<{ success: boolean; status: string }> {
+  return api(`${s(societyId)}/join-requests/${requestId}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
 export function fetchSocietyInvites(
   societyId: string,
 ): Promise<SocietyInvite[]> {

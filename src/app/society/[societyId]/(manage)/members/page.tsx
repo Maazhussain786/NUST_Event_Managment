@@ -18,8 +18,11 @@ import {
   fetchWings,
   fetchSocietyInvites,
   createSocietyInvite,
+  fetchJoinRequests,
+  reviewJoinRequest,
   SocietyApiError,
   type SocietyInvite,
+  type SocietyJoinRequest,
 } from "../../../api";
 import {
   PageLoader,
@@ -68,6 +71,20 @@ export default function MembersPage() {
   const [invitePortfolioId, setInvitePortfolioId] = useState("");
   const [inviteSubmitting, setInviteSubmitting] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
+  const [joinRequests, setJoinRequests] = useState<SocietyJoinRequest[]>([]);
+  const [reviewingRequestId, setReviewingRequestId] = useState<string | null>(
+    null,
+  );
+  const [showInterviewModalFor, setShowInterviewModalFor] =
+    useState<SocietyJoinRequest | null>(null);
+  const [interviewForm, setInterviewForm] = useState({
+    interview_scheduled_at: "",
+    interview_mode: "In-person",
+    interview_location: "",
+    interview_meeting_link: "",
+    interview_notes: "",
+    review_notes: "",
+  });
 
   const isMemberView = (myRole?.role_name || "").toLowerCase() === "member";
   const isPresident = myRole?.role_name === "President";
@@ -85,15 +102,18 @@ export default function MembersPage() {
       setMyRole(roleData.role);
 
       if (roleData.role?.role_name === "President") {
-        const [wingsData, invitesData] = await Promise.all([
+        const [wingsData, invitesData, joinRequestsData] = await Promise.all([
           fetchWings(societyId),
           fetchSocietyInvites(societyId),
+          fetchJoinRequests(societyId, "OPEN"),
         ]);
         setWings(wingsData);
         setInvites(invitesData);
+        setJoinRequests(joinRequestsData.requests || []);
       } else {
         setWings([]);
         setInvites([]);
+        setJoinRequests([]);
       }
     } catch (err) {
       if (err instanceof SocietyApiError) {
@@ -194,6 +214,99 @@ export default function MembersPage() {
       else setInviteError("Failed to create invite");
     } finally {
       setInviteSubmitting(false);
+    }
+  };
+
+  const handleApproveJoinRequest = async (request: SocietyJoinRequest) => {
+    try {
+      setReviewingRequestId(request.id);
+      await reviewJoinRequest(societyId, request.id, {
+        action: "APPROVE",
+      });
+      setToast(
+        `${request.full_name || "Applicant"} approved and added as member`,
+      );
+      const latest = await fetchJoinRequests(societyId, "OPEN");
+      setJoinRequests(latest.requests || []);
+      load();
+    } catch (err) {
+      setToast(
+        err instanceof SocietyApiError
+          ? err.message
+          : "Failed to approve join request",
+      );
+    } finally {
+      setReviewingRequestId(null);
+    }
+  };
+
+  const handleRejectJoinRequest = async (request: SocietyJoinRequest) => {
+    const reason = window.prompt("Reason for rejection (optional):", "") || "";
+    try {
+      setReviewingRequestId(request.id);
+      await reviewJoinRequest(societyId, request.id, {
+        action: "REJECT",
+        review_notes: reason,
+      });
+      setToast(`Rejected request from ${request.full_name || "applicant"}`);
+      const latest = await fetchJoinRequests(societyId, "OPEN");
+      setJoinRequests(latest.requests || []);
+    } catch (err) {
+      setToast(
+        err instanceof SocietyApiError
+          ? err.message
+          : "Failed to reject join request",
+      );
+    } finally {
+      setReviewingRequestId(null);
+    }
+  };
+
+  const openInterviewModal = (request: SocietyJoinRequest) => {
+    setShowInterviewModalFor(request);
+    setInterviewForm({
+      interview_scheduled_at: "",
+      interview_mode: "In-person",
+      interview_location: "",
+      interview_meeting_link: "",
+      interview_notes: "",
+      review_notes: "",
+    });
+  };
+
+  const handleScheduleInterview = async () => {
+    if (!showInterviewModalFor) return;
+    if (!interviewForm.interview_scheduled_at) {
+      setToast("Interview date/time is required");
+      return;
+    }
+
+    try {
+      setReviewingRequestId(showInterviewModalFor.id);
+      await reviewJoinRequest(societyId, showInterviewModalFor.id, {
+        action: "SCHEDULE_INTERVIEW",
+        interview_scheduled_at: interviewForm.interview_scheduled_at,
+        interview_mode: interviewForm.interview_mode,
+        interview_location: interviewForm.interview_location || undefined,
+        interview_meeting_link:
+          interviewForm.interview_meeting_link || undefined,
+        interview_notes: interviewForm.interview_notes || undefined,
+        review_notes: interviewForm.review_notes || undefined,
+      });
+      setToast(
+        `Interview scheduled for ${showInterviewModalFor.full_name || "applicant"}`,
+      );
+      setShowInterviewModalFor(null);
+      const latest = await fetchJoinRequests(societyId, "OPEN");
+      setJoinRequests(latest.requests || []);
+    } catch (err) {
+      setToast(
+        err instanceof SocietyApiError
+          ? err.message
+          : "Failed to schedule interview",
+      );
+    } finally {
+      setReviewingRequestId(null);
     }
   };
 
@@ -340,6 +453,89 @@ export default function MembersPage() {
                   <StatusBadge status={invite.status} />
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {canManageAssignments && (
+        <div className="rounded-lg border border-surface-300/70 p-3 dark:border-surface-700">
+          <p className="mb-2 text-xs text-muted">Join Requests</p>
+          {joinRequests.length === 0 ? (
+            <p className="text-xs text-muted">No pending join requests.</p>
+          ) : (
+            <div className="space-y-3">
+              {joinRequests.map((request) => {
+                const data =
+                  request.application_data &&
+                  typeof request.application_data === "object"
+                    ? (request.application_data as Record<string, unknown>)
+                    : {};
+
+                return (
+                  <div
+                    key={request.id}
+                    className="rounded-lg border border-themed p-3"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-primary truncate">
+                          {request.full_name || "Applicant"}
+                        </p>
+                        <p className="text-xs text-muted truncate">
+                          {request.email || "No email"}
+                        </p>
+                        <p className="mt-1 text-xs text-muted">
+                          Applied{" "}
+                          {new Date(request.created_at).toLocaleString()}
+                        </p>
+                      </div>
+                      <StatusBadge status={request.status} />
+                    </div>
+
+                    {data.motivation && (
+                      <p className="mt-2 text-xs text-secondary">
+                        <span className="font-medium text-primary">
+                          Motivation:
+                        </span>{" "}
+                        {String(data.motivation)}
+                      </p>
+                    )}
+                    {(data.department || data.year_of_study || data.phone) && (
+                      <p className="mt-1 text-xs text-muted">
+                        {[data.department, data.year_of_study, data.phone]
+                          .filter(Boolean)
+                          .map(String)
+                          .join(" • ")}
+                      </p>
+                    )}
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        onClick={() => handleApproveJoinRequest(request)}
+                        disabled={reviewingRequestId === request.id}
+                        className="btn-primary px-3 py-1.5 text-xs"
+                      >
+                        Approve
+                      </button>
+                      <button
+                        onClick={() => openInterviewModal(request)}
+                        disabled={reviewingRequestId === request.id}
+                        className="btn-ghost px-3 py-1.5 text-xs"
+                      >
+                        Schedule Interview
+                      </button>
+                      <button
+                        onClick={() => handleRejectJoinRequest(request)}
+                        disabled={reviewingRequestId === request.id}
+                        className="btn-ghost px-3 py-1.5 text-xs text-red-500 hover:bg-red-500/10"
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -598,6 +794,106 @@ export default function MembersPage() {
                   {inviteSubmitting ? "Sending..." : "Send Invite"}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showInterviewModalFor && (
+        <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg space-y-3 rounded-xl border border-surface-300 bg-surface-0 p-4 dark:border-surface-700 dark:bg-surface-900">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-primary">
+                Schedule Interview
+              </h3>
+              <button
+                onClick={() => setShowInterviewModalFor(null)}
+                className="btn-ghost p-1"
+                aria-label="Close interview modal"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <p className="text-xs text-muted">
+              Applicant: {showInterviewModalFor.full_name || "Applicant"}
+            </p>
+
+            <div className="space-y-2">
+              <input
+                type="datetime-local"
+                className="input-field"
+                value={interviewForm.interview_scheduled_at}
+                onChange={(e) =>
+                  setInterviewForm((p) => ({
+                    ...p,
+                    interview_scheduled_at: e.target.value,
+                  }))
+                }
+              />
+              <input
+                className="input-field"
+                placeholder="Mode (In-person / Online)"
+                value={interviewForm.interview_mode}
+                onChange={(e) =>
+                  setInterviewForm((p) => ({
+                    ...p,
+                    interview_mode: e.target.value,
+                  }))
+                }
+              />
+              <input
+                className="input-field"
+                placeholder="Location"
+                value={interviewForm.interview_location}
+                onChange={(e) =>
+                  setInterviewForm((p) => ({
+                    ...p,
+                    interview_location: e.target.value,
+                  }))
+                }
+              />
+              <input
+                className="input-field"
+                placeholder="Meeting link (optional)"
+                value={interviewForm.interview_meeting_link}
+                onChange={(e) =>
+                  setInterviewForm((p) => ({
+                    ...p,
+                    interview_meeting_link: e.target.value,
+                  }))
+                }
+              />
+              <textarea
+                className="input-field min-h-[80px]"
+                placeholder="Interview instructions for applicant"
+                value={interviewForm.interview_notes}
+                onChange={(e) =>
+                  setInterviewForm((p) => ({
+                    ...p,
+                    interview_notes: e.target.value,
+                  }))
+                }
+              />
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                className="btn-ghost px-3 py-2 text-xs"
+                onClick={() => setShowInterviewModalFor(null)}
+                disabled={reviewingRequestId === showInterviewModalFor.id}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn-primary px-3 py-2 text-xs"
+                onClick={handleScheduleInterview}
+                disabled={reviewingRequestId === showInterviewModalFor.id}
+              >
+                {reviewingRequestId === showInterviewModalFor.id
+                  ? "Saving..."
+                  : "Schedule"}
+              </button>
             </div>
           </div>
         </div>

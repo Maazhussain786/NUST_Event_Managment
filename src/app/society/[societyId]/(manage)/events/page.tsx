@@ -337,7 +337,9 @@ export default function SocietyEventsPage() {
       setEditForm((prev) => ({ ...prev, banner_url: result.url }));
     } catch (err) {
       setToast(
-        err instanceof SocietyApiError ? err.message : "Failed to upload banner",
+        err instanceof SocietyApiError
+          ? err.message
+          : "Failed to upload banner",
       );
     } finally {
       setUploadingBanner(false);
@@ -493,56 +495,61 @@ export default function SocietyEventsPage() {
                     >
                       <Eye size={14} /> View
                     </button>
-                    {canShowActionMenu && <div className="relative">
-                      <button
-                        onClick={() =>
-                          setMenuEvent(menuEvent === event.id ? null : event.id)
-                        }
-                        className="btn-ghost text-xs p-1.5"
-                      >
-                        <MoreHorizontal size={14} />
-                      </button>
-                      {menuEvent === event.id && (
-                        <>
-                          <button
-                            className="fixed inset-0 z-40"
-                            onClick={() => setMenuEvent(null)}
-                          />
-                          <div className="absolute right-0 top-8 z-50 w-36 rounded-lg border border-themed bg-card shadow-xl py-1">
-                            {canEditEvents && (
-                              <button
-                                onClick={() => openEdit(event)}
-                                className="w-full text-left px-3 py-2 text-xs text-secondary hover:bg-secondary flex items-center gap-2"
-                              >
-                                <Edit3 size={12} /> Edit
-                              </button>
-                            )}
-                            {canCancelEvents && event.status !== "CANCELLED" && (
-                              <button
-                                onClick={() => {
-                                  setConfirmCancel(event);
-                                  setMenuEvent(null);
-                                }}
-                                className="w-full text-left px-3 py-2 text-xs text-amber-500 hover:bg-amber-500/5 flex items-center gap-2"
-                              >
-                                <XCircle size={12} /> Cancel
-                              </button>
-                            )}
-                            {canDeleteEvents && (
-                              <button
-                                onClick={() => {
-                                  setConfirmDelete(event);
-                                  setMenuEvent(null);
-                                }}
-                                className="w-full text-left px-3 py-2 text-xs text-red-500 hover:bg-red-500/5 flex items-center gap-2"
-                              >
-                                <Trash2 size={12} /> Delete
-                              </button>
-                            )}
-                          </div>
-                        </>
-                      )}
-                    </div>}
+                    {canShowActionMenu && (
+                      <div className="relative">
+                        <button
+                          onClick={() =>
+                            setMenuEvent(
+                              menuEvent === event.id ? null : event.id,
+                            )
+                          }
+                          className="btn-ghost text-xs p-1.5"
+                        >
+                          <MoreHorizontal size={14} />
+                        </button>
+                        {menuEvent === event.id && (
+                          <>
+                            <button
+                              className="fixed inset-0 z-40"
+                              onClick={() => setMenuEvent(null)}
+                            />
+                            <div className="absolute right-0 top-8 z-50 w-36 rounded-lg border border-themed bg-card shadow-xl py-1">
+                              {canEditEvents && (
+                                <button
+                                  onClick={() => openEdit(event)}
+                                  className="w-full text-left px-3 py-2 text-xs text-secondary hover:bg-secondary flex items-center gap-2"
+                                >
+                                  <Edit3 size={12} /> Edit
+                                </button>
+                              )}
+                              {canCancelEvents &&
+                                event.status !== "CANCELLED" && (
+                                  <button
+                                    onClick={() => {
+                                      setConfirmCancel(event);
+                                      setMenuEvent(null);
+                                    }}
+                                    className="w-full text-left px-3 py-2 text-xs text-amber-500 hover:bg-amber-500/5 flex items-center gap-2"
+                                  >
+                                    <XCircle size={12} /> Cancel
+                                  </button>
+                                )}
+                              {canDeleteEvents && (
+                                <button
+                                  onClick={() => {
+                                    setConfirmDelete(event);
+                                    setMenuEvent(null);
+                                  }}
+                                  className="w-full text-left px-3 py-2 text-xs text-red-500 hover:bg-red-500/5 flex items-center gap-2"
+                                >
+                                  <Trash2 size={12} /> Delete
+                                </button>
+                              )}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </>
                 )}
               </div>
@@ -637,14 +644,18 @@ export default function SocietyEventsPage() {
                     )}
                   </div>
                 ) : (
-                  <label className={`flex flex-col items-center justify-center h-24 rounded-lg border-2 border-dashed border-themed ${canUploadImages ? "cursor-pointer hover:border-brand-500/50" : "opacity-60 cursor-not-allowed"}`}>
+                  <label
+                    className={`flex flex-col items-center justify-center h-24 rounded-lg border-2 border-dashed border-themed ${canUploadImages ? "cursor-pointer hover:border-brand-500/50" : "opacity-60 cursor-not-allowed"}`}
+                  >
                     {uploadingCreateBanner ? (
                       <Loader2 size={20} className="animate-spin text-muted" />
                     ) : (
                       <>
                         <Upload size={18} className="text-muted mb-1" />
                         <span className="text-xs text-muted">
-                          {canUploadImages ? "Upload event image" : "No media upload permission"}
+                          {canUploadImages
+                            ? "Upload event image"
+                            : "No media upload permission"}
                         </span>
                       </>
                     )}

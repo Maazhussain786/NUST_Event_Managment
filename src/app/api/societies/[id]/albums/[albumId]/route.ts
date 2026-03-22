@@ -1,9 +1,9 @@
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
-import { NextRequest, NextResponse } from 'next/server';
-import { query, getClient } from '@/lib/db';
-import { getCurrentUser } from '@/lib/auth';
-import { CONTAINERS, extractBlobName, generateReadUrl } from '@/lib/blob';
+import { NextRequest, NextResponse } from "next/server";
+import { query, getClient } from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth";
+import { CONTAINERS, extractBlobName, generateReadUrl } from "@/lib/blob";
 import {
   ApiErrors,
   extractIpAddress,
@@ -11,9 +11,11 @@ import {
   checkSocietyOperational,
   decrementStorageUsed,
   resolveEffectiveSocietyPrivilege,
-} from '@/lib/api-utils';
+} from "@/lib/api-utils";
 
-function signMediaUrl(url: string | null | undefined): string | null | undefined {
+function signMediaUrl(
+  url: string | null | undefined,
+): string | null | undefined {
   if (!url) return url;
 
   const candidates = [
@@ -40,7 +42,7 @@ function signMediaUrl(url: string | null | undefined): string | null | undefined
  */
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string; albumId: string } }
+  { params }: { params: { id: string; albumId: string } },
 ) {
   try {
     const { id: societyId, albumId } = params;
@@ -52,11 +54,11 @@ export async function GET(
        FROM society_albums a
        LEFT JOIN users u ON a.created_by = u.id
        WHERE a.id = $1 AND a.society_id = $2 AND a.is_deleted = FALSE AND a.deleted_at IS NULL`,
-      [albumId, societyId]
+      [albumId, societyId],
     );
 
     if (albumResult.rows.length === 0) {
-      return ApiErrors.notFound('Album');
+      return ApiErrors.notFound("Album");
     }
 
     const photosResult = await query(
@@ -67,7 +69,7 @@ export async function GET(
        LEFT JOIN users u ON p.uploaded_by = u.id
        WHERE p.album_id = $1 AND p.society_id = $2 AND p.is_deleted = FALSE AND p.deleted_at IS NULL
        ORDER BY p.display_order, p.created_at DESC`,
-      [albumId, societyId]
+      [albumId, societyId],
     );
 
     const photos = photosResult.rows.map((row) => ({
@@ -80,7 +82,7 @@ export async function GET(
       photos,
     });
   } catch (error) {
-    return ApiErrors.serverError('Fetch album details error:', error);
+    return ApiErrors.serverError("Fetch album details error:", error);
   }
 }
 
@@ -91,7 +93,7 @@ export async function GET(
  */
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string; albumId: string } }
+  { params }: { params: { id: string; albumId: string } },
 ) {
   const client = await getClient();
   try {
@@ -102,19 +104,22 @@ export async function PATCH(
     const body = await req.json();
     const ip = extractIpAddress(req);
 
-    await client.query('BEGIN');
+    await client.query("BEGIN");
 
     // Society operational check
     const societyCheck = await checkSocietyOperational(societyId, client);
-    if (societyCheck) { await client.query('ROLLBACK'); return societyCheck; }
+    if (societyCheck) {
+      await client.query("ROLLBACK");
+      return societyCheck;
+    }
 
-      const effectiveManageContent = await resolveEffectiveSocietyPrivilege(
-        { userId: user.userId, societyId, privilegeName: 'MANAGE_CONTENT' },
-        client,
-      );
-      if (!effectiveManageContent.allowed && user.userType !== 'SUPER_ADMIN') {
-      await client.query('ROLLBACK');
-      return ApiErrors.forbidden('You do not have MANAGE_CONTENT privilege');
+    const effectiveManageContent = await resolveEffectiveSocietyPrivilege(
+      { userId: user.userId, societyId, privilegeName: "MANAGE_CONTENT" },
+      client,
+    );
+    if (!effectiveManageContent.allowed && user.userType !== "SUPER_ADMIN") {
+      await client.query("ROLLBACK");
+      return ApiErrors.forbidden("You do not have MANAGE_CONTENT privilege");
     }
 
     // Fetch album with FOR UPDATE
@@ -123,11 +128,11 @@ export async function PATCH(
        FROM society_albums
        WHERE id = $1 AND society_id = $2 AND is_deleted = FALSE AND deleted_at IS NULL
        FOR UPDATE`,
-      [albumId, societyId]
+      [albumId, societyId],
     );
     if (existing.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return ApiErrors.notFound('Album');
+      await client.query("ROLLBACK");
+      return ApiErrors.notFound("Album");
     }
 
     const oldAlbum = existing.rows[0];
@@ -164,8 +169,8 @@ export async function PATCH(
     }
 
     if (sets.length === 0) {
-      await client.query('ROLLBACK');
-      return ApiErrors.validation('No fields to update');
+      await client.query("ROLLBACK");
+      return ApiErrors.validation("No fields to update");
     }
 
     sets.push(`updated_at = NOW()`);
@@ -173,35 +178,35 @@ export async function PATCH(
     vals.push(albumId, societyId);
 
     const result = await client.query(
-      `UPDATE society_albums SET ${sets.join(', ')} WHERE id = $${idx++} AND society_id = $${idx} AND is_deleted = FALSE RETURNING id`,
-      vals
+      `UPDATE society_albums SET ${sets.join(", ")} WHERE id = $${idx++} AND society_id = $${idx} AND is_deleted = FALSE RETURNING id`,
+      vals,
     );
 
     if (result.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return ApiErrors.notFound('Album');
+      await client.query("ROLLBACK");
+      return ApiErrors.notFound("Album");
     }
 
     await writeAuditLog(
       {
-        action: 'ALBUM_UPDATED',
+        action: "ALBUM_UPDATED",
         performedBy: user.userId,
         societyId,
-        targetType: 'album',
+        targetType: "album",
         targetId: albumId,
         oldValue: oldValues,
         newValue: newValues,
         metadata: { updatedBy: user.fullName },
         ipAddress: ip,
       },
-      client
+      client,
     );
 
-    await client.query('COMMIT');
+    await client.query("COMMIT");
     return NextResponse.json({ success: true });
   } catch (error) {
-    await client.query('ROLLBACK');
-    return ApiErrors.serverError('Update album error:', error);
+    await client.query("ROLLBACK");
+    return ApiErrors.serverError("Update album error:", error);
   } finally {
     client.release();
   }
@@ -214,7 +219,7 @@ export async function PATCH(
  */
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string; albumId: string } }
+  { params }: { params: { id: string; albumId: string } },
 ) {
   const client = await getClient();
   try {
@@ -224,19 +229,22 @@ export async function DELETE(
     const { id: societyId, albumId } = params;
     const ip = extractIpAddress(req);
 
-    await client.query('BEGIN');
+    await client.query("BEGIN");
 
     // Society operational check
     const societyCheck = await checkSocietyOperational(societyId, client);
-    if (societyCheck) { await client.query('ROLLBACK'); return societyCheck; }
+    if (societyCheck) {
+      await client.query("ROLLBACK");
+      return societyCheck;
+    }
 
-      const effectiveManageContent = await resolveEffectiveSocietyPrivilege(
-        { userId: user.userId, societyId, privilegeName: 'MANAGE_CONTENT' },
-        client,
-      );
-      if (!effectiveManageContent.allowed && user.userType !== 'SUPER_ADMIN') {
-      await client.query('ROLLBACK');
-      return ApiErrors.forbidden('You do not have MANAGE_CONTENT privilege');
+    const effectiveManageContent = await resolveEffectiveSocietyPrivilege(
+      { userId: user.userId, societyId, privilegeName: "MANAGE_CONTENT" },
+      client,
+    );
+    if (!effectiveManageContent.allowed && user.userType !== "SUPER_ADMIN") {
+      await client.query("ROLLBACK");
+      return ApiErrors.forbidden("You do not have MANAGE_CONTENT privilege");
     }
 
     // Fetch album for audit + lock
@@ -245,11 +253,11 @@ export async function DELETE(
        FROM society_albums
        WHERE id = $1 AND society_id = $2 AND is_deleted = FALSE AND deleted_at IS NULL
        FOR UPDATE`,
-      [albumId, societyId]
+      [albumId, societyId],
     );
     if (existing.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return ApiErrors.notFound('Album');
+      await client.query("ROLLBACK");
+      return ApiErrors.notFound("Album");
     }
 
     const oldAlbum = existing.rows[0];
@@ -259,7 +267,7 @@ export async function DELETE(
       `SELECT COALESCE(SUM(file_size_bytes), 0) AS total_bytes
        FROM society_album_photos
        WHERE album_id = $1 AND society_id = $2 AND is_deleted = FALSE AND deleted_at IS NULL`,
-      [albumId, societyId]
+      [albumId, societyId],
     );
     const freedBytes = parseInt(storageResult.rows[0].total_bytes);
 
@@ -268,7 +276,7 @@ export async function DELETE(
       `UPDATE society_albums
        SET is_deleted = TRUE, deleted_at = NOW(), deleted_by = $3, updated_at = NOW()
        WHERE id = $1 AND society_id = $2`,
-      [albumId, societyId, user.userId]
+      [albumId, societyId, user.userId],
     );
 
     // Cascade soft-delete all photos with timestamp
@@ -276,7 +284,7 @@ export async function DELETE(
       `UPDATE society_album_photos
        SET is_deleted = TRUE, deleted_at = NOW(), deleted_by = $3
        WHERE album_id = $1 AND society_id = $2 AND is_deleted = FALSE`,
-      [albumId, societyId, user.userId]
+      [albumId, societyId, user.userId],
     );
 
     // Decrement storage used
@@ -286,23 +294,23 @@ export async function DELETE(
 
     await writeAuditLog(
       {
-        action: 'ALBUM_DELETED',
+        action: "ALBUM_DELETED",
         performedBy: user.userId,
         societyId,
-        targetType: 'album',
+        targetType: "album",
         targetId: albumId,
         oldValue: { name: oldAlbum.name, photo_count: oldAlbum.photo_count },
         metadata: { deletedBy: user.fullName, freedBytes },
         ipAddress: ip,
       },
-      client
+      client,
     );
 
-    await client.query('COMMIT');
+    await client.query("COMMIT");
     return NextResponse.json({ success: true });
   } catch (error) {
-    await client.query('ROLLBACK');
-    return ApiErrors.serverError('Delete album error:', error);
+    await client.query("ROLLBACK");
+    return ApiErrors.serverError("Delete album error:", error);
   } finally {
     client.release();
   }

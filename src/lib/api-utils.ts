@@ -579,6 +579,48 @@ export interface EffectivePrivilegeResult {
   source: "override" | "role";
 }
 
+// ============================================================================
+// Society Join Requests
+// ============================================================================
+
+export async function ensureSocietyJoinRequestsTable(
+  client?: PoolClient,
+): Promise<void> {
+  const q = client ? client.query.bind(client) : query;
+
+  await q(`
+    CREATE TABLE IF NOT EXISTS society_join_requests (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      society_id UUID NOT NULL REFERENCES societies(id) ON DELETE CASCADE,
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      status TEXT NOT NULL DEFAULT 'PENDING'
+        CHECK (status IN ('PENDING', 'INTERVIEW_SCHEDULED', 'APPROVED', 'REJECTED', 'WITHDRAWN')),
+      application_data JSONB NOT NULL DEFAULT '{}'::jsonb,
+      review_notes TEXT,
+      reviewed_by UUID REFERENCES users(id) ON DELETE SET NULL,
+      reviewed_at TIMESTAMPTZ,
+      interview_scheduled_at TIMESTAMPTZ,
+      interview_mode TEXT,
+      interview_location TEXT,
+      interview_meeting_link TEXT,
+      interview_notes TEXT,
+      member_notified_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await q(`
+    CREATE INDEX IF NOT EXISTS idx_join_requests_society
+    ON society_join_requests (society_id, status, created_at DESC)
+  `);
+
+  await q(`
+    CREATE INDEX IF NOT EXISTS idx_join_requests_user
+    ON society_join_requests (user_id, created_at DESC)
+  `);
+}
+
 /**
  * Resolve effective permission for a user in a society with priority:
  * 1) explicit per-member override, 2) role privilege (fn_has_privilege).
