@@ -49,6 +49,17 @@ export async function GET(
       [id],
     );
 
+    // Fetch portfolios grouped by wing for public join/apply flows.
+    const portfoliosResult = await query(
+      `SELECT p.id, p.name, p.wing_id
+       FROM portfolios p
+       JOIN wings w ON w.id = p.wing_id
+       WHERE w.society_id = $1
+         AND p.deleted_at IS NULL
+       ORDER BY p.name`,
+      [id],
+    );
+
     const society = (() => {
       const row = result.rows[0];
       const logoBlob = row.logo_url
@@ -74,10 +85,35 @@ export async function GET(
       };
     });
 
+    const portfoliosByWing = new Map<
+      string,
+      Array<{ id: string; name: string }>
+    >();
+    for (const row of portfoliosResult.rows as Array<{
+      id: string;
+      name: string;
+      wing_id: string;
+    }>) {
+      if (!portfoliosByWing.has(row.wing_id))
+        portfoliosByWing.set(row.wing_id, []);
+      portfoliosByWing.get(row.wing_id)!.push({ id: row.id, name: row.name });
+    }
+
+    const wings = (
+      wingsResult.rows as Array<{
+        id: string;
+        name: string;
+        description: string | null;
+      }>
+    ).map((wing) => ({
+      ...wing,
+      portfolios: portfoliosByWing.get(wing.id) || [],
+    }));
+
     return NextResponse.json({
       society,
       events,
-      wings: wingsResult.rows,
+      wings,
     });
   } catch (error: unknown) {
     const message =
