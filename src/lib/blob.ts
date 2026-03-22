@@ -16,20 +16,38 @@ import {
   StorageSharedKeyCredential,
   BlobSASPermissions,
   generateBlobSASQueryParameters,
-} from '@azure/storage-blob';
+} from "@azure/storage-blob";
 
 // ============================================================================
 // Configuration
 // ============================================================================
 
 const connectionString = process.env.AZURE_BLOB_CONNECTION_STRING;
-const accountName = process.env.AZURE_BLOB_ACCOUNT_NAME || '';
-const accountKey = process.env.AZURE_BLOB_ACCOUNT_KEY || '';
+const explicitAccountName = process.env.AZURE_BLOB_ACCOUNT_NAME || "";
+const explicitAccountKey = process.env.AZURE_BLOB_ACCOUNT_KEY || "";
 const cdnBaseUrl = process.env.AZURE_BLOB_CDN_URL; // optional CDN
+
+function getConnectionStringValue(key: string): string {
+  if (!connectionString) return "";
+
+  const parts = connectionString.split(";");
+  for (const part of parts) {
+    const [k, ...rest] = part.split("=");
+    if ((k || "").trim().toLowerCase() === key.toLowerCase()) {
+      return rest.join("=").trim();
+    }
+  }
+
+  return "";
+}
+
+const accountName =
+  explicitAccountName || getConnectionStringValue("AccountName");
+const accountKey = explicitAccountKey || getConnectionStringValue("AccountKey");
 
 if (!connectionString) {
   console.warn(
-    'AZURE_BLOB_CONNECTION_STRING not set. Blob storage operations will fail.'
+    "AZURE_BLOB_CONNECTION_STRING not set. Blob storage operations will fail.",
   );
 }
 
@@ -38,11 +56,11 @@ if (!connectionString) {
 // ============================================================================
 
 export const CONTAINERS = {
-  PROFILE_PICTURES: 'profile-pictures',
-  SOCIETY_MEDIA: 'society-media',
-  EVENT_MEDIA: 'event-media',
-  POST_ATTACHMENTS: 'post-attachments',
-  NOTE_ATTACHMENTS: 'note-attachments',
+  PROFILE_PICTURES: "profile-pictures",
+  SOCIETY_MEDIA: "society-media",
+  EVENT_MEDIA: "event-media",
+  POST_ATTACHMENTS: "post-attachments",
+  NOTE_ATTACHMENTS: "note-attachments",
 } as const;
 
 export type ContainerName = (typeof CONTAINERS)[keyof typeof CONTAINERS];
@@ -57,7 +75,7 @@ function getBlobServiceClient(): BlobServiceClient {
   if (!_blobServiceClient) {
     if (!connectionString) {
       throw new Error(
-        'AZURE_BLOB_CONNECTION_STRING is required. Set it in .env.local'
+        "AZURE_BLOB_CONNECTION_STRING is required. Set it in .env.local",
       );
     }
     _blobServiceClient =
@@ -92,7 +110,7 @@ export async function ensureContainersExist(): Promise<void> {
     });
   }
   _containersInitialized = true;
-  console.log('Azure Blob containers initialized');
+  console.log("Azure Blob containers initialized");
 }
 
 // ============================================================================
@@ -124,7 +142,7 @@ export async function uploadBlob(
   blobName: string,
   buffer: Buffer,
   mimeType: string,
-  metadata?: Record<string, string>
+  metadata?: Record<string, string>,
 ): Promise<UploadResult> {
   await ensureContainersExist();
 
@@ -134,7 +152,7 @@ export async function uploadBlob(
   await blockBlobClient.uploadData(buffer, {
     blobHTTPHeaders: {
       blobContentType: mimeType,
-      blobCacheControl: 'public, max-age=31536000', // 1 year cache for immutable files
+      blobCacheControl: "public, max-age=31536000", // 1 year cache for immutable files
     },
     metadata: metadata || {},
   });
@@ -161,12 +179,12 @@ export async function uploadBlob(
  */
 export async function deleteBlob(
   container: ContainerName,
-  blobName: string
+  blobName: string,
 ): Promise<boolean> {
   try {
     const containerClient = getContainerClient(container);
     const blobClient = containerClient.getBlobClient(blobName);
-    await blobClient.deleteIfExists({ deleteSnapshots: 'include' });
+    await blobClient.deleteIfExists({ deleteSnapshots: "include" });
     return true;
   } catch (error) {
     console.error(`Failed to delete blob ${container}/${blobName}:`, error);
@@ -189,7 +207,7 @@ export async function deleteBlob(
 export function generateReadUrl(
   container: ContainerName,
   blobName: string,
-  expiresInMinutes: number = 60
+  expiresInMinutes: number = 60,
 ): string {
   if (!accountName || !accountKey) {
     // Fallback: return direct URL (works if container is public)
@@ -199,21 +217,22 @@ export function generateReadUrl(
 
   const sharedKeyCredential = new StorageSharedKeyCredential(
     accountName,
-    accountKey
+    accountKey,
   );
 
-  const startsOn = new Date();
+  // Start 5 minutes in the past to avoid clock-skew-related 403s.
+  const startsOn = new Date(Date.now() - 5 * 60 * 1000);
   const expiresOn = new Date(startsOn.getTime() + expiresInMinutes * 60 * 1000);
 
   const sasToken = generateBlobSASQueryParameters(
     {
       containerName: container,
       blobName,
-      permissions: BlobSASPermissions.parse('r'), // read only
+      permissions: BlobSASPermissions.parse("r"), // read only
       startsOn,
       expiresOn,
     },
-    sharedKeyCredential
+    sharedKeyCredential,
   ).toString();
 
   const containerClient = getContainerClient(container);
@@ -232,15 +251,15 @@ export function generateReadUrl(
  */
 export function extractBlobName(
   fullUrl: string,
-  container: ContainerName
+  container: ContainerName,
 ): string | null {
   try {
     const url = new URL(fullUrl);
-    const pathParts = url.pathname.split('/');
+    const pathParts = url.pathname.split("/");
     // pathname = /container/path/to/file.jpg
     const containerIndex = pathParts.indexOf(container);
     if (containerIndex === -1) return null;
-    return pathParts.slice(containerIndex + 1).join('/');
+    return pathParts.slice(containerIndex + 1).join("/");
   } catch {
     return null;
   }

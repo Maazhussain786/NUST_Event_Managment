@@ -1,20 +1,28 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { useState, useEffect } from "react";
+import { motion } from "framer-motion";
 import {
-  Calendar, Bell, Sparkles, ArrowRight,
-  Ticket, Users, CalendarDays, ChevronRight, Clock,
-  AlertCircle, CheckCircle2,
-} from 'lucide-react';
-import EventCard from '@/components/EventCard';
-import { AnimatedPage } from '@/components/AnimatedPage';
-import { PageHeader } from '@/components/page-header';
-import { EmptyState } from '@/components/empty-state';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import Link from 'next/link';
+  Calendar,
+  Bell,
+  Sparkles,
+  ArrowRight,
+  Ticket,
+  Users,
+  CalendarDays,
+  ChevronRight,
+  Clock,
+  AlertCircle,
+  CheckCircle2,
+} from "lucide-react";
+import EventCard from "@/components/EventCard";
+import { AnimatedPage } from "@/components/AnimatedPage";
+import { PageHeader } from "@/components/page-header";
+import { EmptyState } from "@/components/empty-state";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import Link from "next/link";
 
 interface Event {
   id: string;
@@ -52,17 +60,18 @@ interface UserStats {
   upcomingEvents: number;
   pendingTickets: number;
   followedSocieties: number;
+  unreadNotifications: number;
 }
 
 const ease = [0.25, 0.1, 0.25, 1] as const;
 
 function getUserName(): string | null {
-  if (typeof window === 'undefined') return null;
+  if (typeof window === "undefined") return null;
   try {
-    const stored = localStorage.getItem('user');
+    const stored = localStorage.getItem("user");
     if (!stored) return null;
     const user = JSON.parse(stored);
-    return user.fullName?.split(' ')[0] || null;
+    return user.fullName?.split(" ")[0] || null;
   } catch {
     return null;
   }
@@ -71,13 +80,17 @@ function getUserName(): string | null {
 function buildContextLine(stats: UserStats): string {
   const parts: string[] = [];
   if (stats.upcomingEvents > 0) {
-    parts.push(`${stats.upcomingEvents} upcoming event${stats.upcomingEvents !== 1 ? 's' : ''}`);
+    parts.push(
+      `${stats.upcomingEvents} upcoming event${stats.upcomingEvents !== 1 ? "s" : ""}`,
+    );
   }
   if (stats.pendingTickets > 0) {
-    parts.push(`${stats.pendingTickets} pending ticket${stats.pendingTickets !== 1 ? 's' : ''}`);
+    parts.push(
+      `${stats.pendingTickets} pending ticket${stats.pendingTickets !== 1 ? "s" : ""}`,
+    );
   }
-  if (parts.length === 0) return 'Discover events happening around you';
-  return `You have ${parts.join(' and ')}`;
+  if (parts.length === 0) return "Discover events happening around you";
+  return `You have ${parts.join(" and ")}`;
 }
 
 function HomeSkeleton() {
@@ -101,7 +114,10 @@ function HomeSkeleton() {
         <Skeleton className="h-5 w-32 mb-4" />
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="flex gap-3.5 p-3 rounded-xl border border-border">
+            <div
+              key={i}
+              className="flex gap-3.5 p-3 rounded-xl border border-border"
+            >
               <Skeleton className="w-12 h-14 rounded-lg shrink-0" />
               <div className="flex-1 space-y-2 py-0.5">
                 <Skeleton className="h-4 w-3/4" />
@@ -119,8 +135,8 @@ export default function HomePage() {
   const [trending, setTrending] = useState<Event[]>([]);
   const [upcoming, setUpcoming] = useState<Event[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [activeCategory, setActiveCategory] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [activeCategory, setActiveCategory] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState<string | null>(null);
   const [nextTicket, setNextTicket] = useState<TicketPreview | null>(null);
@@ -129,15 +145,16 @@ export default function HomePage() {
     upcomingEvents: 0,
     pendingTickets: 0,
     followedSocieties: 0,
+    unreadNotifications: 0,
   });
 
   useEffect(() => {
     setUserName(getUserName());
 
     Promise.all([
-      fetch('/api/events/trending').then((r) => r.json()),
-      fetch('/api/events?limit=10').then((r) => r.json()),
-      fetch('/api/categories').then((r) => r.json()),
+      fetch("/api/events/trending").then((r) => r.json()),
+      fetch("/api/events?limit=10").then((r) => r.json()),
+      fetch("/api/categories").then((r) => r.json()),
     ])
       .then(([trendingData, upcomingData, catData]) => {
         setTrending(trendingData.events || []);
@@ -150,9 +167,20 @@ export default function HomePage() {
       .finally(() => setLoading(false));
 
     // Fetch user's tickets for context
-    if (typeof window !== 'undefined' && localStorage.getItem('user')) {
+    if (typeof window !== "undefined" && localStorage.getItem("user")) {
+      // Fetch unread notifications for badge counter
+      fetch("/api/notifications")
+        .then((r) => (r.ok ? r.json() : []))
+        .then((data) => {
+          if (Array.isArray(data)) {
+            const unreadNotifications = data.filter((n) => !n.is_read).length;
+            setUserStats((prev) => ({ ...prev, unreadNotifications }));
+          }
+        })
+        .catch(() => {});
+
       // Fetch next approved ticket
-      fetch('/api/tickets?limit=1&status=APPROVED&upcoming=true')
+      fetch("/api/tickets?limit=1&status=APPROVED&upcoming=true")
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
           if (data && Array.isArray(data) && data.length > 0) {
@@ -162,7 +190,7 @@ export default function HomePage() {
         .catch(() => {});
 
       // Fetch pending tickets for action items
-      fetch('/api/tickets?status=PENDING')
+      fetch("/api/tickets?status=PENDING")
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
           if (data && Array.isArray(data)) {
@@ -175,8 +203,12 @@ export default function HomePage() {
   }, []);
 
   const filteredUpcoming = upcoming.filter((e) => {
-    const matchesCategory = activeCategory === 'all' || e.category_name?.toLowerCase() === activeCategory;
-    const matchesSearch = !searchQuery || e.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    const matchesCategory =
+      activeCategory === "all" ||
+      e.category_name?.toLowerCase() === activeCategory;
+    const matchesSearch =
+      !searchQuery ||
+      e.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       e.society_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       e.location?.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
@@ -186,17 +218,21 @@ export default function HomePage() {
     <AnimatedPage className="min-h-screen bg-background">
       <PageHeader
         title="Home"
-        greeting={userName ? { userName, contextLine: buildContextLine(userStats) } : undefined}
+        greeting={
+          userName
+            ? { userName, contextLine: buildContextLine(userStats) }
+            : undefined
+        }
         action={
           <Button variant="ghost" size="icon" asChild>
             <Link href="/notifications" aria-label="Notifications">
               <div className="relative">
                 <Bell className="h-5 w-5" />
-                {(userStats.pendingTickets > 0 || userStats.upcomingEvents > 0) && (
+                {userStats.unreadNotifications > 0 && (
                   <span className="absolute -top-1 -right-1 w-4 h-4 bg-brand-500 rounded-full text-[9px] font-bold flex items-center justify-center text-white ring-2 ring-background">
-                    {userStats.pendingTickets + userStats.upcomingEvents > 9
-                      ? '9+'
-                      : userStats.pendingTickets + userStats.upcomingEvents}
+                    {userStats.unreadNotifications > 9
+                      ? "9+"
+                      : userStats.unreadNotifications}
                   </span>
                 )}
               </div>
@@ -206,12 +242,15 @@ export default function HomePage() {
         search={{
           value: searchQuery,
           onChange: setSearchQuery,
-          placeholder: 'Search events, societies...',
+          placeholder: "Search events, societies...",
         }}
         filters={{
           items: [
-            { value: 'all', label: 'All' },
-            ...categories.map((c) => ({ value: c.name.toLowerCase(), label: c.name })),
+            { value: "all", label: "All" },
+            ...categories.map((c) => ({
+              value: c.name.toLowerCase(),
+              label: c.name,
+            })),
           ],
           active: activeCategory,
           onChange: setActiveCategory,
@@ -233,7 +272,9 @@ export default function HomePage() {
                 <div className="rounded-2xl border-2 border-brand-200 dark:border-brand-900/50 bg-gradient-to-br from-brand-50 to-white dark:from-brand-950/30 dark:to-card p-4 hover:border-brand-300 dark:hover:border-brand-800 transition-all duration-200 active:scale-[0.99]">
                   <div className="flex items-center gap-1.5 mb-2">
                     <CheckCircle2 className="w-4 h-4 text-brand-500" />
-                    <span className="text-overline text-brand-600 dark:text-brand-400">YOUR NEXT EVENT</span>
+                    <span className="text-overline text-brand-600 dark:text-brand-400">
+                      YOUR NEXT EVENT
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="flex-1 min-w-0">
@@ -243,13 +284,16 @@ export default function HomePage() {
                       <div className="flex items-center gap-2 mt-1 text-caption text-muted-foreground">
                         <Clock className="w-3.5 h-3.5" />
                         <span>
-                          {new Date(nextTicket.event_start).toLocaleDateString('en-PK', {
-                            weekday: 'short',
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
+                          {new Date(nextTicket.event_start).toLocaleDateString(
+                            "en-PK",
+                            {
+                              weekday: "short",
+                              month: "short",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            },
+                          )}
                         </span>
                       </div>
                     </div>
@@ -278,9 +322,12 @@ export default function HomePage() {
                       </div>
                       <div>
                         <p className="text-body-sm font-semibold text-foreground">
-                          {pendingTickets.length} pending ticket{pendingTickets.length !== 1 ? 's' : ''}
+                          {pendingTickets.length} pending ticket
+                          {pendingTickets.length !== 1 ? "s" : ""}
                         </p>
-                        <p className="text-caption text-muted-foreground">Waiting for approval</p>
+                        <p className="text-caption text-muted-foreground">
+                          Waiting for approval
+                        </p>
                       </div>
                     </div>
                     <ChevronRight className="w-5 h-5 text-muted-foreground" />
@@ -298,17 +345,28 @@ export default function HomePage() {
               transition={{ delay: 0.15, ease }}
               className="grid grid-cols-3 gap-2.5"
             >
-              <Link href="/events" className="rounded-xl border border-border bg-card p-3 hover:border-brand-200 dark:hover:border-brand-900/40 transition-all duration-200 text-center active:scale-[0.97]">
+              <Link
+                href="/events"
+                className="rounded-xl border border-border bg-card p-3 hover:border-brand-200 dark:hover:border-brand-900/40 transition-all duration-200 text-center active:scale-[0.97]"
+              >
                 <CalendarDays className="w-5 h-5 text-brand-500 mx-auto mb-1" />
                 <p className="text-h3 text-foreground">{upcoming.length}</p>
                 <p className="text-caption text-muted-foreground">Events</p>
               </Link>
-              <Link href="/tickets" className="rounded-xl border border-border bg-card p-3 hover:border-brand-200 dark:hover:border-brand-900/40 transition-all duration-200 text-center active:scale-[0.97]">
+              <Link
+                href="/tickets"
+                className="rounded-xl border border-border bg-card p-3 hover:border-brand-200 dark:hover:border-brand-900/40 transition-all duration-200 text-center active:scale-[0.97]"
+              >
                 <Ticket className="w-5 h-5 text-brand-500 mx-auto mb-1" />
-                <p className="text-h3 text-foreground">{pendingTickets.length > 0 ? pendingTickets.length : '—'}</p>
+                <p className="text-h3 text-foreground">
+                  {pendingTickets.length > 0 ? pendingTickets.length : "—"}
+                </p>
                 <p className="text-caption text-muted-foreground">Tickets</p>
               </Link>
-              <Link href="/societies" className="rounded-xl border border-border bg-card p-3 hover:border-brand-200 dark:hover:border-brand-900/40 transition-all duration-200 text-center active:scale-[0.97]">
+              <Link
+                href="/societies"
+                className="rounded-xl border border-border bg-card p-3 hover:border-brand-200 dark:hover:border-brand-900/40 transition-all duration-200 text-center active:scale-[0.97]"
+              >
                 <Users className="w-5 h-5 text-brand-500 mx-auto mb-1" />
                 <p className="text-h3 text-foreground">—</p>
                 <p className="text-caption text-muted-foreground">Societies</p>
@@ -327,8 +385,12 @@ export default function HomePage() {
                 <div className="rounded-2xl border border-border bg-card p-4 hover:border-brand-200 dark:hover:border-brand-900/40 transition-all duration-200 active:scale-[0.99]">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-body font-semibold text-foreground">Discover events at NUST</p>
-                      <p className="text-caption text-muted-foreground mt-0.5">Browse upcoming events, workshops & shows</p>
+                      <p className="text-body font-semibold text-foreground">
+                        Discover events at NUST
+                      </p>
+                      <p className="text-caption text-muted-foreground mt-0.5">
+                        Browse upcoming events, workshops & shows
+                      </p>
                     </div>
                     <div className="w-11 h-11 rounded-xl bg-brand-500/10 flex items-center justify-center shrink-0 ml-3">
                       <CalendarDays className="w-5 h-5 text-brand-500" />
@@ -363,12 +425,15 @@ export default function HomePage() {
             ) : (
               <EmptyState
                 icon={Calendar}
-                message={`No upcoming events${activeCategory !== 'all' ? ' in this category' : ''}`}
+                message={`No upcoming events${activeCategory !== "all" ? " in this category" : ""}`}
               />
             )}
             {filteredUpcoming.length > 6 && (
               <div className="mt-4 text-center">
-                <Link href="/events" className="text-brand-600 dark:text-brand-400 text-body-sm font-semibold">
+                <Link
+                  href="/events"
+                  className="text-brand-600 dark:text-brand-400 text-body-sm font-semibold"
+                >
                   View all events →
                 </Link>
               </div>
@@ -385,7 +450,10 @@ export default function HomePage() {
                   </div>
                   <h2 className="text-h3 text-foreground">Trending</h2>
                 </div>
-                <Link href="/events" className="text-brand-600 dark:text-brand-400 text-body-sm font-semibold flex items-center gap-0.5">
+                <Link
+                  href="/events"
+                  className="text-brand-600 dark:text-brand-400 text-body-sm font-semibold flex items-center gap-0.5"
+                >
                   See all <ChevronRight className="w-4 h-4" />
                 </Link>
               </div>

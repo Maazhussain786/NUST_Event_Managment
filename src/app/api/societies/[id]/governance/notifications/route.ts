@@ -19,7 +19,10 @@ export async function GET(
     const membership = await query(
       `SELECT r.hierarchy_level FROM society_memberships sm
        JOIN roles r ON sm.role_id = r.id
-       WHERE sm.user_id = $1 AND sm.society_id = $2 AND sm.is_active = TRUE`,
+       WHERE sm.user_id = $1
+         AND sm.society_id = $2
+         AND sm.is_active = TRUE
+         AND sm.suspended_at IS NULL`,
       [user.userId, societyId]
     );
     if (membership.rows.length === 0 && user.userType !== 'SUPER_ADMIN') {
@@ -30,7 +33,7 @@ export async function GET(
     // or by the user's own notifications relating to this society's events
     // For now, return user's notifications that contain event links for this society's events
     const result = await query(
-      `SELECT n.id, n.title, n.body, n.link, n.is_read, n.created_at
+      `SELECT n.id, n.title, n.body, n.is_read, n.created_at
        FROM notifications n
        WHERE n.user_id = $1
        ORDER BY n.created_at DESC
@@ -38,18 +41,25 @@ export async function GET(
       [user.userId]
     );
 
-    // Also get audit log entries as "system notifications"
-    const auditNotifs = await query(
-      `SELECT al.id, al.action AS title,
-              COALESCE(al.metadata->>'eventTitle', al.action) AS body,
-              al.created_at, al.target_type AS link,
-              FALSE AS is_read
-       FROM audit_logs al
-       WHERE al.society_id = $1
-       ORDER BY al.created_at DESC
-       LIMIT 50`,
-      [societyId]
-    );
+    // Audit notifications are optional. If audit tables/columns are unavailable,
+    // we still return user notifications instead of failing the entire page.
+    let auditRows: Array<{ id: string; title: string; body: string; created_at: string | Date }> = [];
+    try {
+      const auditNotifs = await query(
+        `SELECT al.id,
+                al.action::text AS title,
+                COALESCE(al.metadata->>'eventTitle', al.metadata->>'event_title', al.action::text) AS body,
+                al.created_at
+         FROM audit_logs al
+         WHERE al.society_id = $1
+         ORDER BY al.created_at DESC
+         LIMIT 50`,
+        [societyId]
+      );
+      auditRows = auditNotifs.rows;
+    } catch (auditError) {
+      console.warn('Audit notifications unavailable, continuing with user notifications only:', auditError);
+    }
 
     // Combine and format
     const notifications = [
@@ -62,7 +72,7 @@ export async function GET(
         created_at: n.created_at,
         metadata: null,
       })),
-      ...auditNotifs.rows.map((n: any) => ({
+      ...auditRows.map((n: any) => ({
         id: n.id,
         title: String(n.title).replace(/_/g, ' '),
         body: n.body,
