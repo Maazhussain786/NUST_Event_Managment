@@ -413,9 +413,12 @@ export function fetchStorage(societyId: string): Promise<SocietyStorageInfo> {
 
 export function deleteMedia(
   mediaId: string,
+  table: "society_media" | "event_media" | "post_attachments" | "event_note_attachments",
   hard?: boolean,
 ): Promise<{ success: boolean }> {
-  const qs = hard ? "?hard=true" : "";
+  const params = new URLSearchParams({ table });
+  if (hard) params.set("hard", "true");
+  const qs = `?${params.toString()}`;
   return api(`/api/media/${mediaId}${qs}`, { method: "DELETE" });
 }
 

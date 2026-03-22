@@ -127,6 +127,7 @@ export async function POST(
     );
 
     let meetsRoleThreshold = user.userType === "SUPER_ADMIN";
+    let isPresidentMember = false;
     if (!meetsRoleThreshold) {
       const roleLevelMap: Record<string, number> = {
         President: 10,
@@ -152,6 +153,7 @@ export async function POST(
       );
 
       const myRole = memberRole.rows[0]?.role_name as string | undefined;
+      isPresidentMember = myRole === "President";
       const requiredRole =
         (memberRole.rows[0]?.content_upload_role as string | undefined) ||
         "Deputy Director";
@@ -169,6 +171,7 @@ export async function POST(
 
     const canCreate =
       user.userType === "SUPER_ADMIN" ||
+      isPresidentMember ||
       hasOverrideGrant ||
       (hasAnyPrivilege && meetsRoleThreshold);
 
