@@ -16,6 +16,19 @@ export async function GET(
     }
 
     const { id: societyId } = params;
+
+    // Verify requester is a member or SUPER_ADMIN
+    if (user.userType !== 'SUPER_ADMIN') {
+      const membership = await query(
+        `SELECT 1 FROM society_memberships
+         WHERE society_id = $1 AND user_id = $2 AND is_active = TRUE`,
+        [societyId, user.userId]
+      );
+      if (membership.rows.length === 0) {
+        return NextResponse.json({ error: 'Not a member of this society' }, { status: 403 });
+      }
+    }
+
     const result = await query(
       `SELECT sm.id AS membership_id, sm.user_id, sm.wing_id, sm.portfolio_id,
               sm.is_active, sm.assigned_at,

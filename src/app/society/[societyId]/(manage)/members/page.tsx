@@ -4,11 +4,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Users, Search, Shield, UserMinus, UserPlus,
-  Crown, ArrowUpDown, Filter,
+  Crown, ArrowUpDown, Filter, Pencil,
 } from 'lucide-react';
-import { fetchMembers, removeMember, SocietyApiError } from '../../../api';
+import { fetchMembers, fetchMyRole, removeMember, SocietyApiError } from '../../../api';
 import { PageLoader, ErrorState, EmptyState, StatusBadge, ConfirmDialog } from '../../../_components/Shared';
-import type { SocietyMember, RoleName } from '../../../types';
+import { RoleEditDialog } from '../../../_components/RoleEditDialog';
+import type { SocietyMember, RoleName, MyRole } from '../../../types';
 
 const ROLE_COLORS: Record<string, string> = {
   'President': 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
@@ -22,11 +23,13 @@ export default function MembersPage() {
   const { societyId } = useParams<{ societyId: string }>();
   const router = useRouter();
   const [members, setMembers] = useState<SocietyMember[]>([]);
+  const [myRole, setMyRole] = useState<MyRole | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('');
   const [removeTarget, setRemoveTarget] = useState<SocietyMember | null>(null);
+  const [editTarget, setEditTarget] = useState<SocietyMember | null>(null);
   const [removing, setRemoving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'hierarchy' | 'name' | 'date'>('hierarchy');
@@ -35,8 +38,12 @@ export default function MembersPage() {
     try {
       setLoading(true);
       setError(null);
-      const data = await fetchMembers(societyId);
+      const [data, roleData] = await Promise.all([
+        fetchMembers(societyId),
+        fetchMyRole(societyId),
+      ]);
       setMembers(data);
+      setMyRole(roleData.role);
     } catch (err) {
       if (err instanceof SocietyApiError) {
         if (err.status === 401) { router.push('/login'); return; }
@@ -65,6 +72,31 @@ export default function MembersPage() {
     } finally {
       setRemoving(false);
     }
+  };
+
+  const handleRoleUpdateSuccess = () => {
+    setToast('Role updated successfully');
+    load();
+  };
+
+  // Check if current user can edit a member's role
+  const canEditRole = (member: SocietyMember): boolean => {
+    if (!myRole) return false;
+    // VP+ can edit lower-ranked members
+    if (myRole.hierarchy_level < 8) return false;
+    // Cannot edit equal or higher ranked members
+    if (member.hierarchy_level >= myRole.hierarchy_level) return false;
+    // Cannot edit President (use transfer-presidency)
+    if (member.role_name === 'President') return false;
+    return true;
+  };
+
+  // Check if current user can remove a member
+  const canRemove = (member: SocietyMember): boolean => {
+    if (!myRole) return false;
+    if (member.hierarchy_level >= myRole.hierarchy_level) return false;
+    if (member.role_name === 'President') return false;
+    return true;
   };
 
   // Filter & sort
@@ -160,21 +192,45 @@ export default function MembersPage() {
                   </div>
                 </div>
 
-                {/* Remove action (only if you outrank them) */}
-                {member.role_name !== 'President' && (
-                  <button
-                    onClick={() => setRemoveTarget(member)}
-                    className="btn-ghost text-xs px-2 py-1.5 text-red-500 hover:bg-red-500/10"
-                    title="Remove member"
-                  >
-                    <UserMinus size={16} />
-                  </button>
-                )}
+                {/* Actions */}
+                <div className="flex items-center gap-1">
+                  {/* Edit role button (VP+ only, for lower-ranked members) */}
+                  {canEditRole(member) && (
+                    <button
+                      onClick={() => setEditTarget(member)}
+                      className="btn-ghost text-xs px-2 py-1.5 text-brand-500 hover:bg-brand-500/10"
+                      title="Edit role"
+                    >
+                      <Pencil size={16} />
+                    </button>
+                  )}
+
+                  {/* Remove action (only if you outrank them) */}
+                  {canRemove(member) && (
+                    <button
+                      onClick={() => setRemoveTarget(member)}
+                      className="btn-ghost text-xs px-2 py-1.5 text-red-500 hover:bg-red-500/10"
+                      title="Remove member"
+                    >
+                      <UserMinus size={16} />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           ))}
         </div>
       )}
+
+      {/* Role Edit Dialog */}
+      <RoleEditDialog
+        open={editTarget !== null}
+        onOpenChange={(open) => !open && setEditTarget(null)}
+        member={editTarget}
+        societyId={societyId}
+        myLevel={myRole?.hierarchy_level || 0}
+        onSuccess={handleRoleUpdateSuccess}
+      />
 
       {/* Remove confirm */}
       <ConfirmDialog

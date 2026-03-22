@@ -10,7 +10,25 @@ export async function GET(
   { params }: { params: { id: string; wingId: string } }
 ) {
   try {
-    const { wingId } = params;
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { id: societyId, wingId } = params;
+
+    // Verify requester is a member or SUPER_ADMIN
+    if (user.userType !== 'SUPER_ADMIN') {
+      const membership = await query(
+        `SELECT 1 FROM society_memberships
+         WHERE society_id = $1 AND user_id = $2 AND is_active = TRUE`,
+        [societyId, user.userId]
+      );
+      if (membership.rows.length === 0) {
+        return NextResponse.json({ error: 'Not a member of this society' }, { status: 403 });
+      }
+    }
+
     const result = await query(
       `SELECT p.id, p.wing_id, p.name, p.description, p.created_at,
               u.full_name AS created_by_name,

@@ -6,9 +6,12 @@ import { getCurrentUser } from '@/lib/auth';
 import crypto from 'crypto';
 
 // Role hierarchy: who can invite whom
+// President can invite all lower roles
+// VP can invite Director, Deputy Director, and Member
+// Director can invite Deputy Director and Member
 const INVITE_RULES: Record<string, string[]> = {
-  'President': ['Vice President'],
-  'Vice President': ['Director'],
+  'President': ['Vice President', 'Director', 'Deputy Director', 'Member'],
+  'Vice President': ['Director', 'Deputy Director', 'Member'],
   'Director': ['Deputy Director', 'Member'],
 };
 
@@ -59,9 +62,22 @@ export async function POST(req: NextRequest) {
     if (roleName === 'Vice President' && !wingId) {
       return NextResponse.json({ error: 'Wing must be specified for VP invite' }, { status: 400 });
     }
-    // Director / Deputy Director / Member must have portfolio (except Member which is wing-level)
-    if (['Director', 'Deputy Director'].includes(roleName) && !portfolioId) {
-      return NextResponse.json({ error: 'Portfolio must be specified for Director/Deputy Director invite' }, { status: 400 });
+    // Director / Deputy Director must have wing and portfolio
+    if (['Director', 'Deputy Director'].includes(roleName)) {
+      if (!wingId) {
+        return NextResponse.json({ error: 'Wing must be specified for Director/Deputy Director invite' }, { status: 400 });
+      }
+      if (!portfolioId) {
+        return NextResponse.json({ error: 'Portfolio must be specified for Director/Deputy Director invite' }, { status: 400 });
+      }
+      // Validate portfolio belongs to the specified wing
+      const portfolioCheck = await query(
+        `SELECT id FROM portfolios WHERE id = $1 AND wing_id = $2 AND deleted_at IS NULL`,
+        [portfolioId, wingId]
+      );
+      if (portfolioCheck.rows.length === 0) {
+        return NextResponse.json({ error: 'Portfolio does not belong to the selected wing' }, { status: 400 });
+      }
     }
 
     // Check role limits

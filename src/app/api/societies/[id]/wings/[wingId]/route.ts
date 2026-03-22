@@ -27,12 +27,27 @@ export async function DELETE(
       return NextResponse.json({ error: 'Only President can delete wings' }, { status: 403 });
     }
 
+    // Check for active memberships in this wing
+    const activeMembers = await query(
+      `SELECT COUNT(*) c FROM society_memberships
+       WHERE wing_id = $1 AND is_active = TRUE`,
+      [wingId]
+    );
+    const affectedCount = parseInt(activeMembers.rows[0].c);
+
+    // Soft delete the wing (trigger in migration will handle membership deactivation)
     await query(
       'UPDATE wings SET deleted_at = NOW() WHERE id = $1 AND society_id = $2',
       [wingId, societyId]
     );
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({
+      success: true,
+      affectedMemberships: affectedCount,
+      message: affectedCount > 0
+        ? `Wing deleted. ${affectedCount} membership(s) were deactivated.`
+        : 'Wing deleted successfully.'
+    });
   } catch (error) {
     console.error('Wing delete error:', error);
     return NextResponse.json({ error: 'Failed' }, { status: 500 });
@@ -45,7 +60,24 @@ export async function GET(
   { params }: { params: { id: string; wingId: string } }
 ) {
   try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { id: societyId, wingId } = params;
+
+    // Verify requester is a member or SUPER_ADMIN
+    if (user.userType !== 'SUPER_ADMIN') {
+      const membership = await query(
+        `SELECT 1 FROM society_memberships
+         WHERE society_id = $1 AND user_id = $2 AND is_active = TRUE`,
+        [societyId, user.userId]
+      );
+      if (membership.rows.length === 0) {
+        return NextResponse.json({ error: 'Not a member of this society' }, { status: 403 });
+      }
+    }
 
     const wing = await query(
       `SELECT w.id, w.name, w.description, w.created_at

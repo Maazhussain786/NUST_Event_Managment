@@ -219,12 +219,43 @@ export function removeMember(
 export function updateMemberRole(
   societyId: string,
   membershipId: string,
-  data: { roleId: string; wingId?: string; portfolioId?: string },
-): Promise<{ success: boolean }> {
+  data: { roleId: string; wingId?: string; portfolioId?: string; reason?: string },
+): Promise<{ success: boolean; message?: string; previousRole?: string; newRole?: string }> {
   return api(`${s(societyId)}/members/${membershipId}`, {
     method: "PATCH",
     body: JSON.stringify(data),
   });
+}
+
+// ─── Roles ───────────────────────────────────────────────────────────────────
+
+export interface Role {
+  id: string;
+  name: string;
+  description: string | null;
+  hierarchy_level: number;
+  is_system_role: boolean;
+  created_at: string;
+}
+
+export function fetchRoles(societyId: string): Promise<Role[]> {
+  return api<Role[]>(`${s(societyId)}/roles`);
+}
+
+// ─── Portfolios ──────────────────────────────────────────────────────────────
+
+export interface Portfolio {
+  id: string;
+  name: string;
+  description: string | null;
+  wing_id: string;
+  created_at: string;
+  member_count?: string;
+  director_name?: string | null;
+}
+
+export function fetchPortfolios(societyId: string, wingId: string): Promise<Portfolio[]> {
+  return api<Portfolio[]>(`${s(societyId)}/wings/${wingId}/portfolios`);
 }
 
 // ─── Wings & Portfolios ────────────────────────────────────────────────────
