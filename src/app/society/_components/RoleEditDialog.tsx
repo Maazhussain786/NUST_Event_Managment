@@ -57,8 +57,11 @@ export function RoleEditDialog({
   const needsPortfolio = selectedRole && ['Director', 'Deputy Director'].includes(selectedRole.name);
 
   // Filter roles user can assign (lower than their level, excluding President)
+  // and keep assignment limited to governance/member workflow roles.
   const assignableRoles = roles.filter(r =>
-    r.hierarchy_level < myLevel && r.name !== 'President'
+    r.hierarchy_level < myLevel &&
+    r.name !== 'President' &&
+    ['Vice President', 'Director', 'Deputy Director', 'Member'].includes(r.name)
   );
 
   // Filter portfolios by selected wing

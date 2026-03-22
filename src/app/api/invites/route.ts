@@ -5,15 +5,7 @@ import { query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import crypto from 'crypto';
 
-// Role hierarchy: who can invite whom
-// President can invite all lower roles
-// VP can invite Director, Deputy Director, and Member
-// Director can invite Deputy Director and Member
-const INVITE_RULES: Record<string, string[]> = {
-  'President': ['Vice President', 'Director', 'Deputy Director', 'Member'],
-  'Vice President': ['Director', 'Deputy Director', 'Member'],
-  'Director': ['Deputy Director', 'Member'],
-};
+const PRESIDENT_INVITABLE_ROLES = ['Vice President', 'Director', 'Deputy Director', 'Member'];
 
 // Role limits per scope
 const ROLE_LIMITS: Record<string, number> = {
@@ -29,7 +21,12 @@ export async function POST(req: NextRequest) {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { societyId, wingId, portfolioId, roleName, email } = await req.json();
+    const body = await req.json();
+    const societyId = body.societyId;
+    const wingId = body.wingId;
+    const portfolioId = body.portfolioId;
+    const roleName = body.roleName;
+    const email = (body.email || body.invitedEmail || '').trim().toLowerCase();
 
     if (!societyId || !roleName || !email) {
       return NextResponse.json({ error: 'societyId, roleName, and email are required' }, { status: 400 });
@@ -49,19 +46,43 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'You are not a member of this society' }, { status: 403 });
     }
 
-    // Check invite permission
-    const canInvite = INVITE_RULES[myRole];
-    if (!canInvite || !canInvite.includes(roleName)) {
+    if (user.userType !== 'SUPER_ADMIN' && myRole !== 'President') {
       return NextResponse.json(
-        { error: `${myRole} cannot invite ${roleName}. Allowed: ${canInvite?.join(', ') || 'none'}` },
+        { error: 'Only President can invite members into governance roles' },
         { status: 403 }
       );
     }
 
-    // VP must be invited to a specific wing
+    if (!PRESIDENT_INVITABLE_ROLES.includes(roleName)) {
+      return NextResponse.json(
+        { error: `Invalid role. Allowed roles: ${PRESIDENT_INVITABLE_ROLES.join(', ')}` },
+        { status: 400 }
+      );
+    }
+
+    // Validate wing if provided
+    if (wingId) {
+      const wingCheck = await query(
+        `SELECT id FROM wings WHERE id = $1 AND society_id = $2 AND deleted_at IS NULL`,
+        [wingId, societyId]
+      );
+      if (wingCheck.rows.length === 0) {
+        return NextResponse.json({ error: 'Invalid wing for this society' }, { status: 400 });
+      }
+    }
+
+    // VP must be invited to a specific wing and cannot have a portfolio
     if (roleName === 'Vice President' && !wingId) {
       return NextResponse.json({ error: 'Wing must be specified for VP invite' }, { status: 400 });
     }
+    if (roleName === 'Vice President' && portfolioId) {
+      return NextResponse.json({ error: `${roleName} invite cannot include a portfolio` }, { status: 400 });
+    }
+
+    if (roleName === 'Member' && portfolioId) {
+      return NextResponse.json({ error: 'Member invite cannot include a portfolio' }, { status: 400 });
+    }
+
     // Director / Deputy Director must have wing and portfolio
     if (['Director', 'Deputy Director'].includes(roleName)) {
       if (!wingId) {
@@ -80,6 +101,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // For roles that do not support portfolio, ignore accidental portfolio payload.
+    const finalPortfolioId = ['Director', 'Deputy Director'].includes(roleName) ? portfolioId : null;
+    const finalWingId = wingId || null;
+
     // Check role limits
     const limit = ROLE_LIMITS[roleName];
     if (limit) {
@@ -95,17 +120,17 @@ export async function POST(req: NextRequest) {
         countQuery = `SELECT COUNT(*) c FROM society_memberships sm
           JOIN roles r ON sm.role_id = r.id
           WHERE sm.society_id = $1 AND sm.wing_id = $2 AND r.name = 'Vice President' AND sm.is_active = TRUE`;
-        countParams = [societyId, wingId];
+        countParams = [societyId, finalWingId];
       } else if (roleName === 'Director') {
         countQuery = `SELECT COUNT(*) c FROM society_memberships sm
           JOIN roles r ON sm.role_id = r.id
           WHERE sm.society_id = $1 AND sm.portfolio_id = $2 AND r.name = 'Director' AND sm.is_active = TRUE`;
-        countParams = [societyId, portfolioId];
+        countParams = [societyId, finalPortfolioId];
       } else if (roleName === 'Deputy Director') {
         countQuery = `SELECT COUNT(*) c FROM society_memberships sm
           JOIN roles r ON sm.role_id = r.id
           WHERE sm.society_id = $1 AND sm.portfolio_id = $2 AND r.name = 'Deputy Director' AND sm.is_active = TRUE`;
-        countParams = [societyId, portfolioId];
+        countParams = [societyId, finalPortfolioId];
       }
 
       if (countQuery) {
@@ -123,13 +148,13 @@ export async function POST(req: NextRequest) {
         WHERE society_id = $1 AND role_name = $2 AND status = 'PENDING'`;
       const pendingParams: (string | null)[] = [societyId, roleName];
 
-      if (wingId) {
+      if (finalWingId) {
         pendingQuery += ` AND wing_id = $${pendingParams.length + 1}`;
-        pendingParams.push(wingId);
+        pendingParams.push(finalWingId);
       }
-      if (portfolioId) {
+      if (finalPortfolioId) {
         pendingQuery += ` AND portfolio_id = $${pendingParams.length + 1}`;
-        pendingParams.push(portfolioId);
+        pendingParams.push(finalPortfolioId);
       }
 
       const pendingCount = await query(pendingQuery, pendingParams);
@@ -141,6 +166,21 @@ export async function POST(req: NextRequest) {
           { status: 409 }
         );
       }
+    }
+
+    // Do not invite users who are already active members; use role reassignment instead.
+    const existingActiveMembership = await query(
+      `SELECT sm.id FROM society_memberships sm
+       JOIN users u ON sm.user_id = u.id
+       WHERE u.email = $1 AND sm.society_id = $2 AND sm.is_active = TRUE
+       LIMIT 1`,
+      [email, societyId]
+    );
+    if (existingActiveMembership.rows.length > 0) {
+      return NextResponse.json(
+        { error: 'User is already an active member. Use Edit Role to change assignment.' },
+        { status: 409 }
+      );
     }
 
     // Check if email already has this role
@@ -155,6 +195,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'User already has this role' }, { status: 409 });
     }
 
+    const existingPendingInvite = await query(
+      `SELECT id FROM invite_tokens
+       WHERE society_id = $1 AND invited_email = $2 AND role_name = $3
+         AND COALESCE(wing_id::text, '') = COALESCE($4::text, '')
+         AND COALESCE(portfolio_id::text, '') = COALESCE($5::text, '')
+         AND status = 'PENDING'
+         AND expires_at > NOW()
+       LIMIT 1`,
+      [societyId, email, roleName, finalWingId, finalPortfolioId]
+    );
+    if (existingPendingInvite.rows.length > 0) {
+      return NextResponse.json({ error: 'A pending invite already exists for this assignment' }, { status: 409 });
+    }
+
     // Generate unique token
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
@@ -162,7 +216,7 @@ export async function POST(req: NextRequest) {
     await query(
       `INSERT INTO invite_tokens (token, society_id, wing_id, portfolio_id, role_name, invited_email, invited_by, expires_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [token, societyId, wingId || null, portfolioId || null, roleName, email, user.userId, expiresAt]
+      [token, societyId, finalWingId, finalPortfolioId, roleName, email, user.userId, expiresAt]
     );
 
     return NextResponse.json({
@@ -186,6 +240,23 @@ export async function GET(req: NextRequest) {
 
     const societyId = req.nextUrl.searchParams.get('societyId');
     if (!societyId) return NextResponse.json({ error: 'societyId required' }, { status: 400 });
+
+    const myMembership = await query(
+      `SELECT r.name FROM society_memberships sm
+       JOIN roles r ON sm.role_id = r.id
+       WHERE sm.user_id = $1 AND sm.society_id = $2 AND sm.is_active = TRUE
+       ORDER BY r.hierarchy_level DESC
+       LIMIT 1`,
+      [user.userId, societyId]
+    );
+
+    const myRole = user.userType === 'SUPER_ADMIN' ? 'President' : myMembership.rows[0]?.name;
+    if (!myRole) {
+      return NextResponse.json({ error: 'Not a member of this society' }, { status: 403 });
+    }
+    if (user.userType !== 'SUPER_ADMIN' && myRole !== 'President') {
+      return NextResponse.json({ error: 'Only President can view invites' }, { status: 403 });
+    }
 
     const result = await query(
       `SELECT it.id, it.token, it.role_name, it.invited_email, it.status,

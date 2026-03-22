@@ -4,6 +4,79 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
+const PORTFOLIO_PRIVILEGE_PROFILE: Array<{ pattern: RegExp; privileges: string[] }> = [
+  {
+    pattern: /(media|photo|video|design|creative|content)/i,
+    privileges: ['UPLOAD_CONTENT', 'DELETE_CONTENT', 'SEND_MESSAGE', 'VIEW_CHAT'],
+  },
+  {
+    pattern: /(social|pr|communication|marketing)/i,
+    privileges: ['SEND_MESSAGE', 'MANAGE_CHAT', 'VIEW_CHAT', 'VIEW_ANALYTICS'],
+  },
+  {
+    pattern: /(event|operations|logistics)/i,
+    privileges: ['CREATE_EVENT', 'EDIT_EVENT', 'SCAN_QR', 'SEND_MESSAGE', 'VIEW_CHAT'],
+  },
+  {
+    pattern: /(finance|accounts|payment|sponsor)/i,
+    privileges: ['VERIFY_PAYMENTS', 'VIEW_ANALYTICS', 'SEND_MESSAGE', 'VIEW_CHAT'],
+  },
+];
+
+const FALLBACK_PORTFOLIO_PRIVILEGES = ['SEND_MESSAGE', 'VIEW_CHAT'];
+
+function resolvePortfolioPrivileges(portfolioName: string): string[] {
+  const selected = new Set<string>();
+  for (const profile of PORTFOLIO_PRIVILEGE_PROFILE) {
+    if (profile.pattern.test(portfolioName)) {
+      for (const key of profile.privileges) selected.add(key);
+    }
+  }
+
+  if (selected.size === 0) {
+    for (const key of FALLBACK_PORTFOLIO_PRIVILEGES) selected.add(key);
+  }
+  return Array.from(selected);
+}
+
+async function assignPortfolioDefaultPrivileges(societyId: string, portfolioName: string, grantedBy: string) {
+  const privilegeKeys = resolvePortfolioPrivileges(portfolioName);
+  const roleRows = await query(
+    `SELECT id FROM roles
+     WHERE society_id = $1 AND name IN ('Director', 'Deputy Director')`,
+    [societyId]
+  );
+
+  const hasGrantedByColumn = await query(
+    `SELECT 1
+     FROM information_schema.columns
+     WHERE table_name = 'role_privileges' AND column_name = 'granted_by'
+     LIMIT 1`
+  );
+
+  for (const role of roleRows.rows as Array<{ id: string }>) {
+    if (hasGrantedByColumn.rows.length > 0) {
+      await query(
+        `INSERT INTO role_privileges (role_id, privilege_id, granted_by)
+         SELECT $1, p.id, $2
+         FROM privileges p
+         WHERE p.name = ANY($3::text[])
+         ON CONFLICT (role_id, privilege_id) DO NOTHING`,
+        [role.id, grantedBy, privilegeKeys]
+      );
+    } else {
+      await query(
+        `INSERT INTO role_privileges (role_id, privilege_id)
+         SELECT $1, p.id
+         FROM privileges p
+         WHERE p.name = ANY($2::text[])
+         ON CONFLICT (role_id, privilege_id) DO NOTHING`,
+        [role.id, privilegeKeys]
+      );
+    }
+  }
+}
+
 // GET /api/societies/[id]/wings/[wingId]/portfolios
 export async function GET(
   req: NextRequest,
@@ -87,6 +160,8 @@ export async function POST(
        VALUES ($1, $2, $3, $4, $5) RETURNING id, name, description, created_at`,
       [wingId, societyId, name, description || '', user.userId]
     );
+
+    await assignPortfolioDefaultPrivileges(societyId, name, user.userId);
 
     return NextResponse.json(result.rows[0], { status: 201 });
   } catch (error: unknown) {
