@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { query } from '@/lib/db';
-import { generateReadUrl, CONTAINERS } from '@/lib/blob';
+import { CONTAINERS, resolveMediaUrl } from '@/lib/blob';
 
 export async function GET() {
   try {
@@ -28,18 +28,13 @@ export async function GET() {
 
     const user = result.rows[0];
 
-    // Generate SAS URL for avatar if it exists
     let avatarUrl: string | null = null;
     if (user.avatar_url) {
       try {
-        // avatar_url stores the blob name (path within container)
-        const blobName = user.avatar_url.startsWith('http')
-          ? null // legacy full URL — use as-is
-          : user.avatar_url;
-
-        avatarUrl = blobName
-          ? generateReadUrl(CONTAINERS.PROFILE_PICTURES, blobName, 60 * 24) // 24h
-          : user.avatar_url;
+        avatarUrl = resolveMediaUrl(user.avatar_url, {
+          container: CONTAINERS.PROFILE_PICTURES,
+          expiresInMinutes: 60 * 24,
+        });
       } catch {
         avatarUrl = null;
       }

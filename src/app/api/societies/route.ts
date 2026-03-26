@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { CONTAINERS, extractBlobName, generateReadUrl } from "@/lib/blob";
+import { CONTAINERS, resolveMediaFields } from "@/lib/blob";
 
 export async function GET(req: Request) {
   try {
@@ -59,18 +59,15 @@ export async function GET(req: Request) {
 
     const result = await query(sql, dataParams);
 
-    const societies = result.rows.map((row) => {
-      const logoBlob = row.logo_url
-        ? extractBlobName(row.logo_url, CONTAINERS.SOCIETY_MEDIA)
-        : null;
-
-      return {
-        ...row,
-        logo_url: logoBlob
-          ? generateReadUrl(CONTAINERS.SOCIETY_MEDIA, logoBlob, 24 * 60)
-          : row.logo_url,
-      };
-    });
+    const societies = result.rows.map((row) =>
+      resolveMediaFields(
+        row,
+        {
+          logo_url: CONTAINERS.SOCIETY_MEDIA,
+        },
+        24 * 60,
+      ),
+    );
 
     return NextResponse.json({ societies, total });
   } catch (error: unknown) {

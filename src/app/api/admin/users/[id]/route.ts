@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { CONTAINERS, resolveMediaFields } from "@/lib/blob";
 
 export async function GET(
   _req: NextRequest,
@@ -75,8 +76,12 @@ export async function GET(
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
+    const userWithResolvedMedia = resolveMediaFields(userResult.rows[0], {
+      avatar_url: CONTAINERS.PROFILE_PICTURES,
+    });
+
     return NextResponse.json({
-      ...userResult.rows[0],
+      ...userWithResolvedMedia,
       memberships: memberships.rows,
       events: events.rows,
       auditLogs: auditLogs.rows,

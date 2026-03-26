@@ -2,29 +2,28 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { CONTAINERS, extractBlobName, generateReadUrl } from "@/lib/blob";
+import { CONTAINERS, resolveMediaUrl } from "@/lib/blob";
 
 function signMediaUrl(
   url: string | null | undefined,
+  containerHint?:
+    | (typeof CONTAINERS)[keyof typeof CONTAINERS]
+    | Array<(typeof CONTAINERS)[keyof typeof CONTAINERS]>,
 ): string | null | undefined {
   if (!url) return url;
-
-  const candidates = [
-    CONTAINERS.EVENT_MEDIA,
-    CONTAINERS.SOCIETY_MEDIA,
-    CONTAINERS.PROFILE_PICTURES,
-    CONTAINERS.POST_ATTACHMENTS,
-    CONTAINERS.NOTE_ATTACHMENTS,
-  ];
-
-  for (const container of candidates) {
-    const blobName = extractBlobName(url, container);
-    if (blobName) {
-      return generateReadUrl(container, blobName, 24 * 60);
-    }
-  }
-
-  return url;
+  return (
+    resolveMediaUrl(url, {
+      container:
+        containerHint || [
+          CONTAINERS.EVENT_MEDIA,
+          CONTAINERS.SOCIETY_MEDIA,
+          CONTAINERS.PROFILE_PICTURES,
+          CONTAINERS.POST_ATTACHMENTS,
+          CONTAINERS.NOTE_ATTACHMENTS,
+        ],
+      expiresInMinutes: 24 * 60,
+    }) || null
+  );
 }
 
 // GET /api/societies/[id]/public — public society profile (no auth)
@@ -136,17 +135,17 @@ export async function GET(
 
     const society = {
       ...societyResult.rows[0],
-      logo_url: signMediaUrl(societyResult.rows[0].logo_url),
+      logo_url: signMediaUrl(societyResult.rows[0].logo_url, CONTAINERS.SOCIETY_MEDIA),
     };
 
     const events = eventsResult.rows.map((row) => ({
       ...row,
-      banner_url: signMediaUrl(row.banner_url),
+      banner_url: signMediaUrl(row.banner_url, CONTAINERS.EVENT_MEDIA),
     }));
 
     const team = teamResult.rows.map((row) => ({
       ...row,
-      avatar_url: signMediaUrl(row.avatar_url),
+      avatar_url: signMediaUrl(row.avatar_url, CONTAINERS.PROFILE_PICTURES),
     }));
 
     const gallery = galleryResult.rows.map((row) => ({

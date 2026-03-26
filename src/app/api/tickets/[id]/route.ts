@@ -5,6 +5,7 @@ import { query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { generateQrPayload, verifyQrPayload } from '@/lib/qr';
 import { getClient } from '@/lib/db';
+import { CONTAINERS, resolveMediaFields } from '@/lib/blob';
 
 /**
  * GET /api/tickets/[id]
@@ -230,7 +231,13 @@ export async function GET(
       }
     }
 
-    return NextResponse.json({ ticket });
+    const resolvedTicket = resolveMediaFields(ticket, {
+      event_banner: CONTAINERS.EVENT_MEDIA,
+      society_logo: CONTAINERS.SOCIETY_MEDIA,
+      payment_proof_url: CONTAINERS.EVENT_MEDIA,
+    });
+
+    return NextResponse.json({ ticket: resolvedTicket });
   } catch (error) {
     console.error('Ticket detail error:', error);
     return NextResponse.json({ error: 'Failed to fetch ticket' }, { status: 500 });

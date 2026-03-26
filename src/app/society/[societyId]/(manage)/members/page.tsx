@@ -444,9 +444,9 @@ export default function MembersPage() {
                     </p>
                     <p className="text-muted">
                       {invite.role_name}
-                      {invite.wing_name ? ` • ${invite.wing_name}` : ""}
+                      {invite.wing_name ? ` | ${invite.wing_name}` : ""}
                       {invite.portfolio_name
-                        ? ` • ${invite.portfolio_name}`
+                        ? ` | ${invite.portfolio_name}`
                         : ""}
                     </p>
                   </div>
@@ -466,11 +466,14 @@ export default function MembersPage() {
           ) : (
             <div className="space-y-3">
               {joinRequests.map((request) => {
-                const data =
-                  request.application_data &&
-                  typeof request.application_data === "object"
-                    ? (request.application_data as Record<string, unknown>)
-                    : {};
+                const data = request.application_data;
+                const applicantDetails = [
+                  data.department,
+                  data.year_of_study,
+                  data.phone,
+                ]
+                  .filter((value): value is string => Boolean(value))
+                  .join(" | ");
 
                 return (
                   <div
@@ -498,15 +501,12 @@ export default function MembersPage() {
                         <span className="font-medium text-primary">
                           Motivation:
                         </span>{" "}
-                        {String(data.motivation)}
+                        {data.motivation}
                       </p>
                     )}
-                    {(data.department || data.year_of_study || data.phone) && (
+                    {applicantDetails && (
                       <p className="mt-1 text-xs text-muted">
-                        {[data.department, data.year_of_study, data.phone]
-                          .filter(Boolean)
-                          .map(String)
-                          .join(" • ")}
+                        {applicantDetails}
                       </p>
                     )}
 
@@ -598,7 +598,7 @@ export default function MembersPage() {
                       <span className="text-[11px] text-muted">
                         {member.wing_name}
                         {member.portfolio_name
-                          ? ` → ${member.portfolio_name}`
+                          ? ` -> ${member.portfolio_name}`
                           : ""}
                       </span>
                     )}

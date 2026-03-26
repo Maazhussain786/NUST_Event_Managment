@@ -264,3 +264,174 @@ export function extractBlobName(
     return null;
   }
 }
+
+// ============================================================================
+// Utility: Resolve media URLs consistently (blob name OR full URL)
+// ============================================================================
+
+const CONTAINER_SET = new Set<ContainerName>(
+  Object.values(CONTAINERS) as ContainerName[],
+);
+
+const configuredBlobHosts = new Set<string>();
+
+if (accountName) {
+  configuredBlobHosts.add(`${accountName}.blob.core.windows.net`.toLowerCase());
+}
+
+const blobEndpoint = getConnectionStringValue("BlobEndpoint");
+if (blobEndpoint) {
+  try {
+    configuredBlobHosts.add(new URL(blobEndpoint).hostname.toLowerCase());
+  } catch {
+    // Ignore malformed BlobEndpoint and continue with known defaults.
+  }
+}
+
+if (cdnBaseUrl) {
+  try {
+    configuredBlobHosts.add(new URL(cdnBaseUrl).hostname.toLowerCase());
+  } catch {
+    // Ignore malformed CDN URL and continue with known defaults.
+  }
+}
+
+type ContainerHint = ContainerName | ContainerName[];
+
+export interface ResolveMediaUrlOptions {
+  container?: ContainerHint;
+  expiresInMinutes?: number;
+}
+
+function normalizeContainerHints(hint?: ContainerHint): ContainerName[] {
+  if (!hint) return [];
+  const list = Array.isArray(hint) ? hint : [hint];
+  return Array.from(
+    new Set(list.filter((value): value is ContainerName => CONTAINER_SET.has(value))),
+  );
+}
+
+function splitPathSegments(pathname: string): string[] {
+  return pathname
+    .split("/")
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+}
+
+function extractContainerAndBlobFromPath(
+  pathname: string,
+): { container: ContainerName; blobName: string } | null {
+  const segments = splitPathSegments(pathname);
+  if (!segments.length) return null;
+
+  for (let i = 0; i < segments.length; i++) {
+    const possibleContainer = segments[i];
+    if (!CONTAINER_SET.has(possibleContainer as ContainerName)) continue;
+
+    const blobName = segments.slice(i + 1).join("/");
+    if (!blobName) return null;
+
+    return {
+      container: possibleContainer as ContainerName,
+      blobName,
+    };
+  }
+
+  return null;
+}
+
+function shouldTreatAsBlobHost(url: URL): boolean {
+  const hostname = url.hostname.toLowerCase();
+  if (hostname.endsWith(".blob.core.windows.net")) return true;
+  return configuredBlobHosts.has(hostname);
+}
+
+function normalizeBlobPath(raw: string): string {
+  return raw.replace(/^\/+/, "").split("?")[0].split("#")[0].trim();
+}
+
+function resolveBlobTarget(
+  raw: string,
+  containerHints: ContainerName[],
+): { container: ContainerName; blobName: string } | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  try {
+    const asUrl = new URL(trimmed);
+    if (!shouldTreatAsBlobHost(asUrl)) {
+      // External URL: keep as-is, never try to reinterpret as blob path.
+      return null;
+    }
+
+    const fromPath = extractContainerAndBlobFromPath(asUrl.pathname);
+
+    if (fromPath) {
+      // If the URL itself provides container + blob path, trust it.
+      return fromPath;
+    }
+
+    return null;
+  } catch {
+    // Not a URL - continue as a plain blob path.
+  }
+
+  const normalizedPath = normalizeBlobPath(trimmed);
+  if (!normalizedPath) return null;
+
+  const explicitContainerPath = extractContainerAndBlobFromPath(normalizedPath);
+  if (explicitContainerPath) {
+    // Explicit container in stored path wins over hints.
+    return explicitContainerPath;
+  }
+
+  if (containerHints.length >= 1) {
+    return { container: containerHints[0], blobName: normalizedPath };
+  }
+
+  return null;
+}
+
+export function resolveMediaUrl(
+  input: unknown,
+  options?: ResolveMediaUrlOptions,
+): string | null {
+  if (typeof input !== "string") return null;
+  const raw = input.trim();
+  if (!raw) return null;
+
+  if (raw.startsWith("data:") || raw.startsWith("blob:")) {
+    return raw;
+  }
+
+  const expiresInMinutes = options?.expiresInMinutes ?? 24 * 60;
+  const containerHints = normalizeContainerHints(options?.container);
+  const target = resolveBlobTarget(raw, containerHints);
+
+  if (target) {
+    return generateReadUrl(target.container, target.blobName, expiresInMinutes);
+  }
+
+  return raw;
+}
+
+export function resolveMediaFields<T extends Record<string, unknown>>(
+  row: T,
+  fieldToContainerMap: Record<string, ContainerHint>,
+  expiresInMinutes: number = 24 * 60,
+): T {
+  const resolved = { ...row } as T;
+
+  for (const [field, containerHint] of Object.entries(fieldToContainerMap)) {
+    if (!(field in resolved)) continue;
+
+    const signed = resolveMediaUrl((resolved as Record<string, unknown>)[field], {
+      container: containerHint,
+      expiresInMinutes,
+    });
+
+    (resolved as Record<string, unknown>)[field] = signed;
+  }
+
+  return resolved;
+}

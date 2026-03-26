@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { CONTAINERS, resolveMediaFields } from '@/lib/blob';
 
 /**
  * GET /api/tickets
@@ -135,8 +136,15 @@ export async function GET() {
     const allTickets = [...paidTickets, ...freeRegistrations].sort(
       (a, b) => new Date(b.event_start).getTime() - new Date(a.event_start).getTime()
     );
+    const resolvedTickets = allTickets.map((ticketRow) =>
+      resolveMediaFields(ticketRow, {
+        event_banner: CONTAINERS.EVENT_MEDIA,
+        society_logo: CONTAINERS.SOCIETY_MEDIA,
+        payment_proof_url: CONTAINERS.EVENT_MEDIA,
+      }),
+    );
 
-    return NextResponse.json(allTickets);
+    return NextResponse.json(resolvedTickets);
   } catch (error) {
     console.error('Tickets list error:', error);
     return NextResponse.json({ error: 'Failed to fetch tickets' }, { status: 500 });

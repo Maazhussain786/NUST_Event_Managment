@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { CONTAINERS, resolveMediaFields } from '@/lib/blob';
 
 // GET /api/societies/my-pending — get current user's pending/info-requested society application
 export async function GET() {
@@ -27,7 +28,12 @@ export async function GET() {
       return NextResponse.json({ society: null });
     }
 
-    return NextResponse.json({ society: result.rows[0] });
+    const society = resolveMediaFields(result.rows[0], {
+      logo_url: CONTAINERS.SOCIETY_MEDIA,
+      banner_url: CONTAINERS.EVENT_MEDIA,
+    });
+
+    return NextResponse.json({ society });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed';
     console.error('My pending society error:', message);

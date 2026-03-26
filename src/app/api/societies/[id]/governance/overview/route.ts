@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { CONTAINERS, resolveMediaFields } from '@/lib/blob';
 
 // GET /api/societies/[id]/governance/overview
 export async function GET(
@@ -146,13 +147,22 @@ export async function GET(
       ? (Number(storage.used) / Number(storage.quota)) * 100
       : 0;
     const role = myRoleData.rows[0] || { role_name: 'Member', hierarchy_level: 1 };
+    const resolvedSociety = resolveMediaFields(soc, {
+      logo_url: CONTAINERS.SOCIETY_MEDIA,
+    });
+    const resolvedUpcomingEvents = upcomingEventsData.rows.map((eventRow) =>
+      resolveMediaFields(eventRow, {
+        banner_url: CONTAINERS.EVENT_MEDIA,
+        thumbnail_url: CONTAINERS.EVENT_MEDIA,
+      }),
+    );
 
     return NextResponse.json({
       society: {
-        id: soc.id,
-        name: soc.name,
-        status: soc.status,
-        logoUrl: soc.logo_url,
+        id: resolvedSociety.id,
+        name: resolvedSociety.name,
+        status: resolvedSociety.status,
+        logoUrl: resolvedSociety.logo_url,
       },
       stats: {
         totalMembers: Number(memberCount.rows[0].count),
@@ -166,7 +176,7 @@ export async function GET(
         totalCheckins: Number(checkInCount.rows[0].count),
         storagePercentUsed,
       },
-      upcomingEvents: upcomingEventsData.rows,
+      upcomingEvents: resolvedUpcomingEvents,
       recentActivity: recentActivityData.rows.map((r: any) => ({
         id: r.id,
         action: r.action,

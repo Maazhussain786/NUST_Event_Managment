@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { CONTAINERS, resolveMediaFields } from '@/lib/blob';
 
 // GET /api/societies/[id]/profile — get society profile (branding)
 export async function GET(
@@ -55,7 +56,11 @@ export async function GET(
       });
     }
 
-    return NextResponse.json(result.rows[0]);
+    const profile = resolveMediaFields(result.rows[0], {
+      cover_url: CONTAINERS.SOCIETY_MEDIA,
+    });
+
+    return NextResponse.json(profile);
   } catch (error) {
     console.error('Get profile error:', error);
     return NextResponse.json({ error: 'Failed' }, { status: 500 });
@@ -133,7 +138,11 @@ export async function PATCH(
       ]
     );
 
-    return NextResponse.json({ success: true, profile: result.rows[0] });
+    const profile = resolveMediaFields(result.rows[0], {
+      cover_url: CONTAINERS.SOCIETY_MEDIA,
+    });
+
+    return NextResponse.json({ success: true, profile });
   } catch (error) {
     console.error('Update profile error:', error);
     return NextResponse.json({ error: 'Failed' }, { status: 500 });

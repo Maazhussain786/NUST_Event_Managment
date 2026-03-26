@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { CONTAINERS, resolveMediaFields } from '@/lib/blob';
 
 // GET /api/societies/[id]/members — list all members with roles
 export async function GET(
@@ -45,7 +46,13 @@ export async function GET(
        ORDER BY r.hierarchy_level DESC, sm.assigned_at ASC`,
       [societyId]
     );
-    return NextResponse.json(result.rows);
+    const members = result.rows.map((member) =>
+      resolveMediaFields(member, {
+        avatar_url: CONTAINERS.PROFILE_PICTURES,
+      }),
+    );
+
+    return NextResponse.json(members);
   } catch (error) {
     console.error('Members fetch error:', error);
     return NextResponse.json({ error: 'Failed' }, { status: 500 });

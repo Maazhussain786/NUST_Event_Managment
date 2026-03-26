@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { getClient } from "@/lib/db";
 import { ensureSocietyJoinRequestsTable } from "@/lib/api-utils";
+import { CONTAINERS, resolveMediaFields } from "@/lib/blob";
 
 async function isPresidentOrSuperAdmin(
   userId: string,
@@ -342,7 +343,13 @@ export async function GET(
       paramsList,
     );
 
-    return NextResponse.json({ requests: result.rows });
+    const requests = result.rows.map((requestRow) =>
+      resolveMediaFields(requestRow, {
+        avatar_url: CONTAINERS.PROFILE_PICTURES,
+      }),
+    );
+
+    return NextResponse.json({ requests });
   } catch (error) {
     console.error("Get join requests error:", error);
     return NextResponse.json(

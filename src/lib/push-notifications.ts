@@ -1,0 +1,378 @@
+import { query } from "@/lib/db";
+
+export type PushPlatform = "ios" | "android" | "web" | "expo" | "unknown";
+
+export interface RegisterPushTokenInput {
+  token: string;
+  platform?: PushPlatform;
+  deviceId?: string | null;
+  appVersion?: string | null;
+  locale?: string | null;
+  timezone?: string | null;
+}
+
+export interface PushMessage {
+  userId: string;
+  title: string;
+  body: string;
+  link?: string | null;
+  data?: Record<string, string>;
+}
+
+type Provider = "expo" | "fcm";
+
+interface ActiveTokenRow {
+  id: string;
+  user_id: string;
+  token: string;
+  platform: string | null;
+}
+
+const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
+const FCM_SEND_URL = "https://fcm.googleapis.com/fcm/send";
+
+function detectProvider(token: string): Provider {
+  if (
+    token.startsWith("ExponentPushToken[") ||
+    token.startsWith("ExpoPushToken[")
+  ) {
+    return "expo";
+  }
+  return "fcm";
+}
+
+function cleanToken(token: string): string {
+  return token.trim();
+}
+
+export async function ensurePushTablesExist(): Promise<void> {
+  await query(`
+    CREATE TABLE IF NOT EXISTS user_push_tokens (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token TEXT NOT NULL UNIQUE,
+      platform TEXT NOT NULL DEFAULT 'unknown',
+      device_id TEXT,
+      app_version TEXT,
+      locale TEXT,
+      timezone TEXT,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      invalidated_reason TEXT,
+      last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS idx_user_push_tokens_user_active
+    ON user_push_tokens (user_id, is_active)
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS event_push_notification_log (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      event_id UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+      notification_type TEXT NOT NULL,
+      trigger_time TIMESTAMPTZ NOT NULL,
+      dedupe_key TEXT NOT NULL UNIQUE,
+      sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS idx_event_push_notification_lookup
+    ON event_push_notification_log (user_id, event_id, notification_type, trigger_time)
+  `);
+}
+
+export async function isPushFeatureEnabled(): Promise<boolean> {
+  try {
+    const result = await query(
+      `SELECT enabled
+       FROM platform_feature_flags
+       WHERE key = 'notifications'
+       LIMIT 1`,
+    );
+
+    if (result.rows.length === 0) return true;
+    return Boolean(result.rows[0].enabled);
+  } catch {
+    // If feature-flag table doesn't exist yet, keep push enabled by default.
+    return true;
+  }
+}
+
+export async function upsertPushToken(
+  userId: string,
+  input: RegisterPushTokenInput,
+): Promise<void> {
+  await ensurePushTablesExist();
+
+  const token = cleanToken(input.token);
+  const platform = (input.platform || "unknown").toLowerCase();
+
+  await query(
+    `INSERT INTO user_push_tokens
+       (user_id, token, platform, device_id, app_version, locale, timezone, is_active, invalidated_reason, last_seen_at, updated_at)
+     VALUES
+       ($1, $2, $3, $4, $5, $6, $7, TRUE, NULL, NOW(), NOW())
+     ON CONFLICT (token) DO UPDATE SET
+       user_id = EXCLUDED.user_id,
+       platform = EXCLUDED.platform,
+       device_id = EXCLUDED.device_id,
+       app_version = EXCLUDED.app_version,
+       locale = EXCLUDED.locale,
+       timezone = EXCLUDED.timezone,
+       is_active = TRUE,
+       invalidated_reason = NULL,
+       last_seen_at = NOW(),
+       updated_at = NOW()`,
+    [
+      userId,
+      token,
+      platform,
+      input.deviceId || null,
+      input.appVersion || null,
+      input.locale || null,
+      input.timezone || null,
+    ],
+  );
+}
+
+export async function deactivatePushToken(
+  userId: string,
+  token: string,
+  reason: string = "User requested unregistration",
+): Promise<void> {
+  await ensurePushTablesExist();
+
+  await query(
+    `UPDATE user_push_tokens
+     SET is_active = FALSE, invalidated_reason = $3, updated_at = NOW()
+     WHERE user_id = $1 AND token = $2`,
+    [userId, cleanToken(token), reason],
+  );
+}
+
+export async function listActivePushTokensForUser(userId: string): Promise<
+  Array<{
+    id: string;
+    platform: string;
+    device_id: string | null;
+    app_version: string | null;
+    locale: string | null;
+    timezone: string | null;
+    last_seen_at: string;
+    created_at: string;
+  }>
+> {
+  await ensurePushTablesExist();
+
+  const result = await query(
+    `SELECT id, platform, device_id, app_version, locale, timezone, last_seen_at, created_at
+     FROM user_push_tokens
+     WHERE user_id = $1 AND is_active = TRUE
+     ORDER BY last_seen_at DESC`,
+    [userId],
+  );
+
+  return result.rows;
+}
+
+async function deactivateInvalidTokenIds(ids: string[]): Promise<void> {
+  if (!ids.length) return;
+
+  await query(
+    `UPDATE user_push_tokens
+     SET is_active = FALSE,
+         invalidated_reason = 'Push provider reported invalid token',
+         updated_at = NOW()
+     WHERE id = ANY($1::uuid[])`,
+    [ids],
+  );
+}
+
+export async function sendPushNotifications(messages: PushMessage[]): Promise<{
+  messageCount: number;
+  tokenCount: number;
+  sentCount: number;
+  failedCount: number;
+}> {
+  if (!messages.length) {
+    return { messageCount: 0, tokenCount: 0, sentCount: 0, failedCount: 0 };
+  }
+
+  await ensurePushTablesExist();
+
+  const uniqueUserIds = Array.from(new Set(messages.map((m) => m.userId)));
+  const tokenResult = await query(
+    `SELECT id, user_id, token, platform
+     FROM user_push_tokens
+     WHERE is_active = TRUE
+       AND user_id = ANY($1::uuid[])`,
+    [uniqueUserIds],
+  );
+
+  const tokensByUser = new Map<string, ActiveTokenRow[]>();
+  for (const row of tokenResult.rows as ActiveTokenRow[]) {
+    if (!tokensByUser.has(row.user_id)) tokensByUser.set(row.user_id, []);
+    tokensByUser.get(row.user_id)!.push(row);
+  }
+
+  let sentCount = 0;
+  let failedCount = 0;
+  const invalidTokenIds = new Set<string>();
+
+  const expoPayloads: Array<{
+    tokenId: string;
+    to: string;
+    title: string;
+    body: string;
+    data?: Record<string, string>;
+  }> = [];
+
+  const fcmPayloads: Array<{
+    tokenId: string;
+    to: string;
+    title: string;
+    body: string;
+    data?: Record<string, string>;
+  }> = [];
+
+  for (const message of messages) {
+    const userTokens = tokensByUser.get(message.userId) || [];
+    for (const tokenRow of userTokens) {
+      const provider = detectProvider(tokenRow.token);
+      const payload = {
+        tokenId: tokenRow.id,
+        to: tokenRow.token,
+        title: message.title,
+        body: message.body,
+        data: {
+          ...(message.data || {}),
+          ...(message.link ? { link: message.link } : {}),
+        },
+      };
+
+      if (provider === "expo") {
+        expoPayloads.push(payload);
+      } else {
+        fcmPayloads.push(payload);
+      }
+    }
+  }
+
+  // Expo push send (batch up to 100)
+  for (let i = 0; i < expoPayloads.length; i += 100) {
+    const chunk = expoPayloads.slice(i, i + 100);
+    try {
+      const res = await fetch(EXPO_PUSH_URL, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(
+          chunk.map((item) => ({
+            to: item.to,
+            title: item.title,
+            body: item.body,
+            sound: "default",
+            data: item.data,
+          })),
+        ),
+      });
+
+      if (!res.ok) {
+        failedCount += chunk.length;
+        continue;
+      }
+
+      const json = (await res.json()) as {
+        data?: Array<{
+          status?: string;
+          details?: { error?: string };
+        }>;
+      };
+
+      const data = json.data || [];
+      chunk.forEach((item, index) => {
+        const ticket = data[index];
+        if (ticket?.status === "ok") {
+          sentCount++;
+          return;
+        }
+
+        failedCount++;
+        const errorCode = ticket?.details?.error || "";
+        if (errorCode === "DeviceNotRegistered") {
+          invalidTokenIds.add(item.tokenId);
+        }
+      });
+    } catch {
+      failedCount += chunk.length;
+    }
+  }
+
+  // FCM push send (legacy API)
+  const fcmServerKey = process.env.FCM_SERVER_KEY || "";
+  if (!fcmServerKey && fcmPayloads.length > 0) {
+    failedCount += fcmPayloads.length;
+  } else {
+    for (const payload of fcmPayloads) {
+      try {
+        const res = await fetch(FCM_SEND_URL, {
+          method: "POST",
+          headers: {
+            Authorization: `key=${fcmServerKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            to: payload.to,
+            notification: {
+              title: payload.title,
+              body: payload.body,
+            },
+            data: payload.data || {},
+            priority: "high",
+          }),
+        });
+
+        if (!res.ok) {
+          failedCount++;
+          continue;
+        }
+
+        const json = (await res.json()) as {
+          success?: number;
+          results?: Array<{ error?: string }>;
+        };
+
+        if (json.success && json.success > 0) {
+          sentCount++;
+          continue;
+        }
+
+        failedCount++;
+        const errorCode = json.results?.[0]?.error || "";
+        if (errorCode === "NotRegistered" || errorCode === "InvalidRegistration") {
+          invalidTokenIds.add(payload.tokenId);
+        }
+      } catch {
+        failedCount++;
+      }
+    }
+  }
+
+  await deactivateInvalidTokenIds(Array.from(invalidTokenIds));
+
+  return {
+    messageCount: messages.length,
+    tokenCount: expoPayloads.length + fcmPayloads.length,
+    sentCount,
+    failedCount,
+  };
+}

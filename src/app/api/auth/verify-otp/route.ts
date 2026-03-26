@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { generateToken } from '@/lib/auth';
 import { extractIpAddress, checkApiRateLimit, ApiErrors } from '@/lib/api-utils';
+import { CONTAINERS, resolveMediaUrl } from '@/lib/blob';
 
 export async function POST(req: NextRequest) {
   try {
@@ -72,7 +73,10 @@ export async function POST(req: NextRequest) {
         email: user.email,
         fullName: user.full_name,
         userType: user.user_type,
-        avatarUrl: user.avatar_url || null,
+        avatarUrl: resolveMediaUrl(user.avatar_url, {
+          container: CONTAINERS.PROFILE_PICTURES,
+          expiresInMinutes: 60 * 24,
+        }),
       },
     });
 

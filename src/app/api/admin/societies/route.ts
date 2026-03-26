@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { CONTAINERS, resolveMediaFields } from '@/lib/blob';
 
 // GET /api/admin/societies?status=PENDING
 export async function GET(req: NextRequest) {
@@ -39,7 +40,13 @@ export async function GET(req: NextRequest) {
     q += ' GROUP BY s.id, ns.abbreviation, u.full_name, u.email, ss.storage_used_bytes, ss.storage_quota_bytes ORDER BY s.created_at DESC';
 
     const result = await query(q, params);
-    return NextResponse.json(result.rows);
+    const societies = result.rows.map((row) =>
+      resolveMediaFields(row, {
+        logo_url: CONTAINERS.SOCIETY_MEDIA,
+      }),
+    );
+
+    return NextResponse.json(societies);
   } catch (error) {
     console.error('Admin societies error:', error);
     return NextResponse.json({ error: 'Failed' }, { status: 500 });

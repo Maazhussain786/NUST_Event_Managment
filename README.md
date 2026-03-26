@@ -56,6 +56,8 @@ AZURE_DB_NAME=event_management
 AZURE_DB_USER=pgadmin
 AZURE_DB_PASSWORD=[Get from admin]
 JWT_SECRET=nust-event-mgmt-secret-2026
+CRON_SECRET=[Generate a long random secret]
+FCM_SERVER_KEY=[Optional: only needed for native FCM tokens]
 NODE_ENV=development
 ```
 
@@ -188,9 +190,23 @@ node scripts/seed.js # Seed database
 
 - Offline capability
 - Install on home screen
-- Push notifications (planned)
+- Push notifications for event reminders
 - App-like experience
 - Automatic updates
+
+### Push Reminder Scheduler
+
+Run this endpoint every 10-15 minutes from your scheduler:
+
+`POST /api/cron/push-event-reminders`
+
+Headers:
+- `x-cron-secret: <CRON_SECRET>`
+
+This dispatches:
+- Event starts in about 1 hour
+- Registration closes in about 1 hour
+- Limited seats left
 
 ## 🎯 Admin Panel
 

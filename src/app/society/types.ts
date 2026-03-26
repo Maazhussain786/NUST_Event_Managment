@@ -83,6 +83,7 @@ export interface SocietyEvent {
   max_participants: number | null;
   participants_count: string;
   banner_url: string | null;
+  thumbnail_url: string | null;
   registration_link: string | null;
   registration_deadline: string | null;
   created_by_name: string;

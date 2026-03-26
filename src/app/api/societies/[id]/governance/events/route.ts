@@ -3,27 +3,22 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
-import { CONTAINERS, extractBlobName, generateReadUrl } from '@/lib/blob';
+import { CONTAINERS, resolveMediaUrl } from '@/lib/blob';
 
 function signMediaUrl(url: string | null | undefined): string | null | undefined {
   if (!url) return url;
-
-  const candidates = [
-    CONTAINERS.EVENT_MEDIA,
-    CONTAINERS.SOCIETY_MEDIA,
-    CONTAINERS.PROFILE_PICTURES,
-    CONTAINERS.POST_ATTACHMENTS,
-    CONTAINERS.NOTE_ATTACHMENTS,
-  ];
-
-  for (const container of candidates) {
-    const blobName = extractBlobName(url, container);
-    if (blobName) {
-      return generateReadUrl(container, blobName, 24 * 60);
-    }
-  }
-
-  return url;
+  return (
+    resolveMediaUrl(url, {
+      container: [
+        CONTAINERS.EVENT_MEDIA,
+        CONTAINERS.SOCIETY_MEDIA,
+        CONTAINERS.PROFILE_PICTURES,
+        CONTAINERS.POST_ATTACHMENTS,
+        CONTAINERS.NOTE_ATTACHMENTS,
+      ],
+      expiresInMinutes: 24 * 60,
+    }) || null
+  );
 }
 
 // GET /api/societies/[id]/governance/events — list society events with optional status filter

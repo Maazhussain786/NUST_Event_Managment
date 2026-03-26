@@ -5,6 +5,17 @@ import { getClient } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { generateQrPayload } from '@/lib/qr';
 
+function requireReturnedId(
+  row: { id?: unknown } | undefined,
+  context: string,
+): string {
+  const id = row?.id;
+  if (typeof id !== 'string' || !id.trim()) {
+    throw new Error(`Missing id from ${context}`);
+  }
+  return id;
+}
+
 /**
  * POST /api/events/[id]/register
  *
@@ -142,9 +153,7 @@ export async function POST(
       ? event.participants_count >= event.max_participants
       : false;
 
-    let registrationId: string | null = null;
-    let waitlistId: string | null = null;
-    let waitlistPosition: number | null = null;
+    let registrationId: string;
 
     if (isFull) {
       // ── Event full → add to waitlist ─────────────────────────────
@@ -154,7 +163,10 @@ export async function POST(
          WHERE event_id = $1 AND cancelled_at IS NULL AND promoted_at IS NULL`,
         [eventId]
       );
-      waitlistPosition = posResult.rows[0].next_pos;
+      const waitlistPosition = Number(posResult.rows[0]?.next_pos);
+      if (!Number.isInteger(waitlistPosition) || waitlistPosition < 1) {
+        throw new Error('Failed to compute waitlist position');
+      }
 
       const wl = await client.query(
         `INSERT INTO event_waitlist (event_id, user_id, position)
@@ -162,7 +174,10 @@ export async function POST(
          RETURNING id`,
         [eventId, user.userId, waitlistPosition]
       );
-      waitlistId = wl.rows[0].id;
+      const waitlistId = requireReturnedId(
+        wl.rows[0],
+        'event_waitlist insert',
+      );
 
       // Audit log for waitlist
       await client.query(
@@ -205,7 +220,10 @@ export async function POST(
          RETURNING id`,
         [existingReg.rows[0].id]
       );
-      registrationId = reReg.rows[0].id;
+      registrationId = requireReturnedId(
+        reReg.rows[0],
+        'event_registrations update',
+      );
     } else {
       // New registration
       const newReg = await client.query(
@@ -214,7 +232,10 @@ export async function POST(
          RETURNING id`,
         [eventId, user.userId]
       );
-      registrationId = newReg.rows[0].id;
+      registrationId = requireReturnedId(
+        newReg.rows[0],
+        'event_registrations insert',
+      );
     }
 
     // Ensure active signed QR exists for free registration entry flow.

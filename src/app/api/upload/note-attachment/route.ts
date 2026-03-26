@@ -17,7 +17,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { query, getClient } from '@/lib/db';
-import { uploadBlob, deleteBlob, CONTAINERS } from '@/lib/blob';
+import { uploadBlob, deleteBlob, CONTAINERS, resolveMediaUrl } from '@/lib/blob';
 import {
   validateAnyFile,
   validateMagicBytes,
@@ -166,10 +166,15 @@ export async function POST(request: NextRequest) {
       await client.query('COMMIT');
 
       recordUpload(user.userId, result.sizeBytes);
+      const readUrl =
+        resolveMediaUrl(result.url, {
+          container: CONTAINERS.NOTE_ATTACHMENTS,
+          expiresInMinutes: 24 * 60,
+        }) || result.url;
 
       return NextResponse.json({
         success: true,
-        data: { url: result.url, sizeBytes: result.sizeBytes },
+        data: { url: readUrl, sizeBytes: result.sizeBytes },
       });
     } catch (txError) {
       await client.query('ROLLBACK');

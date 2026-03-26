@@ -3,30 +3,29 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { query, getClient } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { CONTAINERS, extractBlobName, generateReadUrl } from "@/lib/blob";
+import { CONTAINERS, resolveMediaUrl } from "@/lib/blob";
 import { resolveEffectiveSocietyPrivilege } from "@/lib/api-utils";
 
 function signMediaUrl(
   url: string | null | undefined,
+  containerHint?:
+    | (typeof CONTAINERS)[keyof typeof CONTAINERS]
+    | Array<(typeof CONTAINERS)[keyof typeof CONTAINERS]>,
 ): string | null | undefined {
   if (!url) return url;
-
-  const candidates = [
-    CONTAINERS.SOCIETY_MEDIA,
-    CONTAINERS.EVENT_MEDIA,
-    CONTAINERS.POST_ATTACHMENTS,
-    CONTAINERS.NOTE_ATTACHMENTS,
-    CONTAINERS.PROFILE_PICTURES,
-  ];
-
-  for (const container of candidates) {
-    const blobName = extractBlobName(url, container);
-    if (blobName) {
-      return generateReadUrl(container, blobName, 24 * 60);
-    }
-  }
-
-  return url;
+  return (
+    resolveMediaUrl(url, {
+      container:
+        containerHint || [
+          CONTAINERS.POST_ATTACHMENTS,
+          CONTAINERS.SOCIETY_MEDIA,
+          CONTAINERS.EVENT_MEDIA,
+          CONTAINERS.NOTE_ATTACHMENTS,
+          CONTAINERS.PROFILE_PICTURES,
+        ],
+      expiresInMinutes: 24 * 60,
+    }) || null
+  );
 }
 
 /**
@@ -103,8 +102,8 @@ export async function GET(
 
     const posts = postsResult.rows.map((p) => ({
       ...p,
-      author_avatar: signMediaUrl(p.author_avatar),
-      shared_event_banner: signMediaUrl(p.shared_event_banner),
+      author_avatar: signMediaUrl(p.author_avatar, CONTAINERS.PROFILE_PICTURES),
+      shared_event_banner: signMediaUrl(p.shared_event_banner, CONTAINERS.EVENT_MEDIA),
       images: images[p.id] || [],
     }));
 
