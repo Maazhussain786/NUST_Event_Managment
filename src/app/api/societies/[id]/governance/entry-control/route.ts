@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { query, getClient } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { CONTAINERS, resolveMediaFields } from '@/lib/blob';
 
 // GET /api/societies/[id]/governance/entry-control?eventId=xxx — get entry stats + recent scans
 export async function GET(
@@ -71,6 +72,11 @@ export async function GET(
         [eventId]
       ),
     ]);
+    const resolvedScans = recentScans.rows.map((scan) =>
+      resolveMediaFields(scan, {
+        avatar_url: CONTAINERS.PROFILE_PICTURES,
+      }),
+    );
 
     return NextResponse.json({
       eventId,
@@ -79,7 +85,7 @@ export async function GET(
       ticketed: ticketed.rows[0].count,
       checkedIn: checkedIn.rows[0].count,
       maxParticipants: event.max_participants,
-      recentScans: recentScans.rows,
+      recentScans: resolvedScans,
     });
   } catch (error) {
     console.error('Entry control GET error:', error);

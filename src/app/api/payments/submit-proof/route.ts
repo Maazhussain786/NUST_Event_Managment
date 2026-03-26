@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getClient } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
-import { uploadBlob, CONTAINERS } from '@/lib/blob';
+import { uploadBlob, CONTAINERS, resolveMediaUrl } from '@/lib/blob';
 import {
   validateImageFile,
   validateMagicBytes,
@@ -428,7 +428,10 @@ export async function POST(req: NextRequest) {
         status: 'PENDING',
       },
       paymentProof: {
-        url: upload.url,
+        url: resolveMediaUrl(upload.url, {
+          container: CONTAINERS.EVENT_MEDIA,
+          expiresInMinutes: 24 * 60,
+        }),
         transactionReference,
       },
       message: 'Payment proof submitted. Awaiting society approval.',

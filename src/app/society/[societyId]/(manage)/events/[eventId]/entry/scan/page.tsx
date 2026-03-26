@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import {
   Camera, CameraOff, CheckCircle2, XCircle,
   AlertTriangle, Zap, ArrowLeft,
-  UserCheck, RotateCcw, Calendar, ShieldAlert,
+  UserCheck, RotateCcw, Calendar, ShieldAlert, RefreshCw,
 } from 'lucide-react';
 
 type ScanState = 'idle' | 'scanning' | 'processing' | 'success' | 'error' | 'duplicate';
@@ -15,6 +15,26 @@ interface ScanResult {
   message: string;
   attendeeName?: string;
   type?: string;
+}
+
+interface CameraDevice {
+  id: string;
+  label: string;
+}
+
+const SCAN_CONFIG = {
+  fps: 10,
+  qrbox: { width: 250, height: 250 },
+  aspectRatio: 1,
+  disableFlip: false,
+};
+
+function pickPreferredBackCamera(cameras: CameraDevice[]): CameraDevice | null {
+  if (cameras.length === 0) return null;
+  return (
+    cameras.find((cam) => /(back|rear|environment)/i.test(cam.label)) ||
+    cameras[cameras.length - 1]
+  );
 }
 
 export default function EventQrScannerPage() {
@@ -30,6 +50,11 @@ export default function EventQrScannerPage() {
   const processingRef = useRef(false);
   const [eventTitle, setEventTitle] = useState<string>('');
   const [permissionDenied, setPermissionDenied] = useState(false);
+  const [availableCameras, setAvailableCameras] = useState<CameraDevice[]>([]);
+  const [activeCameraId, setActiveCameraId] = useState<string | null>(null);
+  const [activeFacingMode, setActiveFacingMode] =
+    useState<'environment' | 'user'>('environment');
+  const [isSwitchingCamera, setIsSwitchingCamera] = useState(false);
 
   // Haptic feedback
   const vibrate = useCallback((pattern: number[]) => {
@@ -143,46 +168,161 @@ export default function EventQrScannerPage() {
     }
   }, [parseQrPayload, vibrate]);
 
+  const setScannerError = useCallback((err: any) => {
+    console.error('[Scanner] Init error:', err);
+    if (err?.message?.includes('Permission')) {
+      setCameraError('Camera access denied. Please allow camera access in your browser settings.');
+      return;
+    }
+    if (err?.message?.includes('NotFoundError') || err?.name === 'NotFoundError') {
+      setCameraError('No camera found on this device.');
+      return;
+    }
+    setCameraError(err?.message || 'Failed to start camera');
+  }, []);
+
+  const startScanner = useCallback(
+    async ({
+      cameraId,
+      facingMode = 'environment',
+    }: {
+      cameraId?: string | null;
+      facingMode?: 'environment' | 'user';
+    }): Promise<boolean> => {
+      const scanner = html5QrRef.current;
+      if (!scanner) return false;
+
+      try {
+        await scanner.start(
+          cameraId ? { deviceId: { exact: cameraId } } : { facingMode },
+          SCAN_CONFIG,
+          (decodedText: string) => processQr(decodedText),
+          () => {},
+        );
+        setCameraReady(true);
+        setCameraError(null);
+        setActiveCameraId(cameraId ?? null);
+        setActiveFacingMode(facingMode);
+        return true;
+      } catch (err: any) {
+        setCameraReady(false);
+        setScannerError(err);
+        return false;
+      }
+    },
+    [processQr, setScannerError],
+  );
+
+  const stopScanner = useCallback(async () => {
+    const scanner = html5QrRef.current;
+    if (!scanner) return;
+    try {
+      await scanner.stop();
+    } catch {
+      // Scanner may already be stopped.
+    }
+  }, []);
+
+  const handleFlipCamera = useCallback(async () => {
+    if (isSwitchingCamera || isProcessing || !html5QrRef.current) return;
+
+    setIsSwitchingCamera(true);
+    setResult({ state: 'idle', message: '' });
+    setCameraReady(false);
+    setCameraError(null);
+
+    const nextFacingMode = activeFacingMode === 'environment' ? 'user' : 'environment';
+
+    try {
+      await stopScanner();
+
+      if (availableCameras.length > 1) {
+        let nextCamera: CameraDevice | undefined;
+
+        if (activeCameraId) {
+          const idx = availableCameras.findIndex((cam) => cam.id === activeCameraId);
+          if (idx >= 0) {
+            nextCamera = availableCameras[(idx + 1) % availableCameras.length];
+          }
+        }
+
+        if (!nextCamera) {
+          const regex = nextFacingMode === 'environment'
+            ? /(back|rear|environment)/i
+            : /(front|user|face)/i;
+          nextCamera = availableCameras.find((cam) => regex.test(cam.label)) || availableCameras[0];
+        }
+
+        await startScanner({ cameraId: nextCamera.id, facingMode: nextFacingMode });
+      } else {
+        await startScanner({ facingMode: nextFacingMode });
+      }
+    } finally {
+      setIsSwitchingCamera(false);
+    }
+  }, [
+    activeCameraId,
+    activeFacingMode,
+    availableCameras,
+    isProcessing,
+    isSwitchingCamera,
+    startScanner,
+    stopScanner,
+  ]);
+
   // Initialize scanner
   useEffect(() => {
     if (permissionDenied) return;
 
-    let scanner: any = null;
+    let cancelled = false;
 
     const initScanner = async () => {
       try {
         const { Html5Qrcode } = await import('html5-qrcode');
-        if (!scannerRef.current) return;
+        if (!scannerRef.current || cancelled) return;
 
-        scanner = new Html5Qrcode('qr-reader', { verbose: false });
+        const scanner = new Html5Qrcode('qr-reader', { verbose: false });
         html5QrRef.current = scanner;
 
-        await scanner.start(
-          { facingMode: 'environment' },
-          { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1, disableFlip: false },
-          (decodedText: string) => processQr(decodedText),
-          () => {}
+        let cameras: CameraDevice[] = [];
+        try {
+          const listed = await Html5Qrcode.getCameras();
+          cameras = listed.map((cam: { id: string; label: string }) => ({
+            id: cam.id,
+            label: cam.label || `Camera ${cam.id}`,
+          }));
+        } catch {
+          cameras = [];
+        }
+
+        if (cancelled) return;
+        setAvailableCameras(cameras);
+
+        const preferredBackCamera = pickPreferredBackCamera(cameras);
+        const started = await startScanner(
+          preferredBackCamera
+            ? { cameraId: preferredBackCamera.id, facingMode: 'environment' }
+            : { facingMode: 'environment' },
         );
 
-        setCameraReady(true);
-      } catch (err: any) {
-        console.error('[Scanner] Init error:', err);
-        if (err?.message?.includes('Permission')) {
-          setCameraError('Camera access denied. Please allow camera access in your browser settings.');
-        } else if (err?.message?.includes('NotFoundError') || err?.name === 'NotFoundError') {
-          setCameraError('No camera found on this device.');
-        } else {
-          setCameraError(err?.message || 'Failed to start camera');
+        if (!started && cameras.length > 0) {
+          await startScanner({ cameraId: cameras[0].id, facingMode: 'environment' });
         }
+      } catch (err: any) {
+        setScannerError(err);
       }
     };
 
     initScanner();
 
     return () => {
-      if (scanner) scanner.stop().catch(() => {});
+      cancelled = true;
+      if (html5QrRef.current) {
+        html5QrRef.current.stop().catch(() => {});
+        html5QrRef.current = null;
+      }
     };
-  }, [processQr, permissionDenied]);
+  }, [permissionDenied, setScannerError, startScanner]);
 
   // Auto-clear result
   useEffect(() => {
@@ -261,6 +401,17 @@ export default function EventQrScannerPage() {
             />
 
             {cameraReady && (
+              <button
+                onClick={handleFlipCamera}
+                disabled={isSwitchingCamera || isProcessing}
+                className="absolute top-3 right-3 z-20 rounded-lg bg-black/60 px-3 py-2 text-xs font-medium backdrop-blur flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <RefreshCw size={14} className={isSwitchingCamera ? 'animate-spin' : ''} />
+                {isSwitchingCamera ? 'Switching...' : 'Flip Camera'}
+              </button>
+            )}
+
+            {cameraReady && (
               <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
                 <div className="relative w-[250px] h-[250px]">
                   <div className="absolute top-0 left-0 w-8 h-8 border-t-3 border-l-3 border-brand-500 rounded-tl-lg" />
@@ -332,7 +483,7 @@ export default function EventQrScannerPage() {
         {result.state === 'idle' && cameraReady && (
           <div className="text-center text-gray-400 text-sm py-2">
             <UserCheck size={16} className="inline mr-1.5" />
-            Point camera at a ticket QR code
+            Point {activeFacingMode === 'environment' ? 'back' : 'front'} camera at a ticket QR code
           </div>
         )}
       </div>

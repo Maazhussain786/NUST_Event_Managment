@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
-import { CONTAINERS, extractBlobName, generateReadUrl } from '@/lib/blob';
+import { CONTAINERS, resolveMediaFields } from '@/lib/blob';
 
 // GET /api/societies/[id]/governance/ticket-approvals — list tickets with optional status filter
 export async function GET(
@@ -135,18 +135,16 @@ export async function GET(
       [societyId]
     );
 
-    const tickets = result.rows.map((row) => {
-      const rawProofUrl = row.payment_proof_url as string | null;
-      if (!rawProofUrl) return row;
-
-      const blobName = extractBlobName(rawProofUrl, CONTAINERS.EVENT_MEDIA);
-      if (!blobName) return row;
-
-      return {
-        ...row,
-        payment_proof_url: generateReadUrl(CONTAINERS.EVENT_MEDIA, blobName, 24 * 60),
-      };
-    });
+    const tickets = result.rows.map((row) =>
+      resolveMediaFields(
+        row,
+        {
+          payment_proof_url: CONTAINERS.EVENT_MEDIA,
+          user_avatar: CONTAINERS.PROFILE_PICTURES,
+        },
+        24 * 60,
+      ),
+    );
 
     return NextResponse.json({
       tickets,

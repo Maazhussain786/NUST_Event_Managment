@@ -1021,8 +1021,8 @@ export default function SocietyEventsPage() {
               Cancel Event?
             </h3>
             <p className="text-sm text-muted mb-3">
-              "{confirmCancel.title}" will be cancelled. Ticket holders will be
-              notified.
+              <span className="font-medium">{confirmCancel.title}</span> will be
+              cancelled. Ticket holders will be notified.
             </p>
             <textarea
               value={cancelReason}
@@ -1064,8 +1064,9 @@ export default function SocietyEventsPage() {
               Delete Event?
             </h3>
             <p className="text-sm text-muted mb-4">
-              "{confirmDelete.title}" will be permanently deleted. This cannot
-              be undone. Events with sold tickets cannot be deleted.
+              <span className="font-medium">{confirmDelete.title}</span> will be
+              permanently deleted. This cannot be undone. Events with sold
+              tickets cannot be deleted.
             </p>
             <div className="flex gap-3 justify-end">
               <button

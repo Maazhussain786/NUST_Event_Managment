@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { CONTAINERS, extractBlobName, generateReadUrl } from "@/lib/blob";
+import { CONTAINERS, resolveMediaFields } from "@/lib/blob";
 
 export async function GET(
   req: Request,
@@ -60,30 +60,23 @@ export async function GET(
       [id],
     );
 
-    const society = (() => {
-      const row = result.rows[0];
-      const logoBlob = row.logo_url
-        ? extractBlobName(row.logo_url, CONTAINERS.SOCIETY_MEDIA)
-        : null;
-      return {
-        ...row,
-        logo_url: logoBlob
-          ? generateReadUrl(CONTAINERS.SOCIETY_MEDIA, logoBlob, 24 * 60)
-          : row.logo_url,
-      };
-    })();
+    const society = resolveMediaFields(
+      result.rows[0],
+      {
+        logo_url: CONTAINERS.SOCIETY_MEDIA,
+      },
+      24 * 60,
+    );
 
-    const events = eventsResult.rows.map((row) => {
-      const bannerBlob = row.banner_url
-        ? extractBlobName(row.banner_url, CONTAINERS.EVENT_MEDIA)
-        : null;
-      return {
-        ...row,
-        banner_url: bannerBlob
-          ? generateReadUrl(CONTAINERS.EVENT_MEDIA, bannerBlob, 24 * 60)
-          : row.banner_url,
-      };
-    });
+    const events = eventsResult.rows.map((row) =>
+      resolveMediaFields(
+        row,
+        {
+          banner_url: CONTAINERS.EVENT_MEDIA,
+        },
+        24 * 60,
+      ),
+    );
 
     const portfoliosByWing = new Map<
       string,

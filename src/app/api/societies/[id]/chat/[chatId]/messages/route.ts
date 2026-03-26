@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { CONTAINERS, resolveMediaFields } from '@/lib/blob';
 
 // GET /api/societies/[id]/chat/[chatId]/messages — fetch messages
 export async function GET(
@@ -58,8 +59,13 @@ export async function GET(
     const result = await query(messagesQuery, queryParams);
     const hasMore = result.rows.length > limit;
     const messages = result.rows.slice(0, limit).reverse();
+    const resolvedMessages = messages.map((message) =>
+      resolveMediaFields(message, {
+        sender_avatar: CONTAINERS.PROFILE_PICTURES,
+      }),
+    );
 
-    return NextResponse.json({ messages, hasMore });
+    return NextResponse.json({ messages: resolvedMessages, hasMore });
   } catch (error) {
     console.error('Fetch messages error:', error);
     return NextResponse.json({ error: 'Failed' }, { status: 500 });

@@ -10,6 +10,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { CONTAINERS, resolveMediaFields } from "@/lib/blob";
 
 type QueryRows = { rows: Record<string, unknown>[] };
 
@@ -160,12 +161,18 @@ export async function GET() {
       avg_used_bytes: "0",
     };
 
+    const topSocietiesWithResolvedMedia = topSocieties.rows.map((row) =>
+      resolveMediaFields(row, {
+        logo_url: CONTAINERS.SOCIETY_MEDIA,
+      }),
+    );
+
     return NextResponse.json({
       userGrowth: userGrowth.rows,
       eventsByMonth: eventsByMonth.rows,
       eventsByStatus: eventsByStatus.rows,
       societiesByStatus: societiesByStatus.rows,
-      topSocieties: topSocieties.rows,
+      topSocieties: topSocietiesWithResolvedMedia,
       registrationStats: registrationStats.rows[0] || registrationDefaults,
       revenueStats: revenueStats.rows[0] || revenueDefaults,
       storageOverview: storageOverview.rows[0] || storageDefaults,

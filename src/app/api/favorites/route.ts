@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { CONTAINERS, extractBlobName, generateReadUrl } from "@/lib/blob";
+import { CONTAINERS, resolveMediaFields } from "@/lib/blob";
 
 // GET /api/favorites — list user's favorite societies
 export async function GET() {
@@ -22,18 +22,15 @@ export async function GET() {
       [user.userId],
     );
 
-    const rows = result.rows.map((row) => {
-      const logoBlob = row.logo_url
-        ? extractBlobName(row.logo_url, CONTAINERS.SOCIETY_MEDIA)
-        : null;
-
-      return {
-        ...row,
-        logo_url: logoBlob
-          ? generateReadUrl(CONTAINERS.SOCIETY_MEDIA, logoBlob, 24 * 60)
-          : row.logo_url,
-      };
-    });
+    const rows = result.rows.map((row) =>
+      resolveMediaFields(
+        row,
+        {
+          logo_url: CONTAINERS.SOCIETY_MEDIA,
+        },
+        24 * 60,
+      ),
+    );
 
     return NextResponse.json(rows);
   } catch (error) {

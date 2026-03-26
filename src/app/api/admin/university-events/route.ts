@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { CONTAINERS, extractBlobName, generateReadUrl } from "@/lib/blob";
+import { CONTAINERS, resolveMediaFields } from "@/lib/blob";
 
 function extractMetaImage(html: string): string | null {
   const ogImageMatch = html.match(
@@ -134,18 +134,15 @@ export async function GET() {
       ORDER BY pu.priority_rank DESC, e.event_start DESC
     `);
 
-    const rows = result.rows.map((row) => {
-      if (!row.banner_url) return row;
-
-      const blobName = extractBlobName(row.banner_url, CONTAINERS.EVENT_MEDIA);
-      if (!blobName) return row;
-
-      return {
-        ...row,
-        // 24h read URL for private blob container rendering in admin UI.
-        banner_url: generateReadUrl(CONTAINERS.EVENT_MEDIA, blobName, 24 * 60),
-      };
-    });
+    const rows = result.rows.map((row) =>
+      resolveMediaFields(
+        row,
+        {
+          banner_url: CONTAINERS.EVENT_MEDIA,
+        },
+        24 * 60,
+      ),
+    );
 
     return NextResponse.json(rows);
   } catch (error) {

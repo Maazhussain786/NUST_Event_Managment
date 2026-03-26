@@ -277,7 +277,7 @@ export interface SocietyJoinRequest {
     | "APPROVED"
     | "REJECTED"
     | "WITHDRAWN";
-  application_data: Record<string, unknown>;
+  application_data: JoinRequestApplicationData;
   review_notes: string | null;
   reviewed_by: string | null;
   reviewed_by_name?: string | null;
@@ -293,6 +293,53 @@ export interface SocietyJoinRequest {
   full_name?: string;
   email?: string;
   avatar_url?: string | null;
+}
+
+export interface JoinRequestApplicationData {
+  motivation: string | null;
+  department: string | null;
+  year_of_study: string | null;
+  phone: string | null;
+  [key: string]: unknown;
+}
+
+interface RawSocietyJoinRequest
+  extends Omit<SocietyJoinRequest, "application_data"> {
+  application_data: unknown;
+}
+
+function normalizeOptionalText(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeJoinRequestApplicationData(
+  payload: unknown,
+): JoinRequestApplicationData {
+  const source =
+    payload && typeof payload === "object"
+      ? (payload as Record<string, unknown>)
+      : {};
+
+  return {
+    ...source,
+    motivation: normalizeOptionalText(source.motivation),
+    department: normalizeOptionalText(source.department),
+    year_of_study: normalizeOptionalText(source.year_of_study),
+    phone: normalizeOptionalText(source.phone),
+  };
+}
+
+function normalizeJoinRequest(
+  request: RawSocietyJoinRequest,
+): SocietyJoinRequest {
+  return {
+    ...request,
+    application_data: normalizeJoinRequestApplicationData(
+      request.application_data,
+    ),
+  };
 }
 
 export function submitJoinRequest(
@@ -319,15 +366,24 @@ export function submitJoinRequest(
   });
 }
 
-export function fetchMyJoinRequestStatus(societyId: string): Promise<{
+export async function fetchMyJoinRequestStatus(societyId: string): Promise<{
   is_member: boolean;
   role_name?: string;
   request: SocietyJoinRequest | null;
 }> {
-  return api(`${s(societyId)}/join-requests/me`);
+  const response = await api<{
+    is_member: boolean;
+    role_name?: string;
+    request: RawSocietyJoinRequest | null;
+  }>(`${s(societyId)}/join-requests/me`);
+
+  return {
+    ...response,
+    request: response.request ? normalizeJoinRequest(response.request) : null,
+  };
 }
 
-export function fetchJoinRequests(
+export async function fetchJoinRequests(
   societyId: string,
   status:
     | "OPEN"
@@ -337,7 +393,13 @@ export function fetchJoinRequests(
     | "REJECTED"
     | "WITHDRAWN" = "OPEN",
 ): Promise<{ requests: SocietyJoinRequest[] }> {
-  return api(`${s(societyId)}/join-requests?status=${status}`);
+  const response = await api<{ requests: RawSocietyJoinRequest[] }>(
+    `${s(societyId)}/join-requests?status=${status}`,
+  );
+
+  return {
+    requests: response.requests.map(normalizeJoinRequest),
+  };
 }
 
 export function reviewJoinRequest(

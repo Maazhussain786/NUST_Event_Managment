@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { CONTAINERS, resolveMediaFields } from '@/lib/blob';
 
 // GET /api/societies/[id]/governance/participants — list participants across society events
 export async function GET(
@@ -109,6 +110,11 @@ export async function GET(
     // Sort combined results by registered_at descending
     participants.sort((a, b) =>
       new Date(b.registered_at).getTime() - new Date(a.registered_at).getTime()
+    );
+    participants = participants.map((participant) =>
+      resolveMediaFields(participant, {
+        user_avatar: CONTAINERS.PROFILE_PICTURES,
+      }),
     );
 
     // Count

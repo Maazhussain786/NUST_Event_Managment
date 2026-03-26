@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { CONTAINERS, extractBlobName, generateReadUrl } from "@/lib/blob";
+import { CONTAINERS, resolveMediaFields } from "@/lib/blob";
 
 export async function GET(
   req: Request,
@@ -40,23 +40,14 @@ export async function GET(
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
 
-    const rawEvent = result.rows[0];
-    const bannerBlob = rawEvent.banner_url
-      ? extractBlobName(rawEvent.banner_url, CONTAINERS.EVENT_MEDIA)
-      : null;
-    const logoBlob = rawEvent.society_logo
-      ? extractBlobName(rawEvent.society_logo, CONTAINERS.SOCIETY_MEDIA)
-      : null;
-
-    const event = {
-      ...rawEvent,
-      banner_url: bannerBlob
-        ? generateReadUrl(CONTAINERS.EVENT_MEDIA, bannerBlob, 24 * 60)
-        : rawEvent.banner_url,
-      society_logo: logoBlob
-        ? generateReadUrl(CONTAINERS.SOCIETY_MEDIA, logoBlob, 24 * 60)
-        : rawEvent.society_logo,
-    };
+    const event = resolveMediaFields(
+      result.rows[0],
+      {
+        banner_url: CONTAINERS.EVENT_MEDIA,
+        society_logo: CONTAINERS.SOCIETY_MEDIA,
+      },
+      24 * 60,
+    );
 
     // Check if current user already has a ticket/registration
     let userRegistrationStatus: {
