@@ -10,6 +10,7 @@
 
 export interface PlatformStats {
   totalUsers: number;
+  totalSuperAdmins: number;
   totalSocieties: number;
   totalEvents: number;
   activeEvents: number;
@@ -553,6 +554,41 @@ export interface PlatformNotification {
   total_target: string;
   sender_name: string;
   created_at: string;
+}
+
+export interface PushReminderSummaryRow {
+  notification_type: string;
+  dispatch_status: string;
+  count: number;
+}
+
+export interface PushReminderRecentRow {
+  id: string;
+  user_id: string;
+  user_email: string | null;
+  event_id: string;
+  event_title: string | null;
+  notification_type: string;
+  dispatch_status: string;
+  attempt_count: number;
+  trigger_time: string;
+  created_at: string;
+  last_attempted_at: string | null;
+  delivered_at: string | null;
+  last_error: string | null;
+}
+
+export interface PushReminderStats {
+  generatedAt: string;
+  lookbackDays: number;
+  tokens: {
+    active: number;
+    inactive: number;
+    expo: number;
+    fcm: number;
+  };
+  summary: PushReminderSummaryRow[];
+  recent: PushReminderRecentRow[];
 }
 
 // ─── Blackout Calendar ──────────────────────────────────────────────────────

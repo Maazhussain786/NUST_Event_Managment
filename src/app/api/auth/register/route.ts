@@ -12,18 +12,20 @@ export async function POST(req: NextRequest) {
     if (rateLimited) return rateLimited;
 
     const { email, password, fullName } = await req.json();
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    const normalizedName = String(fullName || '').trim();
 
-    if (!email || !password || !fullName) {
+    if (!normalizedEmail || !password || !normalizedName) {
       return NextResponse.json({ error: 'All fields required' }, { status: 400 });
     }
 
     // Must be NUST email
-    if (!email.endsWith('.edu.pk')) {
+    if (!normalizedEmail.endsWith('.edu.pk')) {
       return NextResponse.json({ error: 'Use your official university email' }, { status: 400 });
     }
 
     // Check existing
-    const existing = await query('SELECT id FROM users WHERE email = $1', [email]);
+    const existing = await query('SELECT id FROM users WHERE LOWER(email) = LOWER($1)', [normalizedEmail]);
     if (existing.rows.length > 0) {
       return NextResponse.json({ error: 'Account already exists' }, { status: 409 });
     }
@@ -34,7 +36,7 @@ export async function POST(req: NextRequest) {
       `INSERT INTO users (email, password_hash, full_name, user_type, status) 
        VALUES ($1, $2, $3, 'STUDENT', 'ACTIVE') 
        RETURNING id, email, full_name, user_type`,
-      [email, passwordHash, fullName]
+      [normalizedEmail, passwordHash, normalizedName]
     );
 
     const user = result.rows[0];

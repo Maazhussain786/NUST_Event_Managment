@@ -1,9 +1,23 @@
 /** @type {import('next').NextConfig} */
+const accountName = process.env.AZURE_BLOB_ACCOUNT_NAME || "";
+const cdnUrl = process.env.AZURE_BLOB_CDN_URL || "";
+
+let cdnHostname = "";
+try {
+  cdnHostname = cdnUrl ? new URL(cdnUrl).hostname : "";
+} catch {
+  cdnHostname = "";
+}
+
+const blobHostname = accountName ? `${accountName}.blob.core.windows.net` : "";
+
 const nextConfig = {
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: 'images.unsplash.com' },
-      { protocol: 'https', hostname: '*.blob.core.windows.net' },
+      { protocol: 'https', hostname: '**.blob.core.windows.net' },
+      ...(blobHostname ? [{ protocol: 'https', hostname: blobHostname }] : []),
+      ...(cdnHostname ? [{ protocol: 'https', hostname: cdnHostname }] : []),
     ],
   },
   // Required for file uploads > 4MB through API routes

@@ -225,3 +225,61 @@ self.addEventListener("message", (event) => {
     });
   }
 });
+
+// —— Push Notifications ——————————————————————————————————————————————————————
+self.addEventListener("push", (event) => {
+  if (!event.data) return;
+
+  let payload = {};
+  try {
+    payload = event.data.json();
+  } catch {
+    payload = { body: event.data.text() };
+  }
+
+  const title = payload.title || "NUST Events";
+  const body = payload.body || "You have a new update.";
+  const link = payload.link || payload.data?.link || "/notifications";
+
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body,
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      data: {
+        link,
+      },
+      tag: payload.tag || undefined,
+      renotify: false,
+    }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetPath = event.notification.data?.link || "/notifications";
+
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      const sameOriginClient = clients.find((client) => {
+        try {
+          const url = new URL(client.url);
+          return url.origin === self.location.origin;
+        } catch {
+          return false;
+        }
+      });
+
+      if (sameOriginClient) {
+        const destination = new URL(targetPath, self.location.origin).toString();
+        sameOriginClient.postMessage({
+          type: "OPEN_LINK",
+          link: destination,
+        });
+        return sameOriginClient.focus();
+      }
+
+      return self.clients.openWindow(targetPath);
+    }),
+  );
+});

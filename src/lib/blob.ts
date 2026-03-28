@@ -314,7 +314,13 @@ function normalizeContainerHints(hint?: ContainerHint): ContainerName[] {
 function splitPathSegments(pathname: string): string[] {
   return pathname
     .split("/")
-    .map((segment) => segment.trim())
+    .map((segment) => {
+      try {
+        return decodeURIComponent(segment).trim();
+      } catch {
+        return segment.trim();
+      }
+    })
     .filter(Boolean);
 }
 
@@ -359,15 +365,19 @@ function resolveBlobTarget(
 
   try {
     const asUrl = new URL(trimmed);
-    if (!shouldTreatAsBlobHost(asUrl)) {
-      // External URL: keep as-is, never try to reinterpret as blob path.
+    const fromPath = extractContainerAndBlobFromPath(asUrl.pathname);
+
+    if (shouldTreatAsBlobHost(asUrl)) {
+      if (fromPath) {
+        // If the URL itself provides container + blob path, trust it.
+        return fromPath;
+      }
       return null;
     }
 
-    const fromPath = extractContainerAndBlobFromPath(asUrl.pathname);
-
     if (fromPath) {
-      // If the URL itself provides container + blob path, trust it.
+      // Legacy app/proxy URLs can still carry a valid /{container}/{blobName} path.
+      // Normalize these to fresh SAS-backed Azure URLs.
       return fromPath;
     }
 

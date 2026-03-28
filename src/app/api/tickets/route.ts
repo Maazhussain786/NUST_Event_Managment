@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { CONTAINERS, resolveMediaFields } from '@/lib/blob';
@@ -11,7 +11,7 @@ import { CONTAINERS, resolveMediaFields } from '@/lib/blob';
  * List all tickets for the authenticated user.
  * Includes event details, society info, and QR status.
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     const user = await getCurrentUser();
     if (!user) {
@@ -41,6 +41,12 @@ export async function GET() {
     const hasProofMetaCols = proofMetaCols.rows.length >= 2;
     const transactionRefExpr = hasProofMetaCols ? 'pp.transaction_reference' : `''::TEXT`;
 
+    const url = new URL(req.url);
+    const statusFilter = (url.searchParams.get("status") || "").trim().toUpperCase();
+    const upcomingOnly = (url.searchParams.get("upcoming") || "").toLowerCase() === "true";
+    const limitRaw = Number(url.searchParams.get("limit") || "0");
+    const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(Math.floor(limitRaw), 200) : 0;
+
     // First, fetch paid event tickets.
     let paidTickets = [];
     try {
@@ -60,6 +66,7 @@ export async function GET() {
           e.event_start,
           e.event_end,
           e.banner_url AS event_banner,
+          e.thumbnail_url AS event_thumbnail,
           e.is_paid,
           e.is_cancelled,
           s.name AS society_name,
@@ -109,6 +116,7 @@ export async function GET() {
           e.event_start,
           e.event_end,
           e.banner_url AS event_banner,
+          e.thumbnail_url AS event_thumbnail,
           e.is_paid,
           e.is_cancelled,
           s.name AS society_name,
@@ -133,12 +141,27 @@ export async function GET() {
     }
 
     // Combine and sort by event_start descending
-    const allTickets = [...paidTickets, ...freeRegistrations].sort(
+    let allTickets = [...paidTickets, ...freeRegistrations].sort(
       (a, b) => new Date(b.event_start).getTime() - new Date(a.event_start).getTime()
     );
+
+    if (statusFilter) {
+      allTickets = allTickets.filter((row) => String(row.status || "").toUpperCase() === statusFilter);
+    }
+
+    if (upcomingOnly) {
+      const nowMs = Date.now();
+      allTickets = allTickets.filter((row) => new Date(row.event_start).getTime() > nowMs);
+    }
+
+    if (limit > 0) {
+      allTickets = allTickets.slice(0, limit);
+    }
+
     const resolvedTickets = allTickets.map((ticketRow) =>
       resolveMediaFields(ticketRow, {
         event_banner: CONTAINERS.EVENT_MEDIA,
+        event_thumbnail: CONTAINERS.EVENT_MEDIA,
         society_logo: CONTAINERS.SOCIETY_MEDIA,
         payment_proof_url: CONTAINERS.EVENT_MEDIA,
       }),

@@ -13,14 +13,19 @@ export async function POST(req: NextRequest) {
     if (rateLimited) return rateLimited;
 
     const { email, password } = await req.json();
+    const normalizedEmail = String(email || '').trim().toLowerCase();
 
-    if (!email || !password) {
+    if (!normalizedEmail || !password) {
       return NextResponse.json({ error: 'Email and password required' }, { status: 400 });
     }
 
     const result = await query(
-      'SELECT id, email, password_hash, full_name, user_type, status, avatar_url FROM users WHERE email = $1',
-      [email]
+      `SELECT id, email, password_hash, full_name, user_type, status, avatar_url
+       FROM users
+       WHERE LOWER(email) = LOWER($1)
+       ORDER BY CASE WHEN email = $1 THEN 0 ELSE 1 END, created_at ASC
+       LIMIT 1`,
+      [normalizedEmail]
     );
 
     if (result.rows.length === 0) {

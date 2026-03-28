@@ -119,7 +119,13 @@ export default function PlatformOverviewPage() {
 
       {/* Primary stats grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Total Users" value={stats.totalUsers} icon={Users} accent="blue" />
+        <StatCard
+          label="Total Users"
+          value={stats.totalUsers}
+          icon={Users}
+          accent="blue"
+          trend={`${stats.totalSuperAdmins} super admin(s)`}
+        />
         <StatCard label="Societies" value={stats.totalSocieties} icon={Building2} accent="green" />
         <StatCard label="Total Events" value={stats.totalEvents} icon={Calendar} accent="purple" />
         <StatCard

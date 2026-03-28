@@ -24,6 +24,7 @@ interface TicketData {
   event_start: string;
   event_end: string;
   event_banner: string | null;
+  event_thumbnail?: string | null;
   society_name: string;
   society_logo: string | null;
   has_qr: boolean;
@@ -105,6 +106,7 @@ function getRelativeEventTime(dateStr: string): string {
 }
 
 function TicketListItem({ ticket }: { ticket: TicketData }) {
+  const [imageFailed, setImageFailed] = useState(false);
   const config = getStatusConfig(ticket);
   const StatusIcon = config.icon;
   const date = new Date(ticket.event_start);
@@ -113,6 +115,8 @@ function TicketListItem({ ticket }: { ticket: TicketData }) {
   const relativeTime = getRelativeEventTime(ticket.event_start);
   const isUpcoming = new Date(ticket.event_start) > new Date();
   const showQR = ticket.has_qr && ticket.status.toUpperCase() === 'APPROVED';
+  const previewSrc = ticket.event_banner || ticket.event_thumbnail || null;
+  const showPreviewImage = Boolean(previewSrc) && !imageFailed;
 
   return (
     <Link href={`/tickets/${ticket.id}`}>
@@ -128,8 +132,16 @@ function TicketListItem({ ticket }: { ticket: TicketData }) {
         <div className="flex items-center gap-3.5">
           {/* Date or image */}
           <div className="relative flex flex-col items-center justify-center flex-shrink-0 overflow-hidden w-14 h-14 rounded-xl bg-muted">
-            {ticket.event_banner ? (
-              <Image src={ticket.event_banner} alt="" fill className="object-cover" sizes="56px" />
+            {showPreviewImage ? (
+              <Image
+                src={previewSrc as string}
+                alt=""
+                fill
+                className="object-cover"
+                sizes="56px"
+                unoptimized
+                onError={() => setImageFailed(true)}
+              />
             ) : (
               <>
                 <span className="text-[9px] font-bold text-brand-500 uppercase tracking-wider">{month}</span>

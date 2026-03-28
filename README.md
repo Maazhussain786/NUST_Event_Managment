@@ -97,9 +97,10 @@ Open [http://localhost:4000](http://localhost:4000)
 
 ## 🔑 Default Login Credentials
 
-### Admin Account
-- **Email**: `mhussain.bscs24seecs@seecs.edu.pk`
-- **Password**: `Mobile 786`
+### Super Admin Accounts
+- **Maaz Hussain**: `maazhussain972@gmail.com` / `maaz@123`
+- **Muhammad Abdul Daym**: `abduldaym786@gmail.com` / `daym@123`
+- **Muhammad Bilal Atif**: `bilalatif23@gmail.com` / `bilal@123`
 
 ### Student Account
 - **Email**: `student1@seecs.edu.pk`
@@ -256,7 +257,7 @@ This project is private and proprietary to NUST.
 ## 👥 Team
 
 - **Maaz Hussain** - Project Lead & Full Stack Developer
-- Contact: mhussain.bscs24seecs@seecs.edu.pk
+- Contact: maazhussain972@gmail.com
 
 ## 🔗 Links
 

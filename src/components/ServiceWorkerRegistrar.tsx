@@ -47,7 +47,26 @@ export function ServiceWorkerRegistrar() {
         });
     }, 1500);
 
-    return () => clearTimeout(timer);
+    const handleWorkerMessage = (event: MessageEvent) => {
+      const data = event.data as { type?: string; link?: string } | undefined;
+      if (!data || data.type !== "OPEN_LINK" || !data.link) return;
+
+      try {
+        const target = new URL(data.link, window.location.origin);
+        if (target.origin === window.location.origin) {
+          window.location.href = `${target.pathname}${target.search}${target.hash}`;
+        }
+      } catch {
+        // Ignore malformed message payloads.
+      }
+    };
+
+    navigator.serviceWorker.addEventListener("message", handleWorkerMessage);
+
+    return () => {
+      clearTimeout(timer);
+      navigator.serviceWorker.removeEventListener("message", handleWorkerMessage);
+    };
   }, []);
 
   return null;

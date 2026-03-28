@@ -19,7 +19,12 @@ export async function GET() {
       [user.userId]
     );
 
-    return NextResponse.json(result.rows);
+    return NextResponse.json(
+      result.rows.map((row) => ({
+        ...row,
+        message: row.body, // backward-compatible alias for older clients
+      })),
+    );
   } catch (error) {
     console.error('Notifications error:', error);
     return NextResponse.json({ error: 'Failed to fetch notifications' }, { status: 500 });

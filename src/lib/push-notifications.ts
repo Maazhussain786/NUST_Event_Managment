@@ -17,6 +17,16 @@ export interface PushMessage {
   body: string;
   link?: string | null;
   data?: Record<string, string>;
+  messageKey?: string;
+}
+
+export interface PushMessageResult {
+  messageKey: string;
+  userId: string;
+  tokenCount: number;
+  sentCount: number;
+  failedCount: number;
+  status: "SENT" | "PARTIAL" | "FAILED" | "NO_TOKENS";
 }
 
 type Provider = "expo" | "fcm";
@@ -25,7 +35,24 @@ interface ActiveTokenRow {
   id: string;
   user_id: string;
   token: string;
-  platform: string | null;
+}
+
+interface DeliveryPayload {
+  messageKey: string;
+  userId: string;
+  tokenId: string;
+  to: string;
+  title: string;
+  body: string;
+  data?: Record<string, string>;
+}
+
+interface DeliveryAccumulator {
+  messageKey: string;
+  userId: string;
+  tokenCount: number;
+  sentCount: number;
+  failedCount: number;
 }
 
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
@@ -43,6 +70,30 @@ function detectProvider(token: string): Provider {
 
 function cleanToken(token: string): string {
   return token.trim();
+}
+
+function statusFromAccumulator(
+  acc: DeliveryAccumulator,
+): PushMessageResult["status"] {
+  if (acc.tokenCount === 0) return "NO_TOKENS";
+  if (acc.sentCount > 0 && acc.failedCount === 0) return "SENT";
+  if (acc.sentCount > 0 && acc.failedCount > 0) return "PARTIAL";
+  return "FAILED";
+}
+
+function addSent(acc: DeliveryAccumulator): void {
+  acc.sentCount += 1;
+}
+
+function addFailed(acc: DeliveryAccumulator): void {
+  acc.failedCount += 1;
+}
+
+function buildMessageKey(message: PushMessage, index: number): string {
+  if (message.messageKey && message.messageKey.trim()) {
+    return message.messageKey.trim();
+  }
+  return `msg:${message.userId}:${index}`;
 }
 
 export async function ensurePushTablesExist(): Promise<void> {
@@ -83,8 +134,43 @@ export async function ensurePushTablesExist(): Promise<void> {
   `);
 
   await query(`
+    ALTER TABLE event_push_notification_log
+    ADD COLUMN IF NOT EXISTS dispatch_status TEXT NOT NULL DEFAULT 'QUEUED'
+  `);
+
+  await query(`
+    ALTER TABLE event_push_notification_log
+    ADD COLUMN IF NOT EXISTS attempt_count INTEGER NOT NULL DEFAULT 0
+  `);
+
+  await query(`
+    ALTER TABLE event_push_notification_log
+    ADD COLUMN IF NOT EXISTS last_error TEXT
+  `);
+
+  await query(`
+    ALTER TABLE event_push_notification_log
+    ADD COLUMN IF NOT EXISTS last_attempted_at TIMESTAMPTZ
+  `);
+
+  await query(`
+    ALTER TABLE event_push_notification_log
+    ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ
+  `);
+
+  await query(`
+    ALTER TABLE event_push_notification_log
+    ADD COLUMN IF NOT EXISTS provider_stats JSONB
+  `);
+
+  await query(`
     CREATE INDEX IF NOT EXISTS idx_event_push_notification_lookup
     ON event_push_notification_log (user_id, event_id, notification_type, trigger_time)
+  `);
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS idx_event_push_notification_status
+    ON event_push_notification_log (dispatch_status, created_at DESC)
   `);
 }
 
@@ -100,7 +186,6 @@ export async function isPushFeatureEnabled(): Promise<boolean> {
     if (result.rows.length === 0) return true;
     return Boolean(result.rows[0].enabled);
   } catch {
-    // If feature-flag table doesn't exist yet, keep push enabled by default.
     return true;
   }
 }
@@ -200,16 +285,23 @@ export async function sendPushNotifications(messages: PushMessage[]): Promise<{
   tokenCount: number;
   sentCount: number;
   failedCount: number;
+  messageResults: PushMessageResult[];
 }> {
   if (!messages.length) {
-    return { messageCount: 0, tokenCount: 0, sentCount: 0, failedCount: 0 };
+    return {
+      messageCount: 0,
+      tokenCount: 0,
+      sentCount: 0,
+      failedCount: 0,
+      messageResults: [],
+    };
   }
 
   await ensurePushTablesExist();
 
   const uniqueUserIds = Array.from(new Set(messages.map((m) => m.userId)));
   const tokenResult = await query(
-    `SELECT id, user_id, token, platform
+    `SELECT id, user_id, token
      FROM user_push_tokens
      WHERE is_active = TRUE
        AND user_id = ANY($1::uuid[])`,
@@ -222,31 +314,28 @@ export async function sendPushNotifications(messages: PushMessage[]): Promise<{
     tokensByUser.get(row.user_id)!.push(row);
   }
 
-  let sentCount = 0;
-  let failedCount = 0;
+  const accumulators = new Map<string, DeliveryAccumulator>();
+  const expoPayloads: DeliveryPayload[] = [];
+  const fcmPayloads: DeliveryPayload[] = [];
   const invalidTokenIds = new Set<string>();
 
-  const expoPayloads: Array<{
-    tokenId: string;
-    to: string;
-    title: string;
-    body: string;
-    data?: Record<string, string>;
-  }> = [];
-
-  const fcmPayloads: Array<{
-    tokenId: string;
-    to: string;
-    title: string;
-    body: string;
-    data?: Record<string, string>;
-  }> = [];
-
-  for (const message of messages) {
+  messages.forEach((message, index) => {
+    const messageKey = buildMessageKey(message, index);
     const userTokens = tokensByUser.get(message.userId) || [];
+
+    const acc: DeliveryAccumulator = {
+      messageKey,
+      userId: message.userId,
+      tokenCount: userTokens.length,
+      sentCount: 0,
+      failedCount: 0,
+    };
+    accumulators.set(messageKey, acc);
+
     for (const tokenRow of userTokens) {
-      const provider = detectProvider(tokenRow.token);
-      const payload = {
+      const payload: DeliveryPayload = {
+        messageKey,
+        userId: message.userId,
         tokenId: tokenRow.id,
         to: tokenRow.token,
         title: message.title,
@@ -257,15 +346,25 @@ export async function sendPushNotifications(messages: PushMessage[]): Promise<{
         },
       };
 
+      const provider = detectProvider(tokenRow.token);
       if (provider === "expo") {
         expoPayloads.push(payload);
       } else {
         fcmPayloads.push(payload);
       }
     }
-  }
+  });
 
-  // Expo push send (batch up to 100)
+  const markSent = (payload: DeliveryPayload) => {
+    const acc = accumulators.get(payload.messageKey);
+    if (acc) addSent(acc);
+  };
+
+  const markFailed = (payload: DeliveryPayload) => {
+    const acc = accumulators.get(payload.messageKey);
+    if (acc) addFailed(acc);
+  };
+
   for (let i = 0; i < expoPayloads.length; i += 100) {
     const chunk = expoPayloads.slice(i, i + 100);
     try {
@@ -287,7 +386,7 @@ export async function sendPushNotifications(messages: PushMessage[]): Promise<{
       });
 
       if (!res.ok) {
-        failedCount += chunk.length;
+        chunk.forEach(markFailed);
         continue;
       }
 
@@ -302,25 +401,24 @@ export async function sendPushNotifications(messages: PushMessage[]): Promise<{
       chunk.forEach((item, index) => {
         const ticket = data[index];
         if (ticket?.status === "ok") {
-          sentCount++;
+          markSent(item);
           return;
         }
 
-        failedCount++;
+        markFailed(item);
         const errorCode = ticket?.details?.error || "";
         if (errorCode === "DeviceNotRegistered") {
           invalidTokenIds.add(item.tokenId);
         }
       });
     } catch {
-      failedCount += chunk.length;
+      chunk.forEach(markFailed);
     }
   }
 
-  // FCM push send (legacy API)
   const fcmServerKey = process.env.FCM_SERVER_KEY || "";
   if (!fcmServerKey && fcmPayloads.length > 0) {
-    failedCount += fcmPayloads.length;
+    fcmPayloads.forEach(markFailed);
   } else {
     for (const payload of fcmPayloads) {
       try {
@@ -342,7 +440,7 @@ export async function sendPushNotifications(messages: PushMessage[]): Promise<{
         });
 
         if (!res.ok) {
-          failedCount++;
+          markFailed(payload);
           continue;
         }
 
@@ -352,27 +450,49 @@ export async function sendPushNotifications(messages: PushMessage[]): Promise<{
         };
 
         if (json.success && json.success > 0) {
-          sentCount++;
+          markSent(payload);
           continue;
         }
 
-        failedCount++;
+        markFailed(payload);
         const errorCode = json.results?.[0]?.error || "";
-        if (errorCode === "NotRegistered" || errorCode === "InvalidRegistration") {
+        if (
+          errorCode === "NotRegistered" ||
+          errorCode === "InvalidRegistration"
+        ) {
           invalidTokenIds.add(payload.tokenId);
         }
       } catch {
-        failedCount++;
+        markFailed(payload);
       }
     }
   }
 
   await deactivateInvalidTokenIds(Array.from(invalidTokenIds));
 
+  const messageResults: PushMessageResult[] = Array.from(accumulators.values()).map(
+    (acc) => ({
+      messageKey: acc.messageKey,
+      userId: acc.userId,
+      tokenCount: acc.tokenCount,
+      sentCount: acc.sentCount,
+      failedCount: acc.failedCount,
+      status: statusFromAccumulator(acc),
+    }),
+  );
+
+  const sentCount = messageResults.reduce((sum, row) => sum + row.sentCount, 0);
+  const failedCount = messageResults.reduce(
+    (sum, row) => sum + row.failedCount,
+    0,
+  );
+  const tokenCount = messageResults.reduce((sum, row) => sum + row.tokenCount, 0);
+
   return {
     messageCount: messages.length,
-    tokenCount: expoPayloads.length + fcmPayloads.length,
+    tokenCount,
     sentCount,
     failedCount,
+    messageResults,
   };
 }

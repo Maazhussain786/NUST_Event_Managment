@@ -82,19 +82,32 @@ ON CONFLICT (name) DO NOTHING;
 -- No additional table needed.
 
 -- ============================================================================
--- 6. SEED SUPER ADMIN USER
+-- 6. SEED SUPER ADMIN USERS
 -- ============================================================================
 
 INSERT INTO users (email, password_hash, full_name, user_type, status) VALUES
-    ('mhussain.bscs24seecs@seecs.edu.pk',
-     -- bcrypt hash of "Mobile 786"
-     '$2b$10$dummyhashwillbereplacedbyapp000000000000000000000',
+    ('maazhussain972@gmail.com',
+     -- bcrypt hash of "maaz@123"
+     '$2a$12$xEHh4ib42sY1QMCgwi.yCefrlGGqa3fQH/pxmQjP3.CQhWd7Hxfz2',
      'Maaz Hussain',
+     'SUPER_ADMIN',
+     'ACTIVE'),
+    ('abduldaym786@gmail.com',
+     -- bcrypt hash of "daym@123"
+     '$2a$12$TdNJHRJlXArS0cIq8DYNSu3ri2NcohaypIz0PAEF0AfrWOBpVjFtu',
+     'Muhammad Abdul Daym',
+     'SUPER_ADMIN',
+     'ACTIVE'),
+    ('bilalatif23@gmail.com',
+     -- bcrypt hash of "bilal@123"
+     '$2a$12$xZcw66AowAuK8HyBfnqWKO8YxEQL1H0CNCQieUgti3A9H.gaah6HS',
+     'Muhammad Bilal Atif',
      'SUPER_ADMIN',
      'ACTIVE')
 ON CONFLICT (email) DO UPDATE SET
+    password_hash = EXCLUDED.password_hash,
     user_type = 'SUPER_ADMIN',
     status = 'ACTIVE',
-    full_name = 'Maaz Hussain';
+    full_name = EXCLUDED.full_name;
 
 COMMIT;

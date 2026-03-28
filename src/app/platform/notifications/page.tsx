@@ -21,12 +21,16 @@ import {
   StatusBadge,
 } from "../_components/Shared";
 import { StatCard } from "../_components/StatCard";
-import type { PlatformNotification } from "../types";
+import type { PlatformNotification, PushReminderStats } from "../types";
 import {
   fetchNotifications,
   createNotification,
   updateNotification,
   deleteNotification,
+  fetchPushReminderStats,
+  runPushReminderDryRun,
+  runPushReminderDispatch,
+  retryPushReminderDispatch,
 } from "../api";
 
 export default function NotificationsPage() {
@@ -58,6 +62,12 @@ export default function NotificationsPage() {
     expires_at: "",
   });
   const [updating, setUpdating] = useState(false);
+  const [pushStats, setPushStats] = useState<PushReminderStats | null>(null);
+  const [pushLoading, setPushLoading] = useState(true);
+  const [dispatchingPush, setDispatchingPush] = useState(false);
+  const [dryRunningPush, setDryRunningPush] = useState(false);
+  const [retryingPush, setRetryingPush] = useState(false);
+  const [pushOperationMessage, setPushOperationMessage] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -75,6 +85,24 @@ export default function NotificationsPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const loadPushStats = useCallback(async () => {
+    try {
+      setPushLoading(true);
+      const data = await fetchPushReminderStats(7);
+      setPushStats(data);
+    } catch (e) {
+      setPushOperationMessage(
+        e instanceof Error ? e.message : "Failed to load push reminder stats",
+      );
+    } finally {
+      setPushLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadPushStats();
+  }, [loadPushStats]);
 
   const handleCreate = async () => {
     if (!form.title || !form.body) return;
@@ -114,6 +142,88 @@ export default function NotificationsPage() {
       load();
     } catch {
       /* noop */
+    }
+  };
+
+  const handleDispatchPush = async () => {
+    setDispatchingPush(true);
+    setPushOperationMessage("");
+    try {
+      const res = await runPushReminderDispatch();
+      const payload = res?.result as
+        | {
+            dispatchedCount?: number;
+            push?: { sentCount?: number; failedCount?: number };
+          }
+        | undefined;
+
+      setPushOperationMessage(
+        `Dispatch completed: ${payload?.dispatchedCount || 0} reminders, ${payload?.push?.sentCount || 0} sent, ${payload?.push?.failedCount || 0} failed.`,
+      );
+      await loadPushStats();
+    } catch (e) {
+      setPushOperationMessage(
+        e instanceof Error ? e.message : "Dispatch failed",
+      );
+    } finally {
+      setDispatchingPush(false);
+    }
+  };
+
+  const handleRetryPush = async () => {
+    setRetryingPush(true);
+    setPushOperationMessage("");
+    try {
+      const res = await retryPushReminderDispatch({
+        statuses: ["FAILED", "NO_TOKENS", "PARTIAL"],
+        lookbackHours: 24,
+        limit: 1000,
+      });
+      const payload = res?.result as
+        | {
+            deletedCount?: number;
+            dispatch?: {
+              dispatchedCount?: number;
+              push?: { sentCount?: number; failedCount?: number };
+            };
+          }
+        | undefined;
+      setPushOperationMessage(
+        `Retry completed: reset ${payload?.deletedCount || 0} entries, dispatched ${payload?.dispatch?.dispatchedCount || 0}, sent ${payload?.dispatch?.push?.sentCount || 0}, failed ${payload?.dispatch?.push?.failedCount || 0}.`,
+      );
+      await loadPushStats();
+    } catch (e) {
+      setPushOperationMessage(
+        e instanceof Error ? e.message : "Retry failed",
+      );
+    } finally {
+      setRetryingPush(false);
+    }
+  };
+
+  const handleDryRunPush = async () => {
+    setDryRunningPush(true);
+    setPushOperationMessage("");
+    try {
+      const res = await runPushReminderDryRun();
+      const payload = res?.result as
+        | {
+            candidateCount?: number;
+            breakdown?: Record<string, number>;
+          }
+        | undefined;
+      const breakdown = payload?.breakdown || {};
+      setPushOperationMessage(
+        `Dry run: ${payload?.candidateCount || 0} candidates (${Object.entries(breakdown)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join(", ")}).`,
+      );
+    } catch (e) {
+      setPushOperationMessage(
+        e instanceof Error ? e.message : "Dry run failed",
+      );
+    } finally {
+      setDryRunningPush(false);
     }
   };
 
@@ -229,6 +339,110 @@ export default function NotificationsPage() {
           icon={Eye}
           accent="blue"
         />
+      </div>
+
+      <div className="card p-4 space-y-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2
+              className="text-lg font-semibold"
+              style={{ color: "var(--text-primary)" }}
+            >
+              Push Reminder Operations
+            </h2>
+            <p
+              className="text-sm mt-1"
+              style={{ color: "var(--text-secondary)" }}
+            >
+              Monitor event reminder delivery and run safe dispatch/retry actions.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleDryRunPush}
+              disabled={dryRunningPush}
+              className="btn-secondary"
+            >
+              {dryRunningPush ? "Checking..." : "Dry Run"}
+            </button>
+            <button
+              onClick={handleDispatchPush}
+              disabled={dispatchingPush}
+              className="btn-primary"
+            >
+              {dispatchingPush ? "Dispatching..." : "Run Dispatch"}
+            </button>
+            <button
+              onClick={handleRetryPush}
+              disabled={retryingPush}
+              className="btn-secondary"
+            >
+              {retryingPush ? "Retrying..." : "Retry Failures"}
+            </button>
+          </div>
+        </div>
+
+        {pushOperationMessage && (
+          <div className="rounded-lg border border-border bg-surface-50 dark:bg-surface-900/40 px-3 py-2 text-xs">
+            {pushOperationMessage}
+          </div>
+        )}
+
+        {pushLoading ? (
+          <div className="text-sm" style={{ color: "var(--text-secondary)" }}>
+            Loading push stats...
+          </div>
+        ) : pushStats ? (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div className="rounded-lg border border-border p-2 text-xs">
+                <div style={{ color: "var(--text-muted)" }}>Active Tokens</div>
+                <div className="text-base font-semibold">{pushStats.tokens.active}</div>
+              </div>
+              <div className="rounded-lg border border-border p-2 text-xs">
+                <div style={{ color: "var(--text-muted)" }}>Inactive Tokens</div>
+                <div className="text-base font-semibold">{pushStats.tokens.inactive}</div>
+              </div>
+              <div className="rounded-lg border border-border p-2 text-xs">
+                <div style={{ color: "var(--text-muted)" }}>Expo Tokens</div>
+                <div className="text-base font-semibold">{pushStats.tokens.expo}</div>
+              </div>
+              <div className="rounded-lg border border-border p-2 text-xs">
+                <div style={{ color: "var(--text-muted)" }}>FCM Tokens</div>
+                <div className="text-base font-semibold">{pushStats.tokens.fcm}</div>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border overflow-hidden">
+              <table className="w-full text-xs">
+                <thead className="bg-surface-100 dark:bg-surface-900/50">
+                  <tr>
+                    <th className="text-left px-2 py-2 font-medium">Reminder Type</th>
+                    <th className="text-left px-2 py-2 font-medium">Status</th>
+                    <th className="text-right px-2 py-2 font-medium">Count</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pushStats.summary.length === 0 ? (
+                    <tr>
+                      <td className="px-2 py-3" colSpan={3}>
+                        No reminder records in lookback window.
+                      </td>
+                    </tr>
+                  ) : (
+                    pushStats.summary.map((row) => (
+                      <tr key={`${row.notification_type}-${row.dispatch_status}`} className="border-t border-border">
+                        <td className="px-2 py-2">{row.notification_type}</td>
+                        <td className="px-2 py-2">{row.dispatch_status}</td>
+                        <td className="px-2 py-2 text-right font-medium">{row.count}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {/* Create Modal */}

@@ -130,7 +130,9 @@ export default function LoginPage() {
           <div className="mt-6 rounded-xl p-3.5 bg-muted/60 border border-border">
             <p className="text-overline text-muted-foreground mb-2">Dev Logins</p>
             {[
-              { label: 'Super Admin', email: 'mhussain.bscs24seecs@seecs.edu.pk', pw: 'Mobile 786' },
+              { label: 'Super Admin 1', email: 'maazhussain972@gmail.com', pw: 'maaz@123' },
+              { label: 'Super Admin 2', email: 'abduldaym786@gmail.com', pw: 'daym@123' },
+              { label: 'Super Admin 3', email: 'bilalatif23@gmail.com', pw: 'bilal@123' },
               { label: 'Student', email: 'student1@seecs.edu.pk', pw: 'test1234' },
               { label: 'President', email: 'president.devs@seecs.edu.pk', pw: 'president123' },
             ].map((cred) => (

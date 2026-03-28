@@ -13,6 +13,7 @@ export async function GET() {
 
     const [
       users,
+      superAdmins,
       societies,
       events,
       pendingEvents,
@@ -24,6 +25,7 @@ export async function GET() {
       suspensionsToday,
     ] = await Promise.all([
       query('SELECT COUNT(*) as count FROM users'),
+      query(`SELECT COUNT(*) as count FROM users WHERE user_type = 'SUPER_ADMIN'`),
       query('SELECT COUNT(*) as count FROM societies WHERE status = $1', ['APPROVED']),
       query('SELECT COUNT(*) as count FROM events'),
       query('SELECT COUNT(*) as count FROM events WHERE status = $1', ['PENDING']),
@@ -50,6 +52,7 @@ export async function GET() {
 
     return NextResponse.json({
       totalUsers: parseInt(users.rows[0].count),
+      totalSuperAdmins: parseInt(superAdmins.rows[0].count),
       totalSocieties: parseInt(societies.rows[0].count),
       totalEvents: parseInt(events.rows[0].count),
       pendingEvents: parseInt(pendingEvents.rows[0].count),

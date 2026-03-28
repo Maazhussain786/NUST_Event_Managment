@@ -3,6 +3,7 @@ import {
   ensurePushTablesExist,
   isPushFeatureEnabled,
   PushMessage,
+  PushMessageResult,
   sendPushNotifications,
 } from "@/lib/push-notifications";
 
@@ -28,6 +29,46 @@ interface RawCandidateRow {
   event_title: string;
   society_name: string;
   remaining_seats?: string | number | null;
+}
+
+export interface PushReminderStats {
+  generatedAt: string;
+  lookbackDays: number;
+  tokens: {
+    active: number;
+    inactive: number;
+    expo: number;
+    fcm: number;
+  };
+  summary: Array<{
+    notification_type: string;
+    dispatch_status: string;
+    count: number;
+  }>;
+  recent: Array<{
+    id: string;
+    user_id: string;
+    user_email: string | null;
+    event_id: string;
+    event_title: string | null;
+    notification_type: string;
+    dispatch_status: string;
+    attempt_count: number;
+    trigger_time: string;
+    created_at: string;
+    last_attempted_at: string | null;
+    delivered_at: string | null;
+    last_error: string | null;
+  }>;
+}
+
+export interface PushReminderRetryInput {
+  statuses?: Array<"FAILED" | "NO_TOKENS" | "PARTIAL" | "QUEUED" | "SENT">;
+  lookbackHours?: number;
+  limit?: number;
+  eventId?: string;
+  userId?: string;
+  notificationType?: ReminderType;
 }
 
 function buildDedupeKey(candidate: ReminderCandidate): string {
@@ -230,9 +271,9 @@ async function reserveReminderDispatch(
   const dedupeKey = buildDedupeKey(candidate);
   const result = await query(
     `INSERT INTO event_push_notification_log
-       (user_id, event_id, notification_type, trigger_time, dedupe_key, sent_at)
+       (user_id, event_id, notification_type, trigger_time, dedupe_key, sent_at, dispatch_status, last_attempted_at)
      VALUES
-       ($1, $2, $3, $4, $5, NOW())
+       ($1, $2, $3, $4, $5, NOW(), 'QUEUED', NOW())
      ON CONFLICT (dedupe_key) DO NOTHING
      RETURNING id`,
     [
@@ -254,6 +295,47 @@ async function insertInAppNotification(candidate: ReminderCandidate): Promise<vo
   );
 }
 
+async function updateReminderDispatchStatus(
+  candidate: ReminderCandidate,
+  messageResult: PushMessageResult | undefined,
+): Promise<void> {
+  const dedupeKey = buildDedupeKey(candidate);
+
+  const status = messageResult?.status || "FAILED";
+  const providerStats = messageResult
+    ? {
+        tokenCount: messageResult.tokenCount,
+        sentCount: messageResult.sentCount,
+        failedCount: messageResult.failedCount,
+      }
+    : {
+        tokenCount: 0,
+        sentCount: 0,
+        failedCount: 1,
+      };
+
+  let lastError: string | null = null;
+  if (status === "NO_TOKENS") {
+    lastError = "No active push tokens for user";
+  } else if (status === "FAILED") {
+    lastError = "Push provider failed to deliver to all tokens";
+  } else if (status === "PARTIAL") {
+    lastError = "Push delivered to some tokens only";
+  }
+
+  await query(
+    `UPDATE event_push_notification_log
+     SET dispatch_status = $1,
+         attempt_count = attempt_count + 1,
+         last_attempted_at = NOW(),
+         delivered_at = CASE WHEN $1 = 'SENT' THEN NOW() ELSE delivered_at END,
+         last_error = $2,
+         provider_stats = $3::jsonb
+     WHERE dedupe_key = $4`,
+    [status, lastError, JSON.stringify(providerStats), dedupeKey],
+  );
+}
+
 export async function dispatchEventReminderPushNotifications(): Promise<{
   featureEnabled: boolean;
   candidateCount: number;
@@ -264,6 +346,7 @@ export async function dispatchEventReminderPushNotifications(): Promise<{
     tokenCount: number;
     sentCount: number;
     failedCount: number;
+    messageResults: PushMessageResult[];
   };
 }> {
   const featureEnabled = await isPushFeatureEnabled();
@@ -273,7 +356,13 @@ export async function dispatchEventReminderPushNotifications(): Promise<{
       candidateCount: 0,
       dispatchedCount: 0,
       inAppCount: 0,
-      push: { messageCount: 0, tokenCount: 0, sentCount: 0, failedCount: 0 },
+      push: {
+        messageCount: 0,
+        tokenCount: 0,
+        sentCount: 0,
+        failedCount: 0,
+        messageResults: [],
+      },
     };
   }
 
@@ -309,6 +398,7 @@ export async function dispatchEventReminderPushNotifications(): Promise<{
     title: candidate.title,
     body: candidate.body,
     link: candidate.link,
+    messageKey: buildDedupeKey(candidate),
     data: {
       type: candidate.type,
       eventId: candidate.eventId,
@@ -316,6 +406,18 @@ export async function dispatchEventReminderPushNotifications(): Promise<{
   }));
 
   const pushResult = await sendPushNotifications(pushMessages);
+  const resultByKey = new Map<string, PushMessageResult>();
+
+  for (const result of pushResult.messageResults) {
+    resultByKey.set(result.messageKey, result);
+  }
+
+  for (const candidate of dispatchable) {
+    await updateReminderDispatchStatus(
+      candidate,
+      resultByKey.get(buildDedupeKey(candidate)),
+    );
+  }
 
   return {
     featureEnabled: true,
@@ -323,5 +425,209 @@ export async function dispatchEventReminderPushNotifications(): Promise<{
     dispatchedCount: dispatchable.length,
     inAppCount: dispatchable.length,
     push: pushResult,
+  };
+}
+
+export async function previewEventReminderPushCandidates(): Promise<{
+  featureEnabled: boolean;
+  candidateCount: number;
+  breakdown: Record<ReminderType, number>;
+}> {
+  const featureEnabled = await isPushFeatureEnabled();
+  if (!featureEnabled) {
+    return {
+      featureEnabled: false,
+      candidateCount: 0,
+      breakdown: {
+        EVENT_STARTING_SOON: 0,
+        REGISTRATION_CLOSING_SOON: 0,
+        LIMITED_SEATS_LEFT: 0,
+      },
+    };
+  }
+
+  await ensurePushTablesExist();
+
+  const [eventStartingSoon, registrationClosingSoon, limitedSeats] =
+    await Promise.all([
+      fetchEventStartingSoonCandidates(),
+      fetchRegistrationClosingCandidates(),
+      fetchLimitedSeatsCandidates(),
+    ]);
+
+  return {
+    featureEnabled: true,
+    candidateCount:
+      eventStartingSoon.length +
+      registrationClosingSoon.length +
+      limitedSeats.length,
+    breakdown: {
+      EVENT_STARTING_SOON: eventStartingSoon.length,
+      REGISTRATION_CLOSING_SOON: registrationClosingSoon.length,
+      LIMITED_SEATS_LEFT: limitedSeats.length,
+    },
+  };
+}
+
+export async function getPushReminderStats(
+  lookbackDays: number = 7,
+): Promise<PushReminderStats> {
+  await ensurePushTablesExist();
+
+  const safeDays = Number.isFinite(lookbackDays)
+    ? Math.min(Math.max(Math.floor(lookbackDays), 1), 90)
+    : 7;
+
+  const summaryResult = await query(
+    `SELECT
+       notification_type,
+       dispatch_status,
+       COUNT(*)::int AS count
+     FROM event_push_notification_log
+     WHERE created_at >= NOW() - ($1::text || ' days')::interval
+     GROUP BY notification_type, dispatch_status
+     ORDER BY notification_type, dispatch_status`,
+    [safeDays],
+  );
+
+  const recentResult = await query(
+    `SELECT
+       l.id,
+       l.user_id,
+       u.email AS user_email,
+       l.event_id,
+       e.title AS event_title,
+       l.notification_type,
+       l.dispatch_status,
+       l.attempt_count,
+       l.trigger_time,
+       l.created_at,
+       l.last_attempted_at,
+       l.delivered_at,
+       l.last_error
+     FROM event_push_notification_log l
+     LEFT JOIN users u ON u.id = l.user_id
+     LEFT JOIN events e ON e.id = l.event_id
+     WHERE l.created_at >= NOW() - ($1::text || ' days')::interval
+     ORDER BY l.created_at DESC
+     LIMIT 100`,
+    [safeDays],
+  );
+
+  const tokenSummary = await query(
+    `SELECT
+       COUNT(*) FILTER (WHERE is_active = TRUE)::int AS active,
+       COUNT(*) FILTER (WHERE is_active = FALSE)::int AS inactive,
+       COUNT(*) FILTER (WHERE is_active = TRUE AND (token LIKE 'ExponentPushToken[%' OR token LIKE 'ExpoPushToken[%'))::int AS expo,
+       COUNT(*) FILTER (WHERE is_active = TRUE AND token NOT LIKE 'ExponentPushToken[%' AND token NOT LIKE 'ExpoPushToken[%')::int AS fcm
+     FROM user_push_tokens`,
+  );
+
+  const tokenRow = tokenSummary.rows[0] || {
+    active: 0,
+    inactive: 0,
+    expo: 0,
+    fcm: 0,
+  };
+
+  return {
+    generatedAt: new Date().toISOString(),
+    lookbackDays: safeDays,
+    tokens: {
+      active: Number(tokenRow.active || 0),
+      inactive: Number(tokenRow.inactive || 0),
+      expo: Number(tokenRow.expo || 0),
+      fcm: Number(tokenRow.fcm || 0),
+    },
+    summary: (summaryResult.rows || []).map((row) => ({
+      notification_type: String(row.notification_type || ""),
+      dispatch_status: String(row.dispatch_status || ""),
+      count: Number(row.count || 0),
+    })),
+    recent: (recentResult.rows || []).map((row) => ({
+      id: String(row.id),
+      user_id: String(row.user_id),
+      user_email: row.user_email || null,
+      event_id: String(row.event_id),
+      event_title: row.event_title || null,
+      notification_type: String(row.notification_type || ""),
+      dispatch_status: String(row.dispatch_status || ""),
+      attempt_count: Number(row.attempt_count || 0),
+      trigger_time: String(row.trigger_time),
+      created_at: String(row.created_at),
+      last_attempted_at: row.last_attempted_at || null,
+      delivered_at: row.delivered_at || null,
+      last_error: row.last_error || null,
+    })),
+  };
+}
+
+export async function retryPushReminderDispatch(
+  input: PushReminderRetryInput = {},
+): Promise<{
+  deletedCount: number;
+  retriedStatuses: string[];
+  lookbackHours: number;
+  dispatch: Awaited<ReturnType<typeof dispatchEventReminderPushNotifications>>;
+}> {
+  await ensurePushTablesExist();
+
+  const statuses = input.statuses && input.statuses.length
+    ? input.statuses
+    : ["FAILED", "NO_TOKENS", "PARTIAL"];
+
+  const lookbackHours = Number.isFinite(input.lookbackHours)
+    ? Math.min(Math.max(Math.floor(input.lookbackHours || 24), 1), 24 * 30)
+    : 24;
+
+  const limit = Number.isFinite(input.limit)
+    ? Math.min(Math.max(Math.floor(input.limit || 500), 1), 5000)
+    : 500;
+
+  const conditions = [
+    `dispatch_status = ANY($1::text[])`,
+    `created_at >= NOW() - ($2::text || ' hours')::interval`,
+  ];
+  const params: unknown[] = [statuses, lookbackHours];
+
+  if (input.eventId) {
+    params.push(input.eventId);
+    conditions.push(`event_id = $${params.length}`);
+  }
+
+  if (input.userId) {
+    params.push(input.userId);
+    conditions.push(`user_id = $${params.length}`);
+  }
+
+  if (input.notificationType) {
+    params.push(input.notificationType);
+    conditions.push(`notification_type = $${params.length}`);
+  }
+
+  params.push(limit);
+
+  const deleteSql = `
+    WITH target_rows AS (
+      SELECT dedupe_key
+      FROM event_push_notification_log
+      WHERE ${conditions.join(" AND ")}
+      ORDER BY created_at DESC
+      LIMIT $${params.length}
+    )
+    DELETE FROM event_push_notification_log l
+    USING target_rows t
+    WHERE l.dedupe_key = t.dedupe_key
+    RETURNING l.dedupe_key
+  `;
+
+  const deleted = await query(deleteSql, params);
+  const dispatch = await dispatchEventReminderPushNotifications();
+
+  return {
+    deletedCount: deleted.rows.length,
+    retriedStatuses: statuses,
+    lookbackHours,
+    dispatch,
   };
 }

@@ -8,8 +8,8 @@ import { useRouter } from 'next/navigation';
 interface Notification {
   id: string;
   title: string;
-  message: string;
-  type: string;
+  body: string;
+  link: string | null;
   is_read: boolean;
   created_at: string;
 }
@@ -45,6 +45,32 @@ export default function NotificationsPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ notificationId: id }),
     });
+  };
+
+  const toAppLink = (raw: string | null): string | null => {
+    if (!raw) return null;
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    if (trimmed.startsWith('/')) return trimmed;
+    try {
+      const url = new URL(trimmed);
+      if (typeof window !== 'undefined' && url.origin === window.location.origin) {
+        return `${url.pathname}${url.search}${url.hash}`;
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  };
+
+  const handleNotificationClick = async (n: Notification) => {
+    if (!n.is_read) {
+      await markRead(n.id);
+    }
+    const appLink = toAppLink(n.link);
+    if (appLink) {
+      router.push(appLink);
+    }
   };
 
   const unreadCount = notifs.filter(n => !n.is_read).length;
@@ -91,7 +117,7 @@ export default function NotificationsPage() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.03 }}
-                onClick={() => markRead(n.id)}
+                onClick={() => handleNotificationClick(n)}
                 className={`card p-4 flex items-start gap-3 cursor-pointer transition-all ${!n.is_read ? 'border-l-4 border-l-brand-500' : ''}`}
               >
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${!n.is_read ? 'bg-brand-500/15' : 'bg-surface-200 dark:bg-surface-700'}`}>
@@ -99,7 +125,7 @@ export default function NotificationsPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className={`text-sm font-medium truncate ${!n.is_read ? 'text-primary' : 'text-muted'}`}>{n.title}</h3>
-                  <p className="text-muted text-xs mt-0.5 line-clamp-2">{n.message}</p>
+                  <p className="text-muted text-xs mt-0.5 line-clamp-2">{n.body}</p>
                   <p className="text-muted text-[11px] mt-1">{timeAgo(n.created_at)}</p>
                 </div>
                 {!n.is_read && <div className="w-2 h-2 rounded-full bg-brand-500 mt-2 flex-shrink-0" />}

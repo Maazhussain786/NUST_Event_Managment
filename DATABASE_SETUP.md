@@ -156,7 +156,9 @@ node scripts/seed.js
 ```
 
 This creates:
-- **Admin account**: `mhussain.bscs24seecs@seecs.edu.pk` / `Mobile 786`
+- **Super Admin**: `maazhussain972@gmail.com` / `maaz@123`
+- **Super Admin**: `abduldaym786@gmail.com` / `daym@123`
+- **Super Admin**: `bilalatif23@gmail.com` / `bilal@123`
 - **Student account**: `student1@seecs.edu.pk` / `test1234`
 - 11 NUST schools
 - 24 sample societies with roles
@@ -266,9 +268,9 @@ Located in `scripts/` directory:
 
 2. Open browser: `http://localhost:4000`
 
-3. Login as admin:
-   - Email: `mhussain.bscs24seecs@seecs.edu.pk`
-   - Password: `Mobile 786`
+3. Login as super admin:
+   - Email: `maazhussain972@gmail.com`
+   - Password: `maaz@123`
 
 4. Or login as student:
    - Email: `student1@seecs.edu.pk`

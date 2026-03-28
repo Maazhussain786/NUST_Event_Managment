@@ -23,18 +23,31 @@ async function seed() {
     console.log('🌱 Starting seed...\n');
     await client.query('BEGIN');
 
-    // 1. Create admin user
-    console.log('👤 Creating admin user...');
-    const adminHash = await bcrypt.hash('Mobile 786', 12);
-    const adminResult = await client.query(
-      `INSERT INTO users (email, password_hash, full_name, user_type, status)
-       VALUES ($1, $2, $3, 'SUPER_ADMIN', 'ACTIVE')
-       ON CONFLICT (email) DO UPDATE SET password_hash = $2, user_type = 'SUPER_ADMIN', status = 'ACTIVE'
-       RETURNING id`,
-      ['mhussain.bscs24seecs@seecs.edu.pk', adminHash, 'Maaz Hussain']
-    );
-    const adminId = adminResult.rows[0].id;
-    console.log(`  ✓ Admin: mhussain.bscs24seecs@seecs.edu.pk`);
+    // 1. Create super admins
+    console.log('👤 Creating super admins...');
+    const superAdmins = [
+      { name: 'Maaz Hussain', email: 'maazhussain972@gmail.com', password: 'maaz@123' },
+      { name: 'Muhammad Abdul Daym', email: 'abduldaym786@gmail.com', password: 'daym@123' },
+      { name: 'Muhammad Bilal Atif', email: 'bilalatif23@gmail.com', password: 'bilal@123' },
+    ];
+    const superAdminIds = [];
+    for (const admin of superAdmins) {
+      const adminHash = await bcrypt.hash(admin.password, 12);
+      const adminResult = await client.query(
+        `INSERT INTO users (email, password_hash, full_name, user_type, status)
+         VALUES ($1, $2, $3, 'SUPER_ADMIN', 'ACTIVE')
+         ON CONFLICT (email) DO UPDATE
+           SET password_hash = EXCLUDED.password_hash,
+               full_name = EXCLUDED.full_name,
+               user_type = 'SUPER_ADMIN',
+               status = 'ACTIVE'
+         RETURNING id`,
+        [admin.email.toLowerCase(), adminHash, admin.name]
+      );
+      superAdminIds.push(adminResult.rows[0].id);
+      console.log(`  ✓ Super Admin: ${admin.email.toLowerCase()}`);
+    }
+    const adminId = superAdminIds[0];
 
     // 2. Create sample students
     console.log('\n👥 Creating sample students...');
@@ -225,7 +238,9 @@ async function seed() {
 
     await client.query('COMMIT');
     console.log('\n✅ Seed completed!\n');
-    console.log('📧 Admin: mhussain.bscs24seecs@seecs.edu.pk / Mobile 786');
+    console.log('📧 Super Admin: maazhussain972@gmail.com / maaz@123');
+    console.log('📧 Super Admin: abduldaym786@gmail.com / daym@123');
+    console.log('📧 Super Admin: bilalatif23@gmail.com / bilal@123');
     console.log('📧 Student: student1@seecs.edu.pk / test1234');
     console.log('📧 President: president.devs@seecs.edu.pk / president123');
   } catch (error) {

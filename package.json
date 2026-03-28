@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start -p 4000",
     "lint": "next lint",
-    "seed": "node scripts/seed.js"
+    "seed": "node scripts/seed.js",
+    "sync:super-admins": "node scripts/sync-super-admins.js",
+    "migrate:016": "node run-migration-016.js"
   },
   "dependencies": {
     "@azure/storage-blob": "^12.31.0",

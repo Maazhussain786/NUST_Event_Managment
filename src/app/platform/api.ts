@@ -27,6 +27,7 @@ import type {
   UniversityEvent,
   CoHostRequest,
   PlatformNotification,
+  PushReminderStats,
   BlackoutDate,
   EmergencyStatus,
   SocietyTransferMember,
@@ -531,6 +532,47 @@ export function updateNotification(
 
 export function deleteNotification(id: string): Promise<{ success: boolean }> {
   return api(`/api/admin/notifications/${id}`, { method: "DELETE" });
+}
+
+export function fetchPushReminderStats(days: number = 7): Promise<PushReminderStats> {
+  const safeDays = Number.isFinite(days) ? Math.max(1, Math.min(Math.floor(days), 90)) : 7;
+  return api<PushReminderStats>(`/api/admin/push-reminders?days=${safeDays}`);
+}
+
+export function runPushReminderDispatch(): Promise<{
+  success: boolean;
+  action: "dispatch";
+  result: unknown;
+}> {
+  return api("/api/admin/push-reminders", {
+    method: "POST",
+    body: JSON.stringify({ action: "dispatch" }),
+  });
+}
+
+export function runPushReminderDryRun(): Promise<{
+  success: boolean;
+  action: "dry-run";
+  result: unknown;
+}> {
+  return api("/api/admin/push-reminders", {
+    method: "POST",
+    body: JSON.stringify({ action: "dry-run" }),
+  });
+}
+
+export function retryPushReminderDispatch(input?: {
+  statuses?: string[];
+  lookbackHours?: number;
+  limit?: number;
+  eventId?: string;
+  userId?: string;
+  notificationType?: string;
+}): Promise<{ success: boolean; action: "retry"; result: unknown }> {
+  return api("/api/admin/push-reminders", {
+    method: "POST",
+    body: JSON.stringify({ action: "retry", ...(input || {}) }),
+  });
 }
 
 // ─── Blackout Calendar ──────────────────────────────────────────────────────

@@ -4,6 +4,7 @@ import './globals.css';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { AuthProvider } from '@/components/AuthProvider';
 import { ServiceWorkerRegistrar } from '@/components/ServiceWorkerRegistrar';
+import { PushTokenSync } from '@/components/PushTokenSync';
 import { Toaster } from 'sonner';
 
 const geist = localFont({
@@ -65,6 +66,7 @@ export default function RootLayout({
               }}
             />
             <ServiceWorkerRegistrar />
+            <PushTokenSync />
           </AuthProvider>
         </ThemeProvider>
       </body>
