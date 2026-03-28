@@ -1,22 +1,44 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { GoogleSignInButton } from '@/components/GoogleSignInButton';
+import { setLocalUser, syncUserFromSession } from '@/lib/client-auth';
 
 const ease = [0.25, 0.1, 0.25, 1] as const;
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    const queryError = searchParams.get('error');
+    if (queryError) {
+      setError(queryError);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    let cancelled = false;
+    syncUserFromSession().then((user) => {
+      if (!cancelled && user) {
+        window.location.href = '/home';
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,7 +59,7 @@ export default function LoginPage() {
         }
         throw new Error(data.error);
       }
-      localStorage.setItem('user', JSON.stringify(data.user));
+      setLocalUser(data.user);
       window.location.href = '/home';
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Login failed');
@@ -79,6 +101,19 @@ export default function LoginPage() {
               {error}
             </motion.div>
           )}
+
+          <GoogleSignInButton />
+
+          <div className="relative py-1">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-border" />
+            </div>
+            <div className="relative flex justify-center">
+              <span className="bg-background px-2 text-[11px] uppercase tracking-wide text-muted-foreground">
+                Or continue with email
+              </span>
+            </div>
+          </div>
 
           <Input
             icon={Mail}

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Building2, Loader2, CheckCircle2, AlertCircle, Upload, X, ImageIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { syncUserFromSession } from '@/lib/client-auth';
 
 interface School {
   id: string;
@@ -70,17 +71,14 @@ export default function RegisterSocietyPage() {
         }
       }
     }).catch((err) => console.error('Failed to fetch pending society:', err));
-    // Pre-fill email from localStorage
-    try {
-      const user = localStorage.getItem('user');
-      if (user) {
-        const parsed = JSON.parse(user);
-        if (!email) setEmail(parsed.email || '');
-        if (!presidentName) setPresidentName(parsed.fullName || '');
-      }
-    } catch (localStorageErr) {
-      console.error('Failed to parse user from localStorage:', localStorageErr);
-    }
+    // Pre-fill from validated session user (cookie-backed persistent login).
+    syncUserFromSession()
+      .then((user) => {
+        if (!user) return;
+        setEmail((prev) => prev || user.email || '');
+        setPresidentName((prev) => prev || user.fullName || '');
+      })
+      .catch((sessionErr) => console.error('Failed to load session user:', sessionErr));
   }, []);
 
   const handleLogoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {

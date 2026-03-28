@@ -19,6 +19,13 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { StatusBadge } from '@/components/status-badge';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import {
+  AUTH_STATE_CHANGED_EVENT,
+  getLocalUser,
+  logoutClient,
+  setLocalUser,
+  syncUserFromSession,
+} from '@/lib/client-auth';
 
 interface UserProfile {
   id: string;
@@ -46,7 +53,7 @@ const ease = [0.25, 0.1, 0.25, 1] as const;
 export default function ProfilePage() {
   const router = useRouter();
   const { theme, toggleTheme } = useTheme();
-  const { isLoggedIn, requireAuth } = useAuth();
+  const { requireAuth } = useAuth();
   const isDark = theme === 'dark';
   const [user, setUser] = useState<UserProfile | null>(null);
   const [mySocieties, setMySocieties] = useState<MySociety[]>([]);
@@ -55,31 +62,57 @@ export default function ProfilePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const stored = localStorage.getItem('user');
-    if (stored) {
-      try { setUser(JSON.parse(stored)); } catch { localStorage.removeItem('user'); }
+    let cancelled = false;
+
+    const load = async () => {
+      const sessionUser = await syncUserFromSession();
+      if (cancelled) return;
+
+      setUser(sessionUser);
+      if (!sessionUser) {
+        setMySocieties([]);
+        return;
+      }
+
       setLoadingSocieties(true);
       fetch('/api/my-societies')
         .then((r) => (r.ok ? r.json() : []))
-        .then((data) => setMySocieties(Array.isArray(data) ? data : []))
+        .then((data) => {
+          if (!cancelled) setMySocieties(Array.isArray(data) ? data : []);
+        })
         .catch((err) => console.error('Failed to fetch societies:', err))
-        .finally(() => setLoadingSocieties(false));
+        .finally(() => {
+          if (!cancelled) setLoadingSocieties(false);
+        });
 
       fetch('/api/me')
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
-          if (data?.user) {
+          if (data?.user && !cancelled) {
             setUser(data.user);
-            localStorage.setItem('user', JSON.stringify(data.user));
+            setLocalUser(data.user);
           }
         })
         .catch((err) => console.error('Failed to fetch user:', err));
-    }
+    };
+
+    void load();
+
+    const handleAuthChanged = () => {
+      setUser(getLocalUser());
+    };
+    window.addEventListener(AUTH_STATE_CHANGED_EVENT, handleAuthChanged);
+    window.addEventListener('storage', handleAuthChanged);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener(AUTH_STATE_CHANGED_EVENT, handleAuthChanged);
+      window.removeEventListener('storage', handleAuthChanged);
+    };
   }, []);
 
-  const handleLogout = () => {
-    localStorage.removeItem('user');
-    document.cookie = 'auth_token=; path=/; max-age=0';
+  const handleLogout = async () => {
+    await logoutClient();
     window.location.href = '/login';
   };
 
@@ -108,7 +141,7 @@ export default function ProfilePage() {
       const data = await res.json();
       const updatedUser = { ...user, avatarUrl: data.data.url };
       setUser(updatedUser);
-      localStorage.setItem('user', JSON.stringify(updatedUser));
+      setLocalUser(updatedUser);
       toast.success('Profile picture updated');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to upload photo');

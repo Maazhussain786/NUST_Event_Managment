@@ -2,9 +2,10 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
-import { verifyPassword, generateToken } from '@/lib/auth';
-import { extractIpAddress, checkApiRateLimit, ApiErrors } from '@/lib/api-utils';
+import { verifyPassword, generateToken, setAuthCookie } from '@/lib/auth';
+import { extractIpAddress, checkApiRateLimit } from '@/lib/api-utils';
 import { CONTAINERS, resolveMediaUrl } from '@/lib/blob';
+import { shouldReturnAuthToken } from '@/lib/auth-response';
 
 export async function POST(req: NextRequest) {
   try {
@@ -56,6 +57,7 @@ export async function POST(req: NextRequest) {
       userType: user.user_type,
       fullName: user.full_name,
     });
+    const includeToken = shouldReturnAuthToken(req);
 
     // Generate signed avatar URL if avatar exists
     let avatarUrl: string | null = null;
@@ -68,7 +70,16 @@ export async function POST(req: NextRequest) {
       } catch { avatarUrl = null; }
     }
 
-    const response = NextResponse.json({
+    const responseBody: {
+      user: {
+        id: string;
+        email: string;
+        fullName: string;
+        userType: string;
+        avatarUrl: string | null;
+      };
+      token?: string;
+    } = {
       user: {
         id: user.id,
         email: user.email,
@@ -76,15 +87,12 @@ export async function POST(req: NextRequest) {
         userType: user.user_type,
         avatarUrl,
       },
-    });
-
-    response.cookies.set('auth_token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60, // 7 days
-      path: '/',
-    });
+    };
+    if (includeToken) {
+      responseBody.token = token;
+    }
+    const response = NextResponse.json(responseBody);
+    setAuthCookie(response, token);
 
     return response;
   } catch (error: unknown) {

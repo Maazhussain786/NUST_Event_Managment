@@ -4,6 +4,11 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Heart, ArrowLeft, Users, Loader2, LogIn } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import {
+  AUTH_STATE_CHANGED_EVENT,
+  getLocalUser,
+  syncUserFromSession,
+} from '@/lib/client-auth';
 
 interface FavSociety {
   id: string;
@@ -21,16 +26,49 @@ export default function FavoritesPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
-    const hasUser = !!localStorage.getItem('user');
-    setIsLoggedIn(hasUser);
-    if (!hasUser) { setLoading(false); return; }
-    fetch('/api/favorites')
-      .then(r => r.json())
-      .then(data => {
-        if (Array.isArray(data)) setFavorites(data);
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
+    let cancelled = false;
+
+    const load = async () => {
+      setLoading(true);
+      const user = await syncUserFromSession();
+      if (cancelled) return;
+
+      const loggedIn = !!user;
+      setIsLoggedIn(loggedIn);
+      if (!loggedIn) {
+        setFavorites([]);
+        setLoading(false);
+        return;
+      }
+
+      fetch('/api/favorites')
+        .then((r) => r.json())
+        .then((data) => {
+          if (!cancelled && Array.isArray(data)) setFavorites(data);
+        })
+        .catch(console.error)
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    };
+
+    void load();
+
+    const handleAuthChanged = () => {
+      const hasUser = !!getLocalUser();
+      setIsLoggedIn(hasUser);
+      if (!hasUser) {
+        setFavorites([]);
+      }
+    };
+    window.addEventListener(AUTH_STATE_CHANGED_EVENT, handleAuthChanged);
+    window.addEventListener('storage', handleAuthChanged);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener(AUTH_STATE_CHANGED_EVENT, handleAuthChanged);
+      window.removeEventListener('storage', handleAuthChanged);
+    };
   }, []);
 
   const removeFav = async (id: string) => {

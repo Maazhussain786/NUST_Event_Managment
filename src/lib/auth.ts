@@ -2,7 +2,8 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { query } from './db';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
+import type { NextResponse } from 'next/server';
 
 let _jwtSecret: string | null = null;
 function getJwtSecret(): string {
@@ -16,6 +17,7 @@ function getJwtSecret(): string {
   return _jwtSecret;
 }
 const JWT_EXPIRES = '7d';
+const AUTH_COOKIE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
 export interface JWTPayload {
   userId: string;
@@ -36,6 +38,16 @@ export function generateToken(payload: JWTPayload): string {
   return jwt.sign(payload, getJwtSecret(), { expiresIn: JWT_EXPIRES });
 }
 
+export function setAuthCookie(response: NextResponse, token: string) {
+  response.cookies.set('auth_token', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: AUTH_COOKIE_MAX_AGE_SECONDS,
+    path: '/',
+  });
+}
+
 export function verifyToken(token: string): JWTPayload | null {
   try {
     return jwt.verify(token, getJwtSecret()) as JWTPayload;
@@ -47,8 +59,22 @@ export function verifyToken(token: string): JWTPayload | null {
 export async function getCurrentUser(): Promise<JWTPayload | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get('auth_token')?.value;
-  if (!token) return null;
-  return verifyToken(token);
+  if (token) {
+    const payload = verifyToken(token);
+    if (payload) return payload;
+  }
+
+  // Mobile/native fallback: allow Bearer token auth for API calls.
+  const headerStore = await headers();
+  const authHeader = headerStore.get('authorization') || '';
+  if (authHeader.toLowerCase().startsWith('bearer ')) {
+    const bearerToken = authHeader.slice(7).trim();
+    if (bearerToken) {
+      return verifyToken(bearerToken);
+    }
+  }
+
+  return null;
 }
 
 export async function getUserById(id: string) {

@@ -1,11 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Mail, Lock, User, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { GoogleSignInButton } from '@/components/GoogleSignInButton';
+import { setLocalUser, syncUserFromSession } from '@/lib/client-auth';
 
 const ease = [0.25, 0.1, 0.25, 1] as const;
 
@@ -17,6 +19,18 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    syncUserFromSession().then((user) => {
+      if (!cancelled && user) {
+        window.location.href = '/home';
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,7 +48,7 @@ export default function RegisterPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       if (data.user) {
-        localStorage.setItem('user', JSON.stringify(data.user));
+        setLocalUser(data.user);
       }
       window.location.href = '/home';
     } catch (err: unknown) {
@@ -74,6 +88,19 @@ export default function RegisterPage() {
               {error}
             </motion.div>
           )}
+
+          <GoogleSignInButton label="Continue with Google" />
+
+          <div className="relative py-1">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-border" />
+            </div>
+            <div className="relative flex justify-center">
+              <span className="bg-background px-2 text-[11px] uppercase tracking-wide text-muted-foreground">
+                Or register with email
+              </span>
+            </div>
+          </div>
 
           <Input
             icon={User}

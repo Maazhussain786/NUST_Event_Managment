@@ -1,9 +1,14 @@
 'use client';
 
-import { createContext, useContext, useCallback, useState } from 'react';
+import { createContext, useContext, useCallback, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LogIn, X, UserCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import {
+  AUTH_STATE_CHANGED_EVENT,
+  getLocalUser,
+  syncUserFromSession,
+} from '@/lib/client-auth';
 
 interface AuthContextType {
   /** true when a user object exists in localStorage */
@@ -26,24 +31,41 @@ export function useAuth() {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [isLoggedIn, setIsLoggedIn] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return !!localStorage.getItem('user');
-  });
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [showPrompt, setShowPrompt] = useState(false);
   const [promptMessage, setPromptMessage] = useState('');
   const router = useRouter();
 
-  const refreshAuth = useCallback(() => {
-    setIsLoggedIn(!!localStorage.getItem('user'));
+  const syncAuthState = useCallback(async () => {
+    const user = await syncUserFromSession();
+    setIsLoggedIn(!!user);
   }, []);
 
+  useEffect(() => {
+    void syncAuthState();
+
+    const handleAuthChange = () => {
+      setIsLoggedIn(!!getLocalUser());
+    };
+
+    window.addEventListener(AUTH_STATE_CHANGED_EVENT, handleAuthChange);
+    window.addEventListener('storage', handleAuthChange);
+    return () => {
+      window.removeEventListener(AUTH_STATE_CHANGED_EVENT, handleAuthChange);
+      window.removeEventListener('storage', handleAuthChange);
+    };
+  }, [syncAuthState]);
+
+  const refreshAuth = useCallback(() => {
+    void syncAuthState();
+  }, [syncAuthState]);
+
   const requireAuth = useCallback((message?: string) => {
-    if (localStorage.getItem('user')) return true;
+    if (isLoggedIn || !!getLocalUser()) return true;
     setPromptMessage(message || 'Sign in to continue');
     setShowPrompt(true);
     return false;
-  }, []);
+  }, [isLoggedIn]);
 
   return (
     <AuthContext.Provider value={{ isLoggedIn, requireAuth, refreshAuth }}>

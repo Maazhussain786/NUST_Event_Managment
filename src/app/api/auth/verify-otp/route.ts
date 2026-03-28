@@ -2,9 +2,10 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
-import { generateToken } from '@/lib/auth';
-import { extractIpAddress, checkApiRateLimit, ApiErrors } from '@/lib/api-utils';
+import { generateToken, setAuthCookie } from '@/lib/auth';
+import { extractIpAddress, checkApiRateLimit } from '@/lib/api-utils';
 import { CONTAINERS, resolveMediaUrl } from '@/lib/blob';
+import { shouldReturnAuthToken } from '@/lib/auth-response';
 
 export async function POST(req: NextRequest) {
   try {
@@ -65,28 +66,44 @@ export async function POST(req: NextRequest) {
       userType: user.user_type,
       fullName: user.full_name,
     });
+    const includeToken = shouldReturnAuthToken(req);
+    let avatarUrl: string | null = null;
+    if (user.avatar_url) {
+      try {
+        avatarUrl = resolveMediaUrl(user.avatar_url, {
+          container: CONTAINERS.PROFILE_PICTURES,
+          expiresInMinutes: 60 * 24,
+        });
+      } catch {
+        avatarUrl = null;
+      }
+    }
 
-    const response = NextResponse.json({
+    const responseBody: {
+      message: string;
+      user: {
+        id: string;
+        email: string;
+        fullName: string;
+        userType: 'SUPER_ADMIN' | 'STUDENT';
+        avatarUrl: string | null;
+      };
+      token?: string;
+    } = {
       message: 'Email verified successfully',
       user: {
         id: user.id,
         email: user.email,
         fullName: user.full_name,
         userType: user.user_type,
-        avatarUrl: resolveMediaUrl(user.avatar_url, {
-          container: CONTAINERS.PROFILE_PICTURES,
-          expiresInMinutes: 60 * 24,
-        }),
+        avatarUrl,
       },
-    });
-
-    response.cookies.set('auth_token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60,
-      path: '/',
-    });
+    };
+    if (includeToken) {
+      responseBody.token = token;
+    }
+    const response = NextResponse.json(responseBody);
+    setAuthCookie(response, token);
 
     return response;
   } catch (error: unknown) {

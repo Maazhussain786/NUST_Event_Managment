@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { setLocalUser } from '@/lib/client-auth';
 
 function VerifyOTPContent() {
   const router = useRouter();
@@ -68,7 +69,7 @@ function VerifyOTPContent() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      localStorage.setItem('user', JSON.stringify(data.user));
+      setLocalUser(data.user);
       router.push('/home');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Verification failed');

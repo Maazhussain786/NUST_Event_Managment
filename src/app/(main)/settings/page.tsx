@@ -7,7 +7,12 @@ import { useRouter } from 'next/navigation';
 import { useTheme } from '@/components/ThemeProvider';
 import { PageHeader } from '@/components/page-header';
 import { Switch } from '@/components/ui/switch';
-import { cn } from '@/lib/utils';
+import {
+  AUTH_STATE_CHANGED_EVENT,
+  getLocalUser,
+  logoutClient,
+  syncUserFromSession,
+} from '@/lib/client-auth';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -16,12 +21,25 @@ export default function SettingsPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
-    setIsLoggedIn(!!localStorage.getItem('user'));
+    let cancelled = false;
+    setIsLoggedIn(!!getLocalUser());
+    syncUserFromSession().then((user) => {
+      if (!cancelled) setIsLoggedIn(!!user);
+    });
+
+    const handleAuthChanged = () => setIsLoggedIn(!!getLocalUser());
+    window.addEventListener(AUTH_STATE_CHANGED_EVENT, handleAuthChanged);
+    window.addEventListener('storage', handleAuthChanged);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener(AUTH_STATE_CHANGED_EVENT, handleAuthChanged);
+      window.removeEventListener('storage', handleAuthChanged);
+    };
   }, []);
 
-  const handleLogout = () => {
-    localStorage.removeItem('user');
-    document.cookie = 'auth_token=; path=/; max-age=0';
+  const handleLogout = async () => {
+    await logoutClient();
     window.location.href = '/login';
   };
 

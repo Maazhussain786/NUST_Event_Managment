@@ -2,8 +2,10 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
-import { hashPassword, generateToken } from '@/lib/auth';
-import { extractIpAddress, checkApiRateLimit, ApiErrors } from '@/lib/api-utils';
+import { hashPassword, generateToken, setAuthCookie } from '@/lib/auth';
+import { extractIpAddress, checkApiRateLimit } from '@/lib/api-utils';
+import { isNustStudentEmailForSignup, NUST_ONLY_ERROR_MESSAGE } from '@/lib/email-policy';
+import { shouldReturnAuthToken } from '@/lib/auth-response';
 
 export async function POST(req: NextRequest) {
   try {
@@ -20,8 +22,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Must be NUST email
-    if (!normalizedEmail.endsWith('.edu.pk')) {
-      return NextResponse.json({ error: 'Use your official university email' }, { status: 400 });
+    if (!isNustStudentEmailForSignup(normalizedEmail)) {
+      return NextResponse.json({ error: NUST_ONLY_ERROR_MESSAGE }, { status: 400 });
     }
 
     // Check existing
@@ -48,8 +50,20 @@ export async function POST(req: NextRequest) {
       userType: user.user_type,
       fullName: user.full_name,
     });
+    const includeToken = shouldReturnAuthToken(req);
 
-    const response = NextResponse.json({
+    const responseBody: {
+      message: string;
+      userId: string;
+      user: {
+        id: string;
+        email: string;
+        fullName: string;
+        userType: 'SUPER_ADMIN' | 'STUDENT';
+        avatarUrl: null;
+      };
+      token?: string;
+    } = {
       message: 'Account created successfully.',
       userId: user.id,
       user: {
@@ -59,15 +73,13 @@ export async function POST(req: NextRequest) {
         userType: user.user_type,
         avatarUrl: null,
       },
-    }, { status: 201 });
+    };
+    if (includeToken) {
+      responseBody.token = token;
+    }
 
-    response.cookies.set('auth_token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60,
-      path: '/',
-    });
+    const response = NextResponse.json(responseBody, { status: 201 });
+    setAuthCookie(response, token);
 
     return response;
   } catch (error: unknown) {

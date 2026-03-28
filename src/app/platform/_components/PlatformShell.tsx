@@ -30,6 +30,7 @@ import {
   ShieldOff,
   CalendarOff,
 } from 'lucide-react';
+import { logoutClient } from '@/lib/client-auth';
 
 interface PlatformShellProps {
   user: { fullName: string; email: string };
@@ -93,8 +94,7 @@ export function PlatformShell({ user, children }: PlatformShellProps) {
   };
 
   const handleLogout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
-    localStorage.removeItem('user');
+    await logoutClient();
     window.location.href = '/login';
   };
 

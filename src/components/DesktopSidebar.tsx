@@ -6,6 +6,12 @@ import { usePathname } from 'next/navigation';
 import { Home, CalendarDays, Users, Ticket, User, Settings, LogOut, type LucideIcon } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import {
+  AUTH_STATE_CHANGED_EVENT,
+  getLocalUser,
+  logoutClient,
+  syncUserFromSession,
+} from '@/lib/client-auth';
 
 interface NavItem {
   href: string;
@@ -27,18 +33,12 @@ interface UserInfo {
 }
 
 function getUserInfo(): UserInfo | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const stored = localStorage.getItem('user');
-    if (!stored) return null;
-    const user = JSON.parse(stored);
-    return {
-      fullName: user.fullName || 'User',
-      email: user.email || '',
-    };
-  } catch {
-    return null;
-  }
+  const user = getLocalUser();
+  if (!user) return null;
+  return {
+    fullName: user.fullName || 'User',
+    email: user.email || '',
+  };
 }
 
 export default function DesktopSidebar() {
@@ -46,7 +46,25 @@ export default function DesktopSidebar() {
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     setUserInfo(getUserInfo());
+    syncUserFromSession().then((user) => {
+      if (!cancelled) {
+        setUserInfo(user ? { fullName: user.fullName || 'User', email: user.email || '' } : null);
+      }
+    });
+
+    const handleAuthChanged = () => {
+      setUserInfo(getUserInfo());
+    };
+    window.addEventListener(AUTH_STATE_CHANGED_EVENT, handleAuthChanged);
+    window.addEventListener('storage', handleAuthChanged);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener(AUTH_STATE_CHANGED_EVENT, handleAuthChanged);
+      window.removeEventListener('storage', handleAuthChanged);
+    };
   }, []);
 
   return (
@@ -140,9 +158,8 @@ export default function DesktopSidebar() {
               <span className="text-caption font-medium">Settings</span>
             </Link>
             <button
-              onClick={() => {
-                localStorage.removeItem('user');
-                localStorage.removeItem('token');
+              onClick={async () => {
+                await logoutClient();
                 window.location.href = '/login';
               }}
               className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
