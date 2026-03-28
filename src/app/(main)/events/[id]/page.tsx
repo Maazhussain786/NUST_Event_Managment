@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
+import { SmartImage } from '@/components/SmartImage';
 
 interface EventDetail {
   id: string;
@@ -617,7 +618,7 @@ export default function EventDetailPage() {
                 className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
               />
               {proofPreview && (
-                <img src={proofPreview} alt="Payment proof preview" className="w-full rounded-lg border border-border max-h-52 object-contain bg-muted" />
+                <SmartImage src={proofPreview} alt="Payment proof preview" className="w-full rounded-lg border border-border max-h-52 object-contain bg-muted" />
               )}
             </div>
 
@@ -636,3 +637,5 @@ export default function EventDetailPage() {
     </div>
   );
 }
+
+

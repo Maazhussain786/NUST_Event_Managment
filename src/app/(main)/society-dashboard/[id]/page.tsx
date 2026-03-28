@@ -8,6 +8,7 @@ import {
   Shield, UserMinus, Send, Eye, X, ExternalLink
 } from 'lucide-react';
 import { useRouter, useParams } from 'next/navigation';
+import { SmartImage } from '@/components/SmartImage';
 
 type Tab = 'overview' | 'wings' | 'members' | 'invites' | 'settings';
 
@@ -358,7 +359,7 @@ export default function SocietyDashboard() {
         </div>
         <div className="w-10 h-10 rounded-xl bg-brand-500/10 flex items-center justify-center overflow-hidden flex-shrink-0">
           {society.logo_url ? (
-            <img src={society.logo_url} alt="" className="w-full h-full object-cover" />
+            <SmartImage src={society.logo_url} alt="" className="w-full h-full object-cover" />
           ) : (
             <Crown className="w-5 h-5 text-brand-500" />
           )}
@@ -919,3 +920,5 @@ export default function SocietyDashboard() {
     </div>
   );
 }
+
+

@@ -100,7 +100,9 @@ async function fetchEventStartingSoonCandidates(): Promise<ReminderCandidate[]> 
        WHERE cancelled_at IS NULL
      ) att ON att.event_id = e.id
      JOIN users u ON u.id = att.user_id
+     LEFT JOIN user_push_preferences upp ON upp.user_id = att.user_id
      WHERE u.status = 'ACTIVE'
+       AND COALESCE(upp.event_starting_soon, TRUE) = TRUE
        AND e.is_cancelled = FALSE
        AND e.deleted_at IS NULL
        AND e.event_start > NOW() + INTERVAL '50 minutes'
@@ -159,6 +161,7 @@ async function fetchRegistrationClosingCandidates(): Promise<ReminderCandidate[]
      JOIN societies s ON s.id = ec.society_id
      JOIN favorite_societies fs ON fs.society_id = ec.society_id
      JOIN users u ON u.id = fs.user_id
+     LEFT JOIN user_push_preferences upp ON upp.user_id = fs.user_id
      LEFT JOIN tickets t ON t.event_id = ec.id
                          AND t.user_id = fs.user_id
                          AND t.cancelled_at IS NULL
@@ -167,6 +170,7 @@ async function fetchRegistrationClosingCandidates(): Promise<ReminderCandidate[]
                                      AND er.user_id = fs.user_id
                                      AND er.cancelled_at IS NULL
      WHERE u.status = 'ACTIVE'
+       AND COALESCE(upp.registration_closing_soon, TRUE) = TRUE
        AND t.id IS NULL
        AND er.id IS NULL
        AND (
@@ -235,6 +239,7 @@ async function fetchLimitedSeatsCandidates(): Promise<ReminderCandidate[]> {
      JOIN societies s ON s.id = ec.society_id
      JOIN favorite_societies fs ON fs.society_id = ec.society_id
      JOIN users u ON u.id = fs.user_id
+     LEFT JOIN user_push_preferences upp ON upp.user_id = fs.user_id
      LEFT JOIN tickets t ON t.event_id = ec.id
                          AND t.user_id = fs.user_id
                          AND t.cancelled_at IS NULL
@@ -243,6 +248,7 @@ async function fetchLimitedSeatsCandidates(): Promise<ReminderCandidate[]> {
                                      AND er.user_id = fs.user_id
                                      AND er.cancelled_at IS NULL
      WHERE u.status = 'ACTIVE'
+       AND COALESCE(upp.limited_seats_left, TRUE) = TRUE
        AND t.id IS NULL
        AND er.id IS NULL
        AND ec.capacity IS NOT NULL

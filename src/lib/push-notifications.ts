@@ -29,6 +29,12 @@ export interface PushMessageResult {
   status: "SENT" | "PARTIAL" | "FAILED" | "NO_TOKENS";
 }
 
+export interface PushReminderPreferences {
+  eventStartingSoon: boolean;
+  registrationClosingSoon: boolean;
+  limitedSeatsLeft: boolean;
+}
+
 type Provider = "expo" | "fcm";
 
 interface ActiveTokenRow {
@@ -57,6 +63,11 @@ interface DeliveryAccumulator {
 
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 const FCM_SEND_URL = "https://fcm.googleapis.com/fcm/send";
+const DEFAULT_PUSH_REMINDER_PREFERENCES: PushReminderPreferences = {
+  eventStartingSoon: true,
+  registrationClosingSoon: true,
+  limitedSeatsLeft: true,
+};
 
 function detectProvider(token: string): Provider {
   if (
@@ -172,6 +183,104 @@ export async function ensurePushTablesExist(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_event_push_notification_status
     ON event_push_notification_log (dispatch_status, created_at DESC)
   `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS user_push_preferences (
+      user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      event_starting_soon BOOLEAN NOT NULL DEFAULT TRUE,
+      registration_closing_soon BOOLEAN NOT NULL DEFAULT TRUE,
+      limited_seats_left BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+}
+
+function mapPreferenceRow(
+  row: Record<string, unknown> | undefined,
+): PushReminderPreferences {
+  if (!row) {
+    return { ...DEFAULT_PUSH_REMINDER_PREFERENCES };
+  }
+
+  return {
+    eventStartingSoon:
+      row.event_starting_soon === undefined
+        ? DEFAULT_PUSH_REMINDER_PREFERENCES.eventStartingSoon
+        : Boolean(row.event_starting_soon),
+    registrationClosingSoon:
+      row.registration_closing_soon === undefined
+        ? DEFAULT_PUSH_REMINDER_PREFERENCES.registrationClosingSoon
+        : Boolean(row.registration_closing_soon),
+    limitedSeatsLeft:
+      row.limited_seats_left === undefined
+        ? DEFAULT_PUSH_REMINDER_PREFERENCES.limitedSeatsLeft
+        : Boolean(row.limited_seats_left),
+  };
+}
+
+export async function getPushReminderPreferences(
+  userId: string,
+): Promise<PushReminderPreferences> {
+  await ensurePushTablesExist();
+
+  await query(
+    `INSERT INTO user_push_preferences (user_id)
+     VALUES ($1)
+     ON CONFLICT (user_id) DO NOTHING`,
+    [userId],
+  );
+
+  const result = await query(
+    `SELECT event_starting_soon, registration_closing_soon, limited_seats_left
+     FROM user_push_preferences
+     WHERE user_id = $1
+     LIMIT 1`,
+    [userId],
+  );
+
+  return mapPreferenceRow(result.rows[0]);
+}
+
+export async function updatePushReminderPreferences(
+  userId: string,
+  patch: Partial<PushReminderPreferences>,
+): Promise<PushReminderPreferences> {
+  const current = await getPushReminderPreferences(userId);
+  const next: PushReminderPreferences = {
+    eventStartingSoon:
+      typeof patch.eventStartingSoon === "boolean"
+        ? patch.eventStartingSoon
+        : current.eventStartingSoon,
+    registrationClosingSoon:
+      typeof patch.registrationClosingSoon === "boolean"
+        ? patch.registrationClosingSoon
+        : current.registrationClosingSoon,
+    limitedSeatsLeft:
+      typeof patch.limitedSeatsLeft === "boolean"
+        ? patch.limitedSeatsLeft
+        : current.limitedSeatsLeft,
+  };
+
+  await query(
+    `INSERT INTO user_push_preferences
+       (user_id, event_starting_soon, registration_closing_soon, limited_seats_left, updated_at)
+     VALUES
+       ($1, $2, $3, $4, NOW())
+     ON CONFLICT (user_id) DO UPDATE SET
+       event_starting_soon = EXCLUDED.event_starting_soon,
+       registration_closing_soon = EXCLUDED.registration_closing_soon,
+       limited_seats_left = EXCLUDED.limited_seats_left,
+       updated_at = NOW()`,
+    [
+      userId,
+      next.eventStartingSoon,
+      next.registrationClosingSoon,
+      next.limitedSeatsLeft,
+    ],
+  );
+
+  return next;
 }
 
 export async function isPushFeatureEnabled(): Promise<boolean> {

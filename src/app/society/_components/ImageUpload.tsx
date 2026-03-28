@@ -5,6 +5,7 @@ import {
   Upload, X, Loader2, AlertCircle, CheckCircle2,
   Image as ImageIcon, Trash2, GripVertical,
 } from 'lucide-react';
+import { SmartImage } from '@/components/SmartImage';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -201,7 +202,7 @@ export default function ImageUpload({
         <div className={`grid gap-2 ${multiple ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-1'}`}>
           {existingImages.map((url, i) => (
             <div key={i} className={`relative group rounded-xl overflow-hidden border border-themed ${!multiple ? aspectRatio : 'aspect-square'}`}>
-              <img src={url} alt="" className="w-full h-full object-cover" />
+              <SmartImage src={url} alt="" className="w-full h-full object-cover" />
               {!disabled && (
                 <button
                   onClick={() => handleRemoveExisting(url)}
@@ -223,7 +224,7 @@ export default function ImageUpload({
         <div className={`grid gap-2 ${multiple ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-1'}`}>
           {previews.map(p => (
             <div key={p.id} className={`relative rounded-xl overflow-hidden border border-themed ${!multiple ? aspectRatio : 'aspect-square'}`}>
-              <img src={p.preview} alt="" className="w-full h-full object-cover" />
+              <SmartImage src={p.preview} alt="" className="w-full h-full object-cover" />
 
               {/* Status overlay */}
               {p.status === 'uploading' && (
@@ -395,7 +396,7 @@ export function SingleImageUpload({
 
       {(preview || displayUrl) ? (
         <div className={`relative group rounded-xl overflow-hidden border border-themed ${aspectRatio}`}>
-          <img src={preview || displayUrl!} alt={label} className="w-full h-full object-cover" />
+          <SmartImage src={preview || displayUrl!} alt={label} className="w-full h-full object-cover" />
 
           {uploading && (
             <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
@@ -452,3 +453,5 @@ export function SingleImageUpload({
     </div>
   );
 }
+
+

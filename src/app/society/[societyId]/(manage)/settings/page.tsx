@@ -34,6 +34,7 @@ import {
   SocietyApiError,
 } from '../../../api';
 import type { SocietySettings, SocietyProfile } from '../../../types';
+import { SmartImage } from '@/components/SmartImage';
 
 type TabKey = 'operations' | 'profile' | 'branding';
 
@@ -574,7 +575,7 @@ function CoverUploader({
     <div>
       {currentUrl ? (
         <div className="relative group rounded-lg overflow-hidden">
-          <img src={currentUrl} alt="Cover" className="w-full h-40 object-cover" />
+          <SmartImage src={currentUrl} alt="Cover" className="w-full h-40 object-cover" />
           <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
             <label className="cursor-pointer px-3 py-1.5 rounded-lg bg-white/90 text-gray-800 text-xs font-medium hover:bg-white flex items-center gap-1.5">
               <Upload size={12} /> Replace
@@ -650,7 +651,7 @@ function LogoUploader({
       <div className="relative group">
         {currentUrl ? (
           <div className="relative w-20 h-20 rounded-xl overflow-hidden">
-            <img src={currentUrl} alt="Logo" className="w-full h-full object-cover" />
+            <SmartImage src={currentUrl} alt="Logo" className="w-full h-full object-cover" />
             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
               <label className="cursor-pointer w-8 h-8 rounded-full bg-white/90 flex items-center justify-center">
                 <Upload size={12} className="text-gray-800" />
@@ -897,3 +898,4 @@ function TransferPresidencySection({ societyId }: { societyId: string }) {
     </>
   );
 }
+

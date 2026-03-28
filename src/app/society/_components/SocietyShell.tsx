@@ -27,6 +27,7 @@ import {
   Camera,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { SmartImage } from '@/components/SmartImage';
 
 interface SocietyShellProps {
   societyId: string;
@@ -121,7 +122,7 @@ export default function SocietyShell({
         {/* Society branding */}
         <div className="flex items-center gap-3 border-b border-border px-4 h-[60px] shrink-0">
           {societyLogo ? (
-            <img src={societyLogo} alt={societyName} className="h-8 w-8 rounded-lg object-cover flex-shrink-0" />
+            <SmartImage src={societyLogo} alt={societyName} className="h-8 w-8 rounded-lg object-cover flex-shrink-0" />
           ) : (
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500/10 text-brand-500 font-bold text-xs flex-shrink-0">
               {initials}
@@ -274,3 +275,5 @@ function getPageTitle(pathname: string, base: string): string {
   };
   return map[sub] || 'Society Management';
 }
+
+

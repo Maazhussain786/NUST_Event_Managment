@@ -21,6 +21,7 @@ import {
   SocietyApiError,
 } from '../../../api';
 import type { ChatChannel, ChatMessage } from '../../../types';
+import { SmartImage } from '@/components/SmartImage';
 
 export default function ChatPage() {
   const params = useParams();
@@ -49,9 +50,7 @@ export default function ChatPage() {
     fetchChatChannels(societyId)
       .then(data => {
         setChannels(data);
-        if (data.length > 0 && !activeChannel) {
-          setActiveChannel(data[0]);
-        }
+        setActiveChannel(prev => prev ?? data[0] ?? null);
       })
       .catch(err => setError(err instanceof SocietyApiError ? err.message : 'Failed to load channels'))
       .finally(() => setLoading(false));
@@ -59,9 +58,10 @@ export default function ChatPage() {
 
   // Load messages when channel changes
   useEffect(() => {
-    if (!activeChannel) return;
+    const activeChannelId = activeChannel?.id;
+    if (!activeChannelId) return;
     setMsgLoading(true);
-    fetchChatMessages(societyId, activeChannel.id)
+    fetchChatMessages(societyId, activeChannelId)
       .then(data => {
         setMessages(data.messages);
         setHasMore(data.hasMore);
@@ -217,7 +217,7 @@ export default function ChatPage() {
                   <div key={msg.id} className="flex gap-3 group">
                     <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-xs font-bold bg-brand-500/10 text-brand-500">
                       {msg.sender_avatar ? (
-                        <img src={msg.sender_avatar} alt="" className="w-full h-full rounded-full object-cover" />
+                        <SmartImage src={msg.sender_avatar} alt="" className="w-full h-full rounded-full object-cover" />
                       ) : (
                         msg.sender_name?.[0] || '?'
                       )}
@@ -271,3 +271,5 @@ export default function ChatPage() {
     </div>
   );
 }
+
+

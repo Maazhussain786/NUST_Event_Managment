@@ -5,6 +5,7 @@ import {
   Image as ImageIcon, Calendar, Pin, Send, X,
   Loader2, Smile, Type, AlertCircle,
 } from 'lucide-react';
+import { SmartImage } from '@/components/SmartImage';
 
 interface PostComposerProps {
   societyId: string;
@@ -94,7 +95,7 @@ export default function PostComposer({
       {/* Author row */}
       <div className="p-4 pb-2 flex items-start gap-3">
         {authorAvatar ? (
-          <img src={authorAvatar} alt="" className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+          <SmartImage src={authorAvatar} alt="" className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
         ) : (
           <div className="w-10 h-10 rounded-full bg-brand-500/10 flex items-center justify-center text-brand-500 font-bold text-sm flex-shrink-0">
             {authorName[0]}
@@ -120,7 +121,7 @@ export default function PostComposer({
           <div className={`grid gap-1.5 ${images.length === 1 ? 'grid-cols-1' : images.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
             {images.map((img, i) => (
               <div key={i} className="relative rounded-lg overflow-hidden aspect-square group">
-                <img src={img.preview} alt="" className="w-full h-full object-cover" />
+                <SmartImage src={img.preview} alt="" className="w-full h-full object-cover" />
                 <button
                   onClick={() => handleRemoveImage(i)}
                   className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
@@ -221,3 +222,5 @@ export default function PostComposer({
     </div>
   );
 }
+
+

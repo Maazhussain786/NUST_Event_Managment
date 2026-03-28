@@ -189,6 +189,7 @@ npm run dev          # Start development server
 npm run build        # Build for production
 npm start            # Start production server
 npm run lint         # Run ESLint
+npm run test:auth:smoke # Smoke-test login/session/logout
 node scripts/seed.js # Seed database
 ```
 
@@ -273,3 +274,4 @@ This project is private and proprietary to NUST.
 ---
 
 **Built with ❤️ for NUST Community**
+

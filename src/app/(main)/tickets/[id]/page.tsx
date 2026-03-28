@@ -9,6 +9,7 @@ import { cacheTicket, getCachedTicket } from '@/lib/ticket-cache';
 import { StatusTimeline, StatusBadge } from '@/components/StatusTimeline';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { SmartImage } from '@/components/SmartImage';
 
 interface TicketDetail {
   id: string;
@@ -472,7 +473,7 @@ export default function TicketDetailPage() {
           {/* Event Banner */}
           <div className="relative aspect-[16/9] overflow-hidden">
             {ticket.event_banner ? (
-              <img
+              <SmartImage
                 src={ticket.event_banner}
                 alt={ticket.event_title}
                 className="absolute inset-0 w-full h-full object-cover"
@@ -602,7 +603,7 @@ export default function TicketDetailPage() {
               <div className="flex flex-col items-center">
                 {/* QR Container with white padding for scanability */}
                 <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
-                  <img
+                  <SmartImage
                     src={qrImageUrl}
                     alt="Ticket QR Code"
                     className="w-48 h-48 sm:w-56 sm:h-56"
@@ -723,3 +724,5 @@ function drawDetailItem(
   const displayValue = maxWidth ? truncate(value, Math.floor(maxWidth / 7)) : value;
   ctx.fillText(displayValue, x, y + 18);
 }
+
+

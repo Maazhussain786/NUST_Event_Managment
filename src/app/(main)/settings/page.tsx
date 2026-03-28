@@ -14,11 +14,25 @@ import {
   syncUserFromSession,
 } from '@/lib/client-auth';
 
+interface PushPreferences {
+  eventStartingSoon: boolean;
+  registrationClosingSoon: boolean;
+  limitedSeatsLeft: boolean;
+}
+
+const DEFAULT_PUSH_PREFERENCES: PushPreferences = {
+  eventStartingSoon: true,
+  registrationClosingSoon: true,
+  limitedSeatsLeft: true,
+};
+
 export default function SettingsPage() {
   const router = useRouter();
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === 'dark';
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [pushPreferences, setPushPreferences] = useState<PushPreferences>(DEFAULT_PUSH_PREFERENCES);
+  const [pushPrefsLoading, setPushPrefsLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -38,9 +52,67 @@ export default function SettingsPage() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    if (!isLoggedIn) {
+      setPushPreferences(DEFAULT_PUSH_PREFERENCES);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const loadPreferences = async () => {
+      setPushPrefsLoading(true);
+      try {
+        const res = await fetch('/api/push/preferences', { credentials: 'include' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled && data?.preferences) {
+          setPushPreferences({
+            eventStartingSoon: Boolean(data.preferences.eventStartingSoon),
+            registrationClosingSoon: Boolean(data.preferences.registrationClosingSoon),
+            limitedSeatsLeft: Boolean(data.preferences.limitedSeatsLeft),
+          });
+        }
+      } catch {
+        // keep defaults on network failures
+      } finally {
+        if (!cancelled) setPushPrefsLoading(false);
+      }
+    };
+
+    void loadPreferences();
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoggedIn]);
+
   const handleLogout = async () => {
     await logoutClient();
     window.location.href = '/login';
+  };
+
+  const updatePushPreference = async (
+    key: keyof PushPreferences,
+    value: boolean,
+  ) => {
+    const previous = pushPreferences;
+    const next = { ...previous, [key]: value };
+    setPushPreferences(next);
+
+    try {
+      const res = await fetch('/api/push/preferences', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [key]: value }),
+      });
+      if (!res.ok) {
+        setPushPreferences(previous);
+      }
+    } catch {
+      setPushPreferences(previous);
+    }
   };
 
   const aboutItems = [
@@ -94,6 +166,36 @@ export default function SettingsPage() {
               {isDark ? 'Dark Mode' : 'Light Mode'}
             </span>
             <Switch checked={isDark} onCheckedChange={toggleTheme} onClick={(e) => e.stopPropagation()} aria-label="Toggle dark mode" />
+          </div>
+        </div>
+
+        {/* Notifications */}
+        <div>
+          <h2 className="text-overline text-muted-foreground mb-3 px-1">Notifications</h2>
+          <div className="space-y-2">
+            {[
+              { key: 'eventStartingSoon' as const, label: 'Event starts in 1 hour' },
+              { key: 'registrationClosingSoon' as const, label: 'Registration closes soon' },
+              { key: 'limitedSeatsLeft' as const, label: 'Limited seats left alerts' },
+            ].map((item) => (
+              <div
+                key={item.key}
+                className="w-full rounded-xl border border-border bg-card p-4 flex items-center gap-3"
+              >
+                <span className="text-body-sm text-foreground flex-1 text-left">{item.label}</span>
+                <Switch
+                  checked={pushPreferences[item.key]}
+                  disabled={!isLoggedIn || pushPrefsLoading}
+                  onCheckedChange={(checked) => updatePushPreference(item.key, checked)}
+                  aria-label={item.label}
+                />
+              </div>
+            ))}
+            {!isLoggedIn && (
+              <p className="text-caption text-muted-foreground px-1">
+                Sign in to manage push reminder preferences.
+              </p>
+            )}
           </div>
         </div>
 

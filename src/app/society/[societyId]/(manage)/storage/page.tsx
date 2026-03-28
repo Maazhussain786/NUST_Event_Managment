@@ -8,6 +8,7 @@ import {
 import { fetchStorage, deleteMedia, SocietyApiError } from '../../../api';
 import { PageLoader, ErrorState, EmptyState, ConfirmDialog } from '../../../_components/Shared';
 import type { SocietyStorageInfo, MediaItem } from '../../../types';
+import { SmartImage } from '@/components/SmartImage';
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -225,12 +226,12 @@ export default function StoragePage() {
               <div className={viewMode === 'list' ? 'w-28 flex-shrink-0' : 'w-full'}>
                 {item.media_type.startsWith('image') ? (
                   <div className="h-32 rounded-lg overflow-hidden mb-3 bg-secondary">
-                    <img
+                    <SmartImage
                       src={item.file_url}
                       alt={item.file_name}
                       className="h-full w-full object-cover"
                       onError={(e) => {
-                        e.currentTarget.src = '/placeholder-event.jpg';
+                        e.currentTarget.src = '/images/placeholders/media.svg';
                       }}
                     />
                   </div>
@@ -299,3 +300,6 @@ export default function StoragePage() {
     </div>
   );
 }
+
+
+

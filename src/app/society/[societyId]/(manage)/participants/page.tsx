@@ -9,6 +9,7 @@ import {
 import { fetchParticipants, fetchSocietyEvents, SocietyApiError } from '../../../api';
 import { PageLoader, ErrorState, EmptyState, StatusBadge } from '../../../_components/Shared';
 import type { EventParticipant, SocietyEvent } from '../../../types';
+import { SmartImage } from '@/components/SmartImage';
 
 export default function ParticipantsPage() {
   const { societyId } = useParams<{ societyId: string }>();
@@ -133,7 +134,7 @@ export default function ParticipantsPage() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         {p.user_avatar ? (
-                          <img src={p.user_avatar} alt="" className="h-7 w-7 rounded-full object-cover" />
+                          <SmartImage src={p.user_avatar} alt="" className="h-7 w-7 rounded-full object-cover" />
                         ) : (
                           <div className="h-7 w-7 rounded-full bg-brand-500/10 text-brand-500 flex items-center justify-center text-xs font-bold">
                             {p.user_name[0]}
@@ -183,3 +184,5 @@ export default function ParticipantsPage() {
     </div>
   );
 }
+
+

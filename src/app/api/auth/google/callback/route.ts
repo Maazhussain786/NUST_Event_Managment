@@ -6,18 +6,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { generateToken, hashPassword, setAuthCookie } from '@/lib/auth';
 import { isAllowedNustEmail, normalizeEmail, NUST_ONLY_ERROR_MESSAGE } from '@/lib/email-policy';
+import { getAppBaseUrl, getGoogleOAuthConfig } from '@/lib/google-oauth-config';
+import { logServerError } from '@/lib/server-logger';
 
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_TOKENINFO_URL = 'https://oauth2.googleapis.com/tokeninfo';
 
-function getPublicBaseUrl(req: NextRequest): string {
-  const envBaseUrl = process.env.APP_BASE_URL || process.env.NEXT_PUBLIC_APP_URL;
-  if (envBaseUrl) return envBaseUrl.replace(/\/+$/, '');
-  return req.nextUrl.origin;
-}
-
 function toLoginRedirect(req: NextRequest, message: string): URL {
-  const url = new URL('/login', getPublicBaseUrl(req));
+  const url = new URL('/login', getAppBaseUrl(req));
   url.searchParams.set('error', message);
   return url;
 }
@@ -37,9 +33,11 @@ interface GoogleTokenInfo {
 }
 
 export async function GET(req: NextRequest) {
-  const clientId = process.env.GOOGLE_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-  if (!clientId || !clientSecret) {
+  const oauth = getGoogleOAuthConfig(req);
+  if (!oauth.configured || !oauth.clientId || !oauth.clientSecret) {
+    logServerError('auth.google.callback.config', 'Google OAuth callback blocked', {
+      missing: oauth.missing,
+    });
     return NextResponse.redirect(
       toLoginRedirect(req, 'Google authentication is not configured. Contact support.')
     );
@@ -83,16 +81,16 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const baseUrl = getPublicBaseUrl(req);
-    const redirectUri = process.env.GOOGLE_REDIRECT_URI || `${baseUrl}/api/auth/google/callback`;
+    const baseUrl = getAppBaseUrl(req);
+    const redirectUri = oauth.redirectUri;
 
     const tokenExchangeRes = await fetch(GOOGLE_TOKEN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         code,
-        client_id: clientId,
-        client_secret: clientSecret,
+        client_id: oauth.clientId,
+        client_secret: oauth.clientSecret,
         redirect_uri: redirectUri,
         grant_type: 'authorization_code',
       }),
@@ -117,7 +115,7 @@ export async function GET(req: NextRequest) {
     const emailVerified =
       tokenInfo.email_verified === true || tokenInfo.email_verified === 'true';
 
-    if (!tokenInfoRes.ok || tokenInfo.aud !== clientId || !email || !emailVerified) {
+    if (!tokenInfoRes.ok || tokenInfo.aud !== oauth.clientId || !email || !emailVerified) {
       const res = NextResponse.redirect(toLoginRedirect(req, 'Google token verification failed.'));
       clearOAuthCookies(res);
       return res;
@@ -179,7 +177,7 @@ export async function GET(req: NextRequest) {
     clearOAuthCookies(res);
     return res;
   } catch (error) {
-    console.error('Google auth callback error:', error);
+    logServerError('auth.google.callback.failure', error);
     const res = NextResponse.redirect(toLoginRedirect(req, 'Google sign-in failed. Try again.'));
     clearOAuthCookies(res);
     return res;

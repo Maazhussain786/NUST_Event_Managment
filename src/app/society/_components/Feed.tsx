@@ -7,6 +7,7 @@ import {
   ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import type { SocietyPost } from '../types';
+import { SmartImage } from '@/components/SmartImage';
 
 // ─── Post Card ──────────────────────────────────────────────────────────────
 
@@ -40,7 +41,7 @@ export function PostCard({ post, brandColor, isManageMode, onEdit, onDelete, onP
         {/* Author header */}
         <div className="p-4 pb-2 flex items-start gap-3">
           {post.author_avatar ? (
-            <img src={post.author_avatar} alt="" className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+            <SmartImage src={post.author_avatar} alt="" className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
           ) : (
             <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0" style={{ background: `${brandColor}15`, color: brandColor }}>
               {post.author_name[0]}
@@ -111,7 +112,7 @@ export function PostCard({ post, brandColor, isManageMode, onEdit, onDelete, onP
                 onClick={() => setLightbox({ images: images.map(im => im.file_url), index: i })}
                 className={`relative overflow-hidden ${images.length === 1 ? 'w-full max-h-[500px]' : images.length === 3 && i === 0 ? 'row-span-2' : ''}`}
               >
-                <img
+                <SmartImage
                   src={img.file_url}
                   alt=""
                   className={`w-full object-cover ${images.length === 1 ? 'max-h-[500px]' : 'aspect-square'}`}
@@ -130,7 +131,7 @@ export function PostCard({ post, brandColor, isManageMode, onEdit, onDelete, onP
         {post.shared_event_title && (
           <div className="mx-4 mb-3 rounded-lg border border-themed overflow-hidden">
             {post.shared_event_banner && (
-              <img src={post.shared_event_banner} alt="" className="w-full h-32 object-cover" />
+              <SmartImage src={post.shared_event_banner} alt="" className="w-full h-32 object-cover" />
             )}
             <div className="p-3">
               <p className="text-sm font-semibold text-primary">{post.shared_event_title}</p>
@@ -214,7 +215,7 @@ function ImageLightbox({ images, initialIndex, onClose }: { images: string[]; in
         </>
       )}
 
-      <img
+      <SmartImage
         src={images[index]}
         alt=""
         className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg"
@@ -303,3 +304,5 @@ function getTimeAgo(dateStr: string): string {
 
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
+
+

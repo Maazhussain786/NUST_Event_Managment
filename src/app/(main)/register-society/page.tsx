@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, Building2, Loader2, CheckCircle2, AlertCircle, Upload, X, ImageIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { syncUserFromSession } from '@/lib/client-auth';
+import { SmartImage } from '@/components/SmartImage';
 
 interface School {
   id: string;
@@ -288,7 +289,7 @@ export default function RegisterSocietyPage() {
             >
               {logoPreview ? (
                 <>
-                  <img src={logoPreview} alt="Logo preview" className="w-full h-full object-cover" />
+                  <SmartImage src={logoPreview} alt="Logo preview" className="w-full h-full object-cover" />
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                     <Upload className="w-5 h-5 text-white" />
                   </div>
@@ -475,7 +476,7 @@ export default function RegisterSocietyPage() {
           >
             {bannerPreview ? (
               <>
-                <img src={bannerPreview} alt="Banner preview" className="w-full h-full object-cover" />
+                <SmartImage src={bannerPreview} alt="Banner preview" className="w-full h-full object-cover" />
                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                   <Upload className="w-5 h-5 text-white" />
                 </div>
@@ -535,3 +536,5 @@ export default function RegisterSocietyPage() {
     </div>
   );
 }
+
+

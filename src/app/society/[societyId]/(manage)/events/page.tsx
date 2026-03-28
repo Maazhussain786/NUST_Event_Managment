@@ -37,6 +37,7 @@ import {
   StatusBadge,
 } from "../../../_components/Shared";
 import type { SocietyEvent, EventStatus } from "../../../types";
+import { SmartImage } from '@/components/SmartImage';
 
 const STATUS_TABS: { label: string; value: string }[] = [
   { label: "All", value: "ALL" },
@@ -197,7 +198,7 @@ export default function SocietyEventsPage() {
         registration_deadline: form.registration_deadline || undefined,
         banner_url: form.banner_url || undefined,
         thumbnail_url:
-          form.thumbnail_url || form.banner_url || "/placeholder-event.jpg",
+          form.thumbnail_url || form.banner_url || "/images/placeholders/media.svg",
       });
       setToast("Event created successfully");
       setShowCreate(false);
@@ -426,7 +427,7 @@ export default function SocietyEventsPage() {
             >
               <div className="flex items-start gap-3">
                 {event.banner_url ? (
-                  <img
+                  <SmartImage
                     src={event.banner_url}
                     alt=""
                     className="h-14 w-14 rounded-lg object-cover flex-shrink-0"
@@ -594,7 +595,7 @@ export default function SocietyEventsPage() {
                 </label>
                 {form.banner_url ? (
                   <div className="relative group rounded-lg overflow-hidden">
-                    <img
+                    <SmartImage
                       src={form.banner_url || form.thumbnail_url}
                       alt=""
                       className="w-full h-32 object-cover"
@@ -607,7 +608,7 @@ export default function SocietyEventsPage() {
                           e.currentTarget.src = form.thumbnail_url;
                           return;
                         }
-                        e.currentTarget.src = "/placeholder-event.jpg";
+                        e.currentTarget.src = "/images/placeholders/media.svg";
                       }}
                     />
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
@@ -881,7 +882,7 @@ export default function SocietyEventsPage() {
                 </label>
                 {editForm.banner_url ? (
                   <div className="relative group rounded-lg overflow-hidden">
-                    <img
+                    <SmartImage
                       src={editForm.banner_url || editForm.thumbnail_url}
                       alt=""
                       className="w-full h-32 object-cover"
@@ -894,7 +895,7 @@ export default function SocietyEventsPage() {
                           e.currentTarget.src = editForm.thumbnail_url;
                           return;
                         }
-                        e.currentTarget.src = "/placeholder-event.jpg";
+                        e.currentTarget.src = "/images/placeholders/media.svg";
                       }}
                     />
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
@@ -1097,3 +1098,6 @@ export default function SocietyEventsPage() {
     </div>
   );
 }
+
+
+

@@ -36,6 +36,7 @@ import {
   EmptyState,
 } from "../../../_components/Shared";
 import type { SocietyAlbum, AlbumPhoto, AlbumCategory } from "../../../types";
+import { SmartImage } from '@/components/SmartImage';
 
 const CATEGORIES: { label: string; value: AlbumCategory }[] = [
   { label: "General", value: "GENERAL" },
@@ -338,12 +339,12 @@ export default function SocietyPhotosPage() {
                   {/* Cover image */}
                   <div className="aspect-[4/3] bg-surface-100 dark:bg-surface-800 relative overflow-hidden">
                     {album.cover_photo_url ? (
-                      <img
+                      <SmartImage
                         src={album.cover_photo_url}
                         alt=""
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                         onError={(e) => {
-                          e.currentTarget.src = "/placeholder-event.jpg";
+                          e.currentTarget.src = "/images/placeholders/media.svg";
                         }}
                       />
                     ) : (
@@ -455,13 +456,13 @@ export default function SocietyPhotosPage() {
                   key={photo.id}
                   className="relative group aspect-square rounded-lg overflow-hidden cursor-pointer"
                 >
-                  <img
+                  <SmartImage
                     src={photo.file_url}
                     alt={photo.caption || ""}
                     className="w-full h-full object-cover"
                     onClick={() => setLightbox({ index: idx })}
                     onError={(e) => {
-                      e.currentTarget.src = "/placeholder-event.jpg";
+                      e.currentTarget.src = "/images/placeholders/media.svg";
                     }}
                   />
                   {/* Featured badge */}
@@ -698,13 +699,13 @@ export default function SocietyPhotosPage() {
               </button>
             </>
           )}
-          <img
+          <SmartImage
             src={photos[lightbox.index].file_url}
             alt={photos[lightbox.index].caption || ""}
             className="max-w-[90vw] max-h-[85vh] object-contain rounded-lg"
             onClick={(e) => e.stopPropagation()}
             onError={(e) => {
-              e.currentTarget.src = "/placeholder-event.jpg";
+              e.currentTarget.src = "/images/placeholders/media.svg";
             }}
           />
           {photos[lightbox.index].caption && (
@@ -727,3 +728,6 @@ export default function SocietyPhotosPage() {
     </div>
   );
 }
+
+
+

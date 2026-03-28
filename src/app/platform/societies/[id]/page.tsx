@@ -29,6 +29,7 @@ import {
   updateStorageLimit,
 } from "../../api";
 import type { AdminSociety, SocietyTransferMember } from "../../types";
+import { SmartImage } from '@/components/SmartImage';
 
 export default function SocietyDetailPage() {
   const params = useParams();
@@ -251,7 +252,7 @@ export default function SocietyDetailPage() {
         <div className="flex items-center gap-3 flex-1 min-w-0">
           <div className="w-12 h-12 rounded-xl bg-surface-100 dark:bg-surface-800 flex items-center justify-center shrink-0 overflow-hidden">
             {society.logo_url ? (
-              <img
+              <SmartImage
                 src={society.logo_url}
                 alt=""
                 className="w-full h-full object-cover"
@@ -806,3 +807,5 @@ function Modal({
     </div>
   );
 }
+
+

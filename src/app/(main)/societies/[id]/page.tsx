@@ -14,6 +14,7 @@ import {
 import { useRouter, useParams } from "next/navigation";
 import EventCard from "@/components/EventCard";
 import { useAuth } from "@/components/AuthProvider";
+import { SmartImage } from '@/components/SmartImage';
 
 interface Society {
   id: string;
@@ -288,7 +289,7 @@ export default function SocietyDetailPage() {
             }}
           >
             {society.logo_url ? (
-              <img
+              <SmartImage
                 src={society.logo_url}
                 alt={society.name}
                 className="w-full h-full rounded-2xl object-cover"
@@ -653,3 +654,5 @@ export default function SocietyDetailPage() {
     </div>
   );
 }
+
+

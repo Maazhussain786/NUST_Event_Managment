@@ -18,6 +18,7 @@ import {
 import { PageLoader, ErrorState, EmptyState, StatusBadge } from '../_components/Shared';
 import { fetchUsers, fetchUserDetail, suspendUser, reactivateUser } from '../api';
 import type { AdminUser, UserDetail } from '../types';
+import { SmartImage } from '@/components/SmartImage';
 
 export default function UsersPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -327,7 +328,7 @@ export default function UsersPage() {
                 <div className="flex items-center gap-4">
                   <div className="w-14 h-14 rounded-full bg-surface-100 dark:bg-surface-800 flex items-center justify-center overflow-hidden">
                     {detailUser.avatar_url ? (
-                      <img src={detailUser.avatar_url} alt="" className="w-full h-full object-cover" />
+                      <SmartImage src={detailUser.avatar_url} alt="" className="w-full h-full object-cover" />
                     ) : (
                       <User className="w-6 h-6" style={{ color: 'var(--text-muted)' }} />
                     )}
@@ -414,3 +415,5 @@ export default function UsersPage() {
     </div>
   );
 }
+
+

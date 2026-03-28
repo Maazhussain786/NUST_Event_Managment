@@ -10,6 +10,7 @@ import {
 import { fetchEntryStats, manualCheckIn, SocietyApiError } from '../../../../../api';
 import { PageLoader, ErrorState, EmptyState, StatCard } from '../../../../../_components/Shared';
 import type { EntryStats } from '../../../../../types';
+import { SmartImage } from '@/components/SmartImage';
 
 export default function EventEntryControlPage() {
   const { societyId, eventId } = useParams<{ societyId: string; eventId: string }>();
@@ -204,7 +205,7 @@ export default function EventEntryControlPage() {
                 {filteredScans.map(record => (
                   <div key={record.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-secondary/50">
                     {record.user_avatar ? (
-                      <img src={record.user_avatar} alt="" className="h-8 w-8 rounded-full object-cover" />
+                      <SmartImage src={record.user_avatar} alt="" className="h-8 w-8 rounded-full object-cover" />
                     ) : (
                       <div className="h-8 w-8 rounded-full bg-brand-500/10 text-brand-500 flex items-center justify-center text-xs font-bold">
                         {record.user_name[0]}
@@ -245,3 +246,5 @@ export default function EventEntryControlPage() {
     </div>
   );
 }
+
+

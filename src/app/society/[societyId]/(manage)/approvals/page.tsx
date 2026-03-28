@@ -4,11 +4,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Ticket, Check, X, RotateCcw, Filter, Eye,
-  CheckSquare, Image, AlertTriangle,
+  CheckSquare, Image as ImageIcon, AlertTriangle,
 } from 'lucide-react';
 import { fetchPendingTickets, reviewTicket, bulkReviewTickets, SocietyApiError } from '../../../api';
 import { PageLoader, ErrorState, EmptyState, StatusBadge, StatCard, ConfirmDialog } from '../../../_components/Shared';
 import type { PendingTicket, TicketStatus } from '../../../types';
+import { SmartImage } from '@/components/SmartImage';
 
 const FILTER_TABS: { label: string; value: string }[] = [
   { label: 'Pending', value: 'PENDING' },
@@ -243,7 +244,7 @@ export default function TicketApprovalsPage() {
                       className="btn-ghost text-xs px-2 py-1.5 flex items-center gap-1"
                       title="View proof"
                     >
-                      <Image size={14} />
+                      <ImageIcon size={14} />
                     </button>
                   )}
 
@@ -327,7 +328,7 @@ export default function TicketApprovalsPage() {
       {/* Proof viewer */}
       {proofUrl && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4" onClick={() => setProofUrl(null)}>
-          <img src={proofUrl} alt="Payment proof" className="max-w-full max-h-[80vh] rounded-lg object-contain" />
+          <SmartImage src={proofUrl} alt="Payment proof" className="max-w-full max-h-[80vh] rounded-lg object-contain" />
         </div>
       )}
 
@@ -340,3 +341,5 @@ export default function TicketApprovalsPage() {
     </div>
   );
 }
+
+

@@ -17,6 +17,7 @@ import { StatusBadge } from '../_components/StatusBadge';
 import { PageLoader, ErrorState, EmptyState } from '../_components/Shared';
 import { fetchSocieties, patchSociety, suspendSociety, reactivateSociety } from '../api';
 import type { AdminSociety, SocietyStatus } from '../types';
+import { SmartImage } from '@/components/SmartImage';
 
 const STATUS_TABS: { label: string; value: SocietyStatus | 'ALL' }[] = [
   { label: 'All', value: 'ALL' },
@@ -127,7 +128,7 @@ export default function SocietiesPage() {
                 {/* Logo */}
                 <div className="w-12 h-12 rounded-xl bg-surface-100 dark:bg-surface-800 flex items-center justify-center shrink-0 overflow-hidden">
                   {soc.logo_url ? (
-                    <img src={soc.logo_url} alt="" className="w-full h-full object-cover" />
+                    <SmartImage src={soc.logo_url} alt="" className="w-full h-full object-cover" />
                   ) : (
                     <Building2 className="w-5 h-5" style={{ color: 'var(--text-muted)' }} />
                   )}
@@ -266,3 +267,5 @@ export default function SocietiesPage() {
     </div>
   );
 }
+
+

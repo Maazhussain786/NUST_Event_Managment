@@ -10,6 +10,7 @@ import { PageLoader, ErrorState, EmptyState } from '../../../_components/Shared'
 import PostComposer from '../../../_components/PostComposer';
 import { Feed } from '../../../_components/Feed';
 import type { SocietyPost } from '../../../types';
+import { SmartImage } from '@/components/SmartImage';
 
 export default function SocietyPostsPage() {
   const { societyId } = useParams<{ societyId: string }>();
@@ -196,7 +197,7 @@ export default function SocietyPostsPage() {
             {editPost.images && editPost.images.length > 0 && (
               <div className="mt-3 flex gap-2 overflow-x-auto">
                 {editPost.images.map(img => (
-                  <img key={img.id} src={img.file_url} alt="" className="h-16 w-16 rounded object-cover flex-shrink-0" />
+                  <SmartImage key={img.id} src={img.file_url} alt="" className="h-16 w-16 rounded object-cover flex-shrink-0" />
                 ))}
               </div>
             )}
@@ -222,3 +223,5 @@ export default function SocietyPostsPage() {
     </div>
   );
 }
+
+

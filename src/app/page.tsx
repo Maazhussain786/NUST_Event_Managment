@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import { motion, AnimatePresence, PanInfo } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import { SmartImage } from '@/components/SmartImage';
 
 const slides = [
   {
@@ -102,7 +103,7 @@ export default function OnboardingPage() {
             {/* Rounded image */}
             <div className="mt-8 flex-1 flex items-center justify-center">
               <div className="relative w-full max-w-[320px] aspect-[3/4] rounded-[2.5rem] overflow-hidden shadow-glow-lg">
-                <img
+                <SmartImage
                   src={slide.image}
                   alt=""
                   className="w-full h-full object-cover pointer-events-none"
@@ -165,3 +166,5 @@ export default function OnboardingPage() {
     </div>
   );
 }
+
+

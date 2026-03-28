@@ -35,6 +35,7 @@ import {
   uploadUniversityEventBanner,
   fetchSocieties,
 } from "../api";
+import { SmartImage } from '@/components/SmartImage';
 
 export default function UniversityEventsPage() {
   const [events, setEvents] = useState<UniversityEvent[]>([]);
@@ -465,7 +466,7 @@ export default function UniversityEventsPage() {
               />
 
               {createBannerPreview && (
-                <img
+                <SmartImage
                   src={createBannerPreview}
                   alt="Banner preview"
                   className="w-full h-32 rounded-xl object-cover border"
@@ -648,7 +649,7 @@ export default function UniversityEventsPage() {
               />
 
               {(editBannerPreview || editEvent.banner_url) && (
-                <img
+                <SmartImage
                   src={editBannerPreview || editEvent.banner_url || ""}
                   alt="Banner preview"
                   className="w-full h-32 rounded-xl object-cover border"
@@ -712,7 +713,7 @@ export default function UniversityEventsPage() {
               <div className="flex items-start gap-4">
                 <div className="w-20 h-16 rounded-xl bg-purple-500/10 flex items-center justify-center shrink-0 overflow-hidden">
                   {ev.banner_url ? (
-                    <img
+                    <SmartImage
                       src={ev.banner_url}
                       alt=""
                       className="w-full h-full object-cover"
@@ -855,3 +856,5 @@ export default function UniversityEventsPage() {
     </div>
   );
 }
+
+

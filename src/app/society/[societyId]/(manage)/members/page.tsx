@@ -33,6 +33,7 @@ import {
 } from "../../../_components/Shared";
 import { RoleEditDialog } from "../../../_components/RoleEditDialog";
 import type { SocietyMember, RoleName, MyRole, Wing } from "../../../types";
+import { SmartImage } from '@/components/SmartImage';
 
 const ROLE_COLORS: Record<string, string> = {
   President: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
@@ -554,7 +555,7 @@ export default function MembersPage() {
               <div className="flex items-center gap-3">
                 {member.avatar_url &&
                 !avatarLoadFailed[member.membership_id] ? (
-                  <img
+                  <SmartImage
                     src={member.avatar_url}
                     alt=""
                     className="h-10 w-10 flex-shrink-0 rounded-full object-cover"
@@ -901,3 +902,5 @@ export default function MembersPage() {
     </div>
   );
 }
+
+

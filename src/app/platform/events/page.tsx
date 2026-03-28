@@ -31,6 +31,7 @@ import {
   updateEvent,
 } from "../api";
 import type { AdminEvent, EventStatus, AdminSociety } from "../types";
+import { SmartImage } from '@/components/SmartImage';
 
 const STATUS_TABS: { label: string; value: EventStatus | "ALL" }[] = [
   { label: "All", value: "ALL" },
@@ -402,7 +403,7 @@ export default function EventsPage() {
               <div className="flex items-start gap-4">
                 <div className="w-16 h-16 rounded-xl bg-surface-100 dark:bg-surface-800 flex items-center justify-center shrink-0 overflow-hidden">
                   {evt.banner_url ? (
-                    <img
+                    <SmartImage
                       src={evt.banner_url}
                       alt=""
                       className="w-full h-full object-cover"
@@ -440,7 +441,7 @@ export default function EventsPage() {
                   {evt.society_name && (
                     <div className="flex items-center gap-1.5 mt-2">
                       {evt.society_logo && (
-                        <img
+                        <SmartImage
                           src={evt.society_logo}
                           alt=""
                           className="w-4 h-4 rounded-full object-cover"
@@ -630,7 +631,7 @@ export default function EventsPage() {
               />
 
               {createBannerPreview && (
-                <img
+                <SmartImage
                   src={createBannerPreview}
                   alt="Banner preview"
                   className="w-full h-32 rounded-xl object-cover border"
@@ -863,7 +864,7 @@ export default function EventsPage() {
               />
 
               {(editBannerPreview || editEvent.banner_url) && (
-                <img
+                <SmartImage
                   src={editBannerPreview || editEvent.banner_url || ""}
                   alt="Banner preview"
                   className="w-full h-32 rounded-xl object-cover border"
@@ -968,3 +969,5 @@ export default function EventsPage() {
     </div>
   );
 }
+
+

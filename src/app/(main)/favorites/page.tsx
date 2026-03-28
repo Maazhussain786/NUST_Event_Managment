@@ -9,6 +9,7 @@ import {
   getLocalUser,
   syncUserFromSession,
 } from '@/lib/client-auth';
+import { SmartImage } from '@/components/SmartImage';
 
 interface FavSociety {
   id: string;
@@ -127,7 +128,7 @@ export default function FavoritesPage() {
                     onClick={() => router.push(`/societies/${soc.id}`)}
                   >
                     {soc.logo_url ? (
-                      <img src={soc.logo_url} alt={soc.name} className="w-full h-full object-cover" />
+                      <SmartImage src={soc.logo_url} alt={soc.name} className="w-full h-full object-cover" />
                     ) : (
                       soc.name.charAt(0)
                     )}
@@ -153,3 +154,5 @@ export default function FavoritesPage() {
     </div>
   );
 }
+
+

@@ -19,6 +19,7 @@ import {
   Eye,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { SmartImage } from '@/components/SmartImage';
 
 type Tab = "overview" | "events" | "societies" | "users";
 
@@ -418,7 +419,7 @@ export default function AdminDashboard() {
                       <div className="flex items-start gap-3">
                         <div className="flex items-center justify-center flex-shrink-0 overflow-hidden font-bold w-14 h-14 rounded-xl bg-brand-500/10 text-brand-500">
                           {ev.banner_url ? (
-                            <img
+                            <SmartImage
                               src={ev.banner_url}
                               alt=""
                               className="object-cover w-full h-full"
@@ -541,7 +542,7 @@ export default function AdminDashboard() {
                       <div className="flex items-center gap-3">
                         <div className="flex items-center justify-center w-12 h-12 overflow-hidden font-bold rounded-xl bg-brand-500/10 text-brand-500">
                           {soc.logo_url ? (
-                            <img
+                            <SmartImage
                               src={soc.logo_url}
                               alt=""
                               className="object-cover w-full h-full"
@@ -782,3 +783,5 @@ export default function AdminDashboard() {
     </div>
   );
 }
+
+

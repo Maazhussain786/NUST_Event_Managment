@@ -2,6 +2,8 @@ export const dynamic = 'force-dynamic';
 
 import crypto from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
+import { getAppBaseUrl, getGoogleOAuthConfig } from '@/lib/google-oauth-config';
+import { logServerError } from '@/lib/server-logger';
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 
@@ -12,25 +14,26 @@ function sanitizeNextPath(input: string | null): string {
   return input;
 }
 
-function getPublicBaseUrl(req: NextRequest): string {
-  const envBaseUrl = process.env.APP_BASE_URL || process.env.NEXT_PUBLIC_APP_URL;
-  if (envBaseUrl) return envBaseUrl.replace(/\/+$/, '');
-  return req.nextUrl.origin;
-}
-
 export async function GET(req: NextRequest) {
-  const clientId = process.env.GOOGLE_CLIENT_ID;
-  if (!clientId) {
-    return NextResponse.json({ error: 'Google auth is not configured' }, { status: 500 });
+  const oauth = getGoogleOAuthConfig(req);
+  if (!oauth.configured || !oauth.clientId) {
+    logServerError('auth.google.start.config', 'Google OAuth is not configured', {
+      missing: oauth.missing,
+    });
+    const loginUrl = new URL('/login', getAppBaseUrl(req));
+    loginUrl.searchParams.set(
+      'error',
+      'Google sign-in is not configured. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env.local and restart.'
+    );
+    return NextResponse.redirect(loginUrl);
   }
 
   const nextPath = sanitizeNextPath(req.nextUrl.searchParams.get('next'));
   const state = crypto.randomBytes(24).toString('hex');
-  const baseUrl = getPublicBaseUrl(req);
-  const redirectUri = process.env.GOOGLE_REDIRECT_URI || `${baseUrl}/api/auth/google/callback`;
+  const redirectUri = oauth.redirectUri;
 
   const authParams = new URLSearchParams({
-    client_id: clientId,
+    client_id: oauth.clientId,
     redirect_uri: redirectUri,
     response_type: 'code',
     scope: 'openid email profile',
@@ -58,4 +61,3 @@ export async function GET(req: NextRequest) {
 
   return response;
 }
-

@@ -25,6 +25,7 @@ import {
   Youtube,
   Settings,
 } from 'lucide-react';
+import { SmartImage } from '@/components/SmartImage';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -185,7 +186,7 @@ export default function PublicSocietyPage() {
       {/* ─── Cover Banner ─── */}
       <div className="relative h-52 sm:h-64" style={{ background: profile?.cover_url ? undefined : `linear-gradient(135deg, ${brandColor}, ${profile?.accent_color || '#e08a30'})` }}>
         {profile?.cover_url && (
-          <img src={profile.cover_url} alt="Cover" className="w-full h-full object-cover" />
+          <SmartImage src={profile.cover_url} alt="Cover" className="w-full h-full object-cover" />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
         <div className="absolute top-4 left-4 right-4 flex justify-between z-10">
@@ -205,7 +206,7 @@ export default function PublicSocietyPage() {
         <div className="flex items-end gap-4 mb-3">
           <div className="w-24 h-24 rounded-2xl shrink-0 border-4 flex items-center justify-center text-3xl font-bold overflow-hidden" style={{ background: 'var(--bg-primary)', borderColor: 'var(--bg-primary)', color: brandColor }}>
             {society.logo_url ? (
-              <img src={society.logo_url} alt={society.name} className="w-full h-full object-cover" />
+              <SmartImage src={society.logo_url} alt={society.name} className="w-full h-full object-cover" />
             ) : (
               society.name[0]
             )}
@@ -299,7 +300,7 @@ function HomeTab({ posts, profile, events, brandColor, router }: { posts: any[];
           className="card p-0 w-full text-left overflow-hidden"
         >
           {upcomingEvent.banner_url ? (
-            <img src={upcomingEvent.banner_url} alt="" className="w-full h-40 object-cover" />
+            <SmartImage src={upcomingEvent.banner_url} alt="" className="w-full h-40 object-cover" />
           ) : (
             <div className="w-full h-40 flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${brandColor}33, ${brandColor}11)` }}>
               <Calendar size={40} style={{ color: brandColor }} />
@@ -335,7 +336,7 @@ function HomeTab({ posts, profile, events, brandColor, router }: { posts: any[];
               {/* Author */}
               <div className="p-4 pb-2 flex items-center gap-3">
                 {post.author_avatar ? (
-                  <img src={post.author_avatar} alt="" className="w-10 h-10 rounded-full object-cover" />
+                  <SmartImage src={post.author_avatar} alt="" className="w-10 h-10 rounded-full object-cover" />
                 ) : (
                   <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm" style={{ background: `${brandColor}15`, color: brandColor }}>
                     {post.author_name?.[0] || '?'}
@@ -354,7 +355,7 @@ function HomeTab({ posts, profile, events, brandColor, router }: { posts: any[];
               {post.images && post.images.length > 0 && (
                 <div className={`${post.images.length === 1 ? '' : 'grid gap-0.5 grid-cols-2'}`}>
                   {post.images.slice(0, 4).map((img: any, i: number) => (
-                    <img key={img.id} src={img.file_url} alt="" className={`w-full object-cover ${post.images.length === 1 ? 'max-h-[400px]' : 'aspect-square'}`} />
+                    <SmartImage key={img.id} src={img.file_url} alt="" className={`w-full object-cover ${post.images.length === 1 ? 'max-h-[400px]' : 'aspect-square'}`} />
                   ))}
                 </div>
               )}
@@ -478,7 +479,7 @@ function EventsTab({ events, brandColor, router }: { events: PublicEvent[]; bran
         return (
           <button key={ev.id} onClick={() => router.push(`/events/${ev.id}`)} className="card p-0 w-full text-left overflow-hidden flex flex-col sm:flex-row">
             {ev.banner_url ? (
-              <img src={ev.banner_url} alt={ev.title} className="w-full sm:w-40 h-32 sm:h-auto object-cover shrink-0" />
+              <SmartImage src={ev.banner_url} alt={ev.title} className="w-full sm:w-40 h-32 sm:h-auto object-cover shrink-0" />
             ) : (
               <div className="w-full sm:w-40 h-32 sm:h-auto shrink-0 flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${brandColor}33, ${brandColor}11)` }}>
                 <Calendar size={32} style={{ color: brandColor }} />
@@ -524,7 +525,7 @@ function PhotosTab({ albums, gallery, brandColor }: { albums: any[]; gallery: Ga
               <div key={album.id} className="card overflow-hidden group cursor-pointer">
                 <div className="aspect-[4/3] bg-surface-100 dark:bg-surface-800 relative overflow-hidden">
                   {album.cover_photo_url ? (
-                    <img src={album.cover_photo_url} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                    <SmartImage src={album.cover_photo_url} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
                       <ImageIcon size={28} className="text-muted opacity-30" />
@@ -554,7 +555,7 @@ function PhotosTab({ albums, gallery, brandColor }: { albums: any[]; gallery: Ga
                 className="relative overflow-hidden rounded-xl aspect-square group"
               >
                 {item.file_type?.startsWith('image') ? (
-                  <img src={item.file_url} alt={item.title} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
+                  <SmartImage src={item.file_url} alt={item.title} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
                 ) : (
                   <div className="w-full h-full bg-secondary flex items-center justify-center">
                     <ImageIcon size={32} className="text-muted" />
@@ -576,7 +577,7 @@ function PhotosTab({ albums, gallery, brandColor }: { albums: any[]; gallery: Ga
       {/* Lightbox */}
       {lightbox && (
         <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4" onClick={() => setLightbox(null)}>
-          <img src={lightbox} alt="Preview" className="max-w-full max-h-full object-contain rounded-lg" />
+          <SmartImage src={lightbox} alt="Preview" className="max-w-full max-h-full object-contain rounded-lg" />
         </div>
       )}
     </>
@@ -604,7 +605,7 @@ function TeamTab({ team, brandColor }: { team: TeamMember[]; brandColor: string 
             {leadership.map(m => (
               <div key={m.membership_id} className="card p-4 flex items-center gap-3">
                 {m.avatar_url ? (
-                  <img src={m.avatar_url} alt={m.full_name} className="w-12 h-12 rounded-full object-cover" />
+                  <SmartImage src={m.avatar_url} alt={m.full_name} className="w-12 h-12 rounded-full object-cover" />
                 ) : (
                   <div className="w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold" style={{ background: `${brandColor}15`, color: brandColor }}>
                     {m.full_name[0]}
@@ -629,7 +630,7 @@ function TeamTab({ team, brandColor }: { team: TeamMember[]; brandColor: string 
             {directors.map(m => (
               <div key={m.membership_id} className="card p-3 flex items-center gap-3">
                 {m.avatar_url ? (
-                  <img src={m.avatar_url} alt={m.full_name} className="w-10 h-10 rounded-full object-cover" />
+                  <SmartImage src={m.avatar_url} alt={m.full_name} className="w-10 h-10 rounded-full object-cover" />
                 ) : (
                   <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold bg-secondary text-primary">
                     {m.full_name[0]}
@@ -739,3 +740,5 @@ function getTimeAgo(dateStr: string): string {
   if (weeks < 4) return `${weeks}w ago`;
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
 }
+
+
