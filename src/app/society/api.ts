@@ -20,6 +20,8 @@ import type {
   SocietyStorageInfo,
   EventParticipant,
   SocietyNotification,
+  SocietyEventBroadcast,
+  SocietyEventBroadcastOptions,
   SocietyAnalytics,
   SocietyAuditLogResponse,
   SocietySettings,
@@ -629,6 +631,76 @@ export function markNotificationRead(
     method: "PATCH",
     body: JSON.stringify({ is_read: true }),
   });
+}
+
+export function fetchEventBroadcasts(
+  societyId: string,
+  eventId?: string,
+): Promise<{
+  broadcasts: SocietyEventBroadcast[];
+  options: SocietyEventBroadcastOptions;
+  permissions: { canRead: boolean; canManage: boolean };
+}> {
+  const qs = eventId
+    ? `?${new URLSearchParams({ eventId }).toString()}`
+    : "";
+  return api(`${s(societyId)}/governance/event-broadcasts${qs}`);
+}
+
+export function createEventBroadcast(
+  societyId: string,
+  data: {
+    eventId: string;
+    title: string;
+    message: string;
+    updateType?: string;
+    severity?: string;
+    targetScope?: string;
+    includePush?: boolean;
+    includeInApp?: boolean;
+    scheduledAt?: string | null;
+    metadata?: Record<string, unknown> | null;
+  },
+): Promise<{
+  success: boolean;
+  dispatched: boolean;
+  broadcast: SocietyEventBroadcast;
+  dispatch?: {
+    ok: boolean;
+    reason?: string;
+    status?: string;
+    recipientCount: number;
+    inAppDeliveredCount: number;
+  } | null;
+}> {
+  return api(`${s(societyId)}/governance/event-broadcasts`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateEventBroadcast(
+  societyId: string,
+  broadcastId: string,
+  action: "CANCEL" | "SEND_NOW",
+): Promise<{
+  success: boolean;
+  broadcast?: SocietyEventBroadcast | null;
+  dispatch?: {
+    ok: boolean;
+    reason?: string;
+    status?: string;
+    recipientCount: number;
+    inAppDeliveredCount: number;
+  } | null;
+}> {
+  return api(
+    `${s(societyId)}/governance/event-broadcasts/${broadcastId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ action }),
+    },
+  );
 }
 
 // ─── Analytics ──────────────────────────────────────────────────────────────

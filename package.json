@@ -10,6 +10,7 @@
     "seed": "node scripts/seed.js",
     "sync:super-admins": "node scripts/sync-super-admins.js",
     "migrate:016": "node run-migration-016.js",
+    "migrate:017": "node run-migration-017.js",
     "test:auth:smoke": "node scripts/auth-smoke.js"
   },
   "dependencies": {

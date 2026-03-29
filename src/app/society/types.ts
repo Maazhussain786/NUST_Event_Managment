@@ -284,6 +284,66 @@ export interface SocietyNotification {
   metadata: Record<string, unknown> | null;
 }
 
+export type EventBroadcastUpdateType =
+  | "GENERAL"
+  | "SCHEDULE_CHANGE"
+  | "VENUE_CHANGE"
+  | "DELAY"
+  | "EARLY_START"
+  | "IMPORTANT";
+
+export type EventBroadcastSeverity = "INFO" | "IMPORTANT" | "URGENT";
+
+export type EventBroadcastTargetScope =
+  | "ALL_PARTICIPANTS"
+  | "TICKET_HOLDERS"
+  | "REGISTRATIONS_ONLY";
+
+export type EventBroadcastStatus =
+  | "PENDING"
+  | "SCHEDULED"
+  | "PROCESSING"
+  | "SENT"
+  | "PARTIAL"
+  | "FAILED"
+  | "CANCELLED";
+
+export interface SocietyEventBroadcast {
+  id: string;
+  society_id: string;
+  event_id: string;
+  event_title: string | null;
+  created_by: string;
+  created_by_name: string | null;
+  update_type: EventBroadcastUpdateType;
+  severity: EventBroadcastSeverity;
+  title: string;
+  message: string;
+  include_push: boolean;
+  include_in_app: boolean;
+  target_scope: EventBroadcastTargetScope;
+  status: EventBroadcastStatus;
+  scheduled_at: string | null;
+  sent_at: string | null;
+  cancelled_at: string | null;
+  recipient_count: number;
+  in_app_delivered_count: number;
+  push_token_count: number;
+  push_sent_count: number;
+  push_failed_count: number;
+  last_error: string | null;
+  is_automated: boolean;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SocietyEventBroadcastOptions {
+  updateTypes: EventBroadcastUpdateType[];
+  severities: EventBroadcastSeverity[];
+  targetScopes: EventBroadcastTargetScope[];
+}
+
 // ─── Analytics ──────────────────────────────────────────────────────────────
 
 export interface SocietyAnalytics {
@@ -310,6 +370,7 @@ export interface SocietyAnalytics {
 
 export type SocietyAuditAction =
   | 'EVENT_CREATED' | 'EVENT_UPDATED' | 'EVENT_CANCELLED'
+  | 'EVENT_BROADCAST_CREATED' | 'EVENT_BROADCAST_SENT' | 'EVENT_BROADCAST_CANCELLED'
   | 'MEMBER_ADDED' | 'MEMBER_REMOVED' | 'MEMBER_SUSPENDED' | 'MEMBER_REACTIVATED'
   | 'WING_CREATED' | 'WING_DELETED' 
   | 'PORTFOLIO_CREATED' | 'PORTFOLIO_DELETED'

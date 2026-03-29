@@ -148,6 +148,11 @@ Add events status column (if not present):
 node scripts/add-event-status.js
 ```
 
+Apply event update broadcast migration:
+```bash
+npm run migrate:017
+```
+
 ### Step 6: Seed Sample Data
 
 Populate database with sample data:

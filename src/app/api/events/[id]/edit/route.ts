@@ -23,6 +23,7 @@ import {
   validateTimeChangeAfterCheckIn,
   resolveEffectiveSocietyPrivilege,
 } from '@/lib/api-utils';
+import { createAutomaticEventUpdateBroadcast } from "@/lib/event-broadcasts";
 
 /**
  * PATCH /api/events/[id]
@@ -305,6 +306,40 @@ export async function PATCH(
     );
 
     await client.query('COMMIT');
+
+    const scheduleChanged =
+      Object.prototype.hasOwnProperty.call(newValues, "event_start") ||
+      Object.prototype.hasOwnProperty.call(newValues, "event_end");
+    const venueChanged =
+      Object.prototype.hasOwnProperty.call(newValues, "location") ||
+      Object.prototype.hasOwnProperty.call(newValues, "venue_details");
+
+    if (scheduleChanged || venueChanged) {
+      try {
+        await createAutomaticEventUpdateBroadcast({
+          societyId: event.society_id,
+          eventId,
+          actorUserId: user.userId,
+          eventTitle: String(newValues.title || event.title || "Event"),
+          oldStart: event.event_start ? new Date(event.event_start).toISOString() : null,
+          newStart: Object.prototype.hasOwnProperty.call(newValues, "event_start")
+            ? String(newValues.event_start || "")
+            : event.event_start
+              ? new Date(event.event_start).toISOString()
+              : null,
+          oldEnd: event.event_end ? new Date(event.event_end).toISOString() : null,
+          newEnd: Object.prototype.hasOwnProperty.call(newValues, "event_end")
+            ? String(newValues.event_end || "")
+            : event.event_end
+              ? new Date(event.event_end).toISOString()
+              : null,
+          oldVenue: String(event.location || ""),
+          newVenue: String(newValues.location ?? event.location ?? ""),
+        });
+      } catch (broadcastError) {
+        console.error("Automatic event update broadcast failed:", broadcastError);
+      }
+    }
 
     return NextResponse.json({
       success: true,
