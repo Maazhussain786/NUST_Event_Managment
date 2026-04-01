@@ -11,6 +11,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { logSuperAdminAudit } from "@/lib/admin-audit";
 
 // Default feature flags returned when table doesn't exist
 const DEFAULT_FLAGS = [
@@ -174,17 +175,12 @@ export async function PATCH(req: NextRequest) {
       [enabled, key],
     );
 
-    // Audit
-    await query(
-      `INSERT INTO audit_logs (action, performed_by, target_type, target_id, new_value, metadata)
-       VALUES ('SUPERADMIN_OVERRIDE', $1, 'FEATURE_FLAG', $2, $3, $4)`,
-      [
-        user.userId,
-        null,
-        JSON.stringify({ enabled }),
-        JSON.stringify({ flagKey: key, toggledBy: user.email }),
-      ],
-    );
+    await logSuperAdminAudit(req, user, {
+      targetType: "FEATURE_FLAG",
+      targetId: key,
+      newValue: { enabled },
+      metadata: { flagKey: key, toggledBy: user.email },
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -5,6 +5,7 @@ import { query } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { CONTAINERS, resolveMediaFields } from "@/lib/blob";
 import { ensureNustAdministrationSociety } from "@/lib/nustAdministrationSociety";
+import { logSuperAdminAudit } from "@/lib/admin-audit";
 
 async function ensurePlatformEventControlsTable() {
   await query(`
@@ -263,24 +264,20 @@ export async function POST(req: NextRequest) {
       [eventId, Boolean(is_pinned), user.userId],
     );
 
-    await query(
-      `INSERT INTO audit_logs (performed_by, action, target_type, target_id, metadata)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [
-        user.userId,
-        "EVENT_CREATED",
-        "EVENT",
-        eventId,
-        JSON.stringify({
+      await logSuperAdminAudit(req, user, {
+        action: "EVENT_CREATED",
+        societyId: hostSocietyId,
+        targetType: "EVENT",
+        targetId: eventId,
+        metadata: {
           source: "SUPER_ADMIN_PLATFORM_EVENTS",
           society_id: hostSocietyId,
           title: String(title).trim(),
           registration_deadline: normalizedRegistrationDeadline,
           include_nust_administration: includeNustAdmin,
           cohost_society_ids: uniqueCohostSocietyIds,
-        }),
-      ],
-    );
+        },
+      });
 
     return NextResponse.json({ success: true, id: eventId });
   } catch (error) {

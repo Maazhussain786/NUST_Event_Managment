@@ -8,6 +8,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { logSuperAdminAudit } from '@/lib/admin-audit';
 
 export async function GET() {
   try {
@@ -60,17 +61,12 @@ export async function POST(req: NextRequest) {
 
     await query('UPDATE users SET user_type = $1 WHERE id = $2', ['SUPER_ADMIN', userId]);
 
-    // Audit
-    await query(
-      `INSERT INTO audit_logs (action, performed_by, target_type, target_id, new_value, metadata)
-       VALUES ('SUPERADMIN_OVERRIDE', $1, 'USER', $2, $3, $4)`,
-      [
-        user.userId,
-        userId,
-        JSON.stringify({ user_type: 'SUPER_ADMIN' }),
-        JSON.stringify({ promotedBy: user.email, targetName: target.rows[0].full_name }),
-      ]
-    );
+    await logSuperAdminAudit(req, user, {
+      targetType: 'USER',
+      targetId: userId,
+      newValue: { user_type: 'SUPER_ADMIN' },
+      metadata: { promotedBy: user.email, targetName: target.rows[0].full_name },
+    });
 
     return NextResponse.json({ success: true, message: 'User promoted to administrator' });
   } catch (error) {

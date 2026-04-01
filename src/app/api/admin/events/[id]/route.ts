@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { logSuperAdminAudit } from "@/lib/admin-audit";
 
 async function ensurePlatformEventControlsTable() {
   await query(`
@@ -43,20 +44,14 @@ export async function PATCH(
         [id, shouldPin, user.userId],
       );
 
-      await query(
-        `INSERT INTO audit_logs (performed_by, action, target_type, target_id, metadata)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [
-          user.userId,
-          "SUPERADMIN_OVERRIDE",
-          "EVENT",
-          id,
-          JSON.stringify({
-            reason: reason || "",
-            pinAction: shouldPin ? "PINNED" : "UNPINNED",
-          }),
-        ],
-      );
+      await logSuperAdminAudit(req, user, {
+        targetType: "EVENT",
+        targetId: id,
+        metadata: {
+          reason: reason || "",
+          pinAction: shouldPin ? "PINNED" : "UNPINNED",
+        },
+      });
 
       return NextResponse.json({ success: true, is_pinned: shouldPin });
     }
@@ -144,17 +139,12 @@ export async function PATCH(
         vals,
       );
 
-      await query(
-        `INSERT INTO audit_logs (performed_by, action, target_type, target_id, metadata)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [
-          user.userId,
-          "EVENT_UPDATED",
-          "EVENT",
-          id,
-          JSON.stringify({ source: "SUPER_ADMIN_PLATFORM_EVENTS_EDIT" }),
-        ],
-      );
+      await logSuperAdminAudit(req, user, {
+        action: "EVENT_UPDATED",
+        targetType: "EVENT",
+        targetId: id,
+        metadata: { source: "SUPER_ADMIN_PLATFORM_EVENTS_EDIT" },
+      });
 
       return NextResponse.json({ success: true });
     }
@@ -169,17 +159,12 @@ export async function PATCH(
     );
 
     // Log the action
-    await query(
-      `INSERT INTO audit_logs (performed_by, action, target_type, target_id, metadata)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [
-        user.userId,
-        `EVENT_${action}`,
-        "EVENT",
-        id,
-        JSON.stringify({ reason: reason || "" }),
-      ],
-    );
+    await logSuperAdminAudit(req, user, {
+      action: `EVENT_${action}`,
+      targetType: "EVENT",
+      targetId: id,
+      metadata: { reason: reason || "" },
+    });
 
     return NextResponse.json({ success: true, status: action });
   } catch (error) {
@@ -190,7 +175,7 @@ export async function PATCH(
 
 // DELETE /api/admin/events/[id] — soft-delete event
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
@@ -228,20 +213,15 @@ export async function DELETE(
       [id, user.userId],
     );
 
-    await query(
-      `INSERT INTO audit_logs (performed_by, action, target_type, target_id, metadata)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [
-        user.userId,
-        "EVENT_DELETED",
-        "EVENT",
-        id,
-        JSON.stringify({
-          source: "SUPER_ADMIN_PLATFORM_EVENTS",
-          deletedBy: user.email,
-        }),
-      ],
-    );
+    await logSuperAdminAudit(req, user, {
+      action: "EVENT_DELETED",
+      targetType: "EVENT",
+      targetId: id,
+      metadata: {
+        source: "SUPER_ADMIN_PLATFORM_EVENTS",
+        deletedBy: user.email,
+      },
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {

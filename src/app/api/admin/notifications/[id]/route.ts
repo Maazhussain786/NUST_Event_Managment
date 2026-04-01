@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { logSuperAdminAudit } from "@/lib/admin-audit";
 
 export async function PATCH(
   req: NextRequest,
@@ -62,23 +63,19 @@ export async function PATCH(
       ],
     );
 
-    await query(
-      `INSERT INTO audit_logs (action, performed_by, target_type, target_id, new_value, metadata)
-       VALUES ('SUPERADMIN_OVERRIDE', $1, 'NOTIFICATION', $2, $3, $4)`,
-      [
-        user.userId,
-        id,
-        JSON.stringify({
-          title,
-          priority: priority || "NORMAL",
-          action: "EDITED",
-        }),
-        JSON.stringify({
-          editedBy: user.email,
-          target_type: target_type || "ALL",
-        }),
-      ],
-    );
+    await logSuperAdminAudit(req, user, {
+      targetType: "NOTIFICATION",
+      targetId: id,
+      newValue: {
+        title,
+        priority: priority || "NORMAL",
+        action: "EDITED",
+      },
+      metadata: {
+        editedBy: user.email,
+        target_type: target_type || "ALL",
+      },
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -107,15 +104,11 @@ export async function DELETE(
       [id],
     );
 
-    await query(
-      `INSERT INTO audit_logs (action, performed_by, target_type, target_id, metadata)
-       VALUES ('SUPERADMIN_OVERRIDE', $1, 'NOTIFICATION', $2, $3)`,
-      [
-        user.userId,
-        id,
-        JSON.stringify({ action: "DEACTIVATED", deactivatedBy: user.email }),
-      ],
-    );
+    await logSuperAdminAudit(_req, user, {
+      targetType: "NOTIFICATION",
+      targetId: id,
+      metadata: { action: "DEACTIVATED", deactivatedBy: user.email },
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {

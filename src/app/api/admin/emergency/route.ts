@@ -11,6 +11,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { logSuperAdminAudit } from "@/lib/admin-audit";
 
 const EMERGENCY_FLAGS = [
   {
@@ -171,21 +172,16 @@ export async function POST(req: NextRequest) {
       [enabled, user.userId, key],
     );
 
-    // Audit with high visibility
-    await query(
-      `INSERT INTO audit_logs (action, performed_by, target_type, target_id, new_value, metadata)
-       VALUES ('SUPERADMIN_OVERRIDE', $1, 'EMERGENCY_FLAG', $2, $3, $4)`,
-      [
-        user.userId,
-        null,
-        JSON.stringify({ enabled }),
-        JSON.stringify({
-          emergencyFlag: key,
-          toggledBy: user.email,
-          action: enabled ? "ACTIVATED" : "DEACTIVATED",
-        }),
-      ],
-    );
+    await logSuperAdminAudit(req, user, {
+      targetType: "EMERGENCY_FLAG",
+      targetId: key,
+      newValue: { enabled },
+      metadata: {
+        emergencyFlag: key,
+        toggledBy: user.email,
+        action: enabled ? "ACTIVATED" : "DEACTIVATED",
+      },
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -8,6 +8,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { logSuperAdminAudit } from '@/lib/admin-audit';
 
 async function ensureTable() {
   try {
@@ -124,17 +125,12 @@ export async function POST(req: NextRequest) {
       ]
     );
 
-    // Audit
-    await query(
-      `INSERT INTO audit_logs (action, performed_by, target_type, target_id, new_value, metadata)
-       VALUES ('SUPERADMIN_OVERRIDE', $1, 'NOTIFICATION', $2, $3, $4)`,
-      [
-        user.userId,
-        result.rows[0].id,
-        JSON.stringify({ title, priority: priority || 'NORMAL' }),
-        JSON.stringify({ sentBy: user.email, target_type: target_type || 'ALL' }),
-      ]
-    );
+    await logSuperAdminAudit(req, user, {
+      targetType: 'NOTIFICATION',
+      targetId: result.rows[0].id,
+      newValue: { title, priority: priority || 'NORMAL' },
+      metadata: { sentBy: user.email, target_type: target_type || 'ALL' },
+    });
 
     return NextResponse.json({ success: true, id: result.rows[0].id });
   } catch (error) {

@@ -36,6 +36,9 @@ export async function GET(req: NextRequest) {
     const societyId = sp.get('societyId');
     const from = sp.get('from');
     const to = sp.get('to');
+    const search = sp.get('search')?.trim();
+    const userEmail = sp.get('userEmail')?.trim();
+    const actionPrefix = sp.get('actionPrefix')?.trim();
 
     const conditions: string[] = [];
     const params: unknown[] = [];
@@ -65,6 +68,29 @@ export async function GET(req: NextRequest) {
       paramIdx++;
       conditions.push(`al.created_at <= ($${paramIdx}::date + INTERVAL '1 day')::timestamptz`);
       params.push(to);
+    }
+    if (userEmail) {
+      paramIdx++;
+      conditions.push(`u.email ILIKE $${paramIdx}`);
+      params.push(`%${userEmail}%`);
+    }
+    if (actionPrefix) {
+      paramIdx++;
+      conditions.push(`al.action::text ILIKE $${paramIdx}`);
+      params.push(`${actionPrefix}%`);
+    }
+    if (search) {
+      paramIdx++;
+      conditions.push(
+        `(al.action::text ILIKE $${paramIdx}
+           OR COALESCE(u.full_name, '') ILIKE $${paramIdx}
+           OR COALESCE(u.email, '') ILIKE $${paramIdx}
+           OR COALESCE(s.name, '') ILIKE $${paramIdx}
+           OR COALESCE(al.target_type, '') ILIKE $${paramIdx}
+           OR COALESCE(al.target_id::text, '') ILIKE $${paramIdx}
+           OR COALESCE(al.metadata::text, '') ILIKE $${paramIdx})`,
+      );
+      params.push(`%${search}%`);
     }
 
     const whereClause = conditions.length > 0
@@ -109,7 +135,11 @@ export async function GET(req: NextRequest) {
     // ─── JSON (paginated) ───────────────────────────────────────────────
     // Count total
     const countResult = await query(
-      `SELECT COUNT(*) AS total FROM audit_logs al ${whereClause}`,
+      `SELECT COUNT(*) AS total
+       FROM audit_logs al
+       LEFT JOIN users u ON u.id = al.performed_by
+       LEFT JOIN societies s ON s.id = al.society_id
+       ${whereClause}`,
       params
     );
     const total = parseInt(countResult.rows[0].total, 10);

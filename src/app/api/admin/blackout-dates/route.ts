@@ -9,6 +9,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { logSuperAdminAudit } from '@/lib/admin-audit';
 
 async function ensureTable() {
   try {
@@ -90,16 +91,12 @@ export async function POST(req: NextRequest) {
       ]
     );
 
-    await query(
-      `INSERT INTO audit_logs (action, performed_by, target_type, target_id, new_value, metadata)
-       VALUES ('SUPERADMIN_OVERRIDE', $1, 'BLACKOUT_DATE', $2, $3, $4)`,
-      [
-        user.userId,
-        result.rows[0].id,
-        JSON.stringify({ title, start_date, end_date, scope: scope || 'ALL' }),
-        JSON.stringify({ createdBy: user.email }),
-      ]
-    );
+    await logSuperAdminAudit(req, user, {
+      targetType: 'BLACKOUT_DATE',
+      targetId: result.rows[0].id,
+      newValue: { title, start_date, end_date, scope: scope || 'ALL' },
+      metadata: { createdBy: user.email },
+    });
 
     return NextResponse.json({ success: true, id: result.rows[0].id });
   } catch (error) {
@@ -122,15 +119,11 @@ export async function DELETE(req: NextRequest) {
 
     await query('DELETE FROM platform_blackout_dates WHERE id = $1', [id]);
 
-    await query(
-      `INSERT INTO audit_logs (action, performed_by, target_type, target_id, metadata)
-       VALUES ('SUPERADMIN_OVERRIDE', $1, 'BLACKOUT_DATE', $2, $3)`,
-      [
-        user.userId,
-        id,
-        JSON.stringify({ action: 'DELETED', deletedBy: user.email }),
-      ]
-    );
+    await logSuperAdminAudit(req, user, {
+      targetType: 'BLACKOUT_DATE',
+      targetId: id,
+      metadata: { action: 'DELETED', deletedBy: user.email },
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {

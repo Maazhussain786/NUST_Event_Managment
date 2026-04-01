@@ -10,6 +10,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { logSuperAdminAudit } from '@/lib/admin-audit';
 
 const DEFAULT_CONFIG = [
   { key: 'max_societies_per_user', label: 'Max Societies per User', description: 'Maximum number of societies a user can join', value: '10', type: 'number' as const, unit: 'societies', category: 'Limits' },
@@ -96,18 +97,13 @@ export async function PATCH(req: NextRequest) {
       [String(value), key]
     );
 
-    // Audit
-    await query(
-      `INSERT INTO audit_logs (action, performed_by, target_type, target_id, old_value, new_value, metadata)
-       VALUES ('SUPERADMIN_OVERRIDE', $1, 'SYSTEM_CONFIG', $2, $3, $4, $5)`,
-      [
-        user.userId,
-        key,
-        JSON.stringify({ value: oldValue }),
-        JSON.stringify({ value: String(value) }),
-        JSON.stringify({ configKey: key, updatedBy: user.email }),
-      ]
-    );
+    await logSuperAdminAudit(req, user, {
+      targetType: 'SYSTEM_CONFIG',
+      targetId: key,
+      oldValue: { value: oldValue },
+      newValue: { value: String(value) },
+      metadata: { configKey: key, updatedBy: user.email },
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {
