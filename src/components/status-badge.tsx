@@ -45,7 +45,11 @@ export interface StatusBadgeProps {
 }
 
 export function StatusBadge({ status, size = 'sm', className }: StatusBadgeProps) {
-  const mapped = STATUS_MAP[status] || { variant: 'outline' as BadgeVariant, label: status.replace(/_/g, ' ') };
+  const normalizedStatus = String(status || '').trim().toUpperCase();
+  const mapped = STATUS_MAP[normalizedStatus] || {
+    variant: 'outline' as BadgeVariant,
+    label: normalizedStatus.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()),
+  };
   return (
     <Badge variant={mapped.variant} size={size} className={className}>
       {mapped.label}

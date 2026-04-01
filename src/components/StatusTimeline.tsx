@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 
 type Step = 'purchased' | 'approved' | 'checked_in';
 type Status = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CHECKED_IN' | string;
+type StepState = 'completed' | 'current' | 'pending' | 'rejected';
 
 interface StatusTimelineProps {
   status: Status;
@@ -17,8 +18,22 @@ const steps: { key: Step; label: string }[] = [
   { key: 'checked_in', label: 'Checked In' },
 ];
 
-function getStepState(step: Step, status: Status): 'completed' | 'current' | 'pending' | 'rejected' {
-  const normalizedStatus = status.toUpperCase();
+function normalizeStatus(status: Status): 'PENDING' | 'APPROVED' | 'REJECTED' | 'CHECKED_IN' {
+  const normalized = String(status || '').trim().toUpperCase();
+
+  if (normalized === 'CHECKED_IN' || normalized === 'CHECKEDIN' || normalized === 'SCANNED') {
+    return 'CHECKED_IN';
+  }
+  if (normalized === 'APPROVED') {
+    return 'APPROVED';
+  }
+  if (normalized === 'REJECTED' || normalized === 'CANCELLED') {
+    return 'REJECTED';
+  }
+  return 'PENDING';
+}
+
+function getStepState(step: Step, normalizedStatus: ReturnType<typeof normalizeStatus>): StepState {
 
   // Handle rejection - show red state
   if (normalizedStatus === 'REJECTED') {
@@ -44,14 +59,18 @@ function getStepState(step: Step, status: Status): 'completed' | 'current' | 'pe
 }
 
 export function StatusTimeline({ status, className }: StatusTimelineProps) {
-  const normalizedStatus = status.toUpperCase();
-  const isRejected = normalizedStatus === 'REJECTED';
+  const normalizedStatus = normalizeStatus(status);
 
   return (
     <div className={cn('status-timeline', className)}>
       {steps.map((step, index) => {
-        const state = getStepState(step.key, status);
+        const state = getStepState(step.key, normalizedStatus);
         const isLast = index === steps.length - 1;
+        const nextStep = steps[index + 1];
+        const nextState: StepState | null = nextStep
+          ? getStepState(nextStep.key, normalizedStatus)
+          : null;
+        const isSegmentCompleted = nextState === 'completed' || nextState === 'current' || nextState === 'rejected';
 
         return (
           <div key={step.key} className="status-timeline-step">
@@ -60,7 +79,7 @@ export function StatusTimeline({ status, className }: StatusTimelineProps) {
               <div
                 className={cn(
                   'status-timeline-line',
-                  (state === 'completed' || (state === 'current' && index === 0)) && 'completed',
+                  isSegmentCompleted && 'completed',
                 )}
               />
             )}
@@ -68,7 +87,7 @@ export function StatusTimeline({ status, className }: StatusTimelineProps) {
             {/* Dot */}
             <div
               className={cn(
-                'w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200',
+                'relative z-10 w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 ring-2 ring-background',
                 state === 'completed' && 'bg-emerald-500 text-white',
                 state === 'current' && 'bg-amber-500 text-white animate-status-pulse',
                 state === 'rejected' && 'bg-red-500 text-white',
@@ -112,7 +131,7 @@ interface StatusBadgeProps {
 }
 
 export function StatusBadge({ status, reason, className }: StatusBadgeProps) {
-  const normalizedStatus = status.toUpperCase();
+  const normalizedStatus = String(status || '').trim().toUpperCase();
 
   const config = {
     PENDING: {
@@ -127,11 +146,29 @@ export function StatusBadge({ status, reason, className }: StatusBadgeProps) {
       label: 'Approved',
       description: 'Show your QR code at the venue',
     },
+    PENDING_VERIFICATION: {
+      bg: 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/40',
+      text: 'text-amber-700 dark:text-amber-400',
+      label: 'Proof Needed',
+      description: 'Submit your payment screenshot from the event page',
+    },
+    NEEDS_REUPLOAD: {
+      bg: 'bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-900/40',
+      text: 'text-orange-700 dark:text-orange-400',
+      label: 'Reupload Required',
+      description: 'Upload an updated payment screenshot to continue',
+    },
     REJECTED: {
       bg: 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900/40',
       text: 'text-red-700 dark:text-red-400',
       label: 'Rejected',
       description: reason || 'Your ticket was not approved',
+    },
+    CANCELLED: {
+      bg: 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900/40',
+      text: 'text-red-700 dark:text-red-400',
+      label: 'Cancelled',
+      description: 'This ticket is no longer valid',
     },
     CHECKED_IN: {
       bg: 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/40',

@@ -37,6 +37,8 @@ interface TicketData {
 const ease = [0.25, 0.1, 0.25, 1] as const;
 
 function getStatusConfig(ticket: TicketData) {
+  const normalizedStatus = String(ticket.status || '').toUpperCase();
+
   if (ticket.is_cancelled) {
     return {
       variant: 'destructive' as const,
@@ -46,12 +48,12 @@ function getStatusConfig(ticket: TicketData) {
       bgClass: '',
     };
   }
-  switch (ticket.status.toUpperCase()) {
+  switch (normalizedStatus) {
     case 'APPROVED':
     case 'CHECKED_IN':
       return {
         variant: 'success' as const,
-        label: ticket.status === 'CHECKED_IN' ? 'Checked In' : 'Valid',
+        label: normalizedStatus === 'CHECKED_IN' ? 'Checked In' : 'Valid',
         icon: CheckCircle2,
         borderClass: 'border-l-3 border-l-emerald-500',
         bgClass: '',
@@ -60,7 +62,7 @@ function getStatusConfig(ticket: TicketData) {
     case 'PENDING_VERIFICATION':
       return {
         variant: 'warning' as const,
-        label: ticket.status.toUpperCase() === 'PENDING_VERIFICATION' ? 'Proof Needed' : 'Pending',
+        label: normalizedStatus === 'PENDING_VERIFICATION' ? 'Proof Needed' : 'Pending',
         icon: Clock,
         borderClass: 'border-l-3 border-l-amber-500',
         bgClass: 'bg-amber-50/50 dark:bg-amber-950/10',
@@ -84,7 +86,7 @@ function getStatusConfig(ticket: TicketData) {
     default:
       return {
         variant: 'default' as const,
-        label: ticket.status,
+        label: normalizedStatus.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()),
         icon: AlertCircle,
         borderClass: '',
         bgClass: '',
@@ -114,7 +116,8 @@ function TicketListItem({ ticket }: { ticket: TicketData }) {
   const month = date.toLocaleDateString('en-PK', { month: 'short' }).toUpperCase();
   const relativeTime = getRelativeEventTime(ticket.event_start);
   const isUpcoming = new Date(ticket.event_start) > new Date();
-  const showQR = ticket.has_qr && ticket.status.toUpperCase() === 'APPROVED';
+  const normalizedStatus = String(ticket.status || '').toUpperCase();
+  const showQR = ticket.has_qr && (normalizedStatus === 'APPROVED' || normalizedStatus === 'CHECKED_IN');
   const previewSrc = ticket.event_banner || ticket.event_thumbnail || null;
   const showPreviewImage = Boolean(previewSrc) && !imageFailed;
 
@@ -191,7 +194,7 @@ function TicketListItem({ ticket }: { ticket: TicketData }) {
         </div>
 
         {/* Rejection reason */}
-        {ticket.status.toUpperCase() === 'REJECTED' && ticket.rejection_reason && (
+        {String(ticket.status || '').toUpperCase() === 'REJECTED' && ticket.rejection_reason && (
           <div className="pt-3 mt-3 border-t border-border">
             <p className="text-red-600 text-caption dark:text-red-400">
               <span className="font-medium">Reason:</span> {ticket.rejection_reason}
@@ -354,12 +357,14 @@ export default function TicketsPage() {
   }
 
   const now = new Date();
-  const upcomingTickets = tickets.filter(
-    (t) => new Date(t.event_start) > now && t.status !== 'CANCELLED' && t.status !== 'REJECTED' && !t.is_cancelled,
-  );
-  const pastTickets = tickets.filter(
-    (t) => new Date(t.event_start) <= now || t.status === 'CANCELLED' || t.status === 'REJECTED' || t.is_cancelled,
-  );
+  const upcomingTickets = tickets.filter((t) => {
+    const normalizedStatus = String(t.status || '').toUpperCase();
+    return new Date(t.event_start) > now && normalizedStatus !== 'CANCELLED' && normalizedStatus !== 'REJECTED' && !t.is_cancelled;
+  });
+  const pastTickets = tickets.filter((t) => {
+    const normalizedStatus = String(t.status || '').toUpperCase();
+    return new Date(t.event_start) <= now || normalizedStatus === 'CANCELLED' || normalizedStatus === 'REJECTED' || t.is_cancelled;
+  });
 
   return (
     <div className="min-h-screen bg-background">

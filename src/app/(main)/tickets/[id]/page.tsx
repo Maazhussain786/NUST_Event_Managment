@@ -354,13 +354,14 @@ export default function TicketDetailPage() {
     );
   }
 
-  const isCancelled = ticket.is_cancelled || ticket.status === 'CANCELLED' || ticket.status === 'REJECTED';
-  const isPending = ticket.status === 'PENDING' || ticket.status === 'PENDING_VERIFICATION' || ticket.status === 'NEEDS_REUPLOAD';
-  const isApproved = (ticket.ticket_status || ticket.status) === 'APPROVED';
-  const isNeedsReupload = ticket.status === 'NEEDS_REUPLOAD';
-  const isPendingVerification = ticket.status === 'PENDING_VERIFICATION';
+  const normalizedTicketStatus = String(ticket.status || '').toUpperCase();
+  const isCancelled = ticket.is_cancelled || normalizedTicketStatus === 'CANCELLED' || normalizedTicketStatus === 'REJECTED';
+  const isPending = normalizedTicketStatus === 'PENDING' || normalizedTicketStatus === 'PENDING_VERIFICATION' || normalizedTicketStatus === 'NEEDS_REUPLOAD';
+  const isNeedsReupload = normalizedTicketStatus === 'NEEDS_REUPLOAD';
+  const isPendingVerification = normalizedTicketStatus === 'PENDING_VERIFICATION';
   const isScanned = !!ticket.scanned_at;
   const effectiveStatus = isScanned ? 'CHECKED_IN' : ((ticket.ticket_status || ticket.status) as string);
+  const isApproved = ['APPROVED', 'CHECKED_IN'].includes(String(effectiveStatus || '').toUpperCase());
 
   const dateFormatted = new Date(ticket.event_start).toLocaleDateString('en-PK', {
     weekday: 'short', month: 'short', day: 'numeric', year: 'numeric'
@@ -421,7 +422,7 @@ export default function TicketDetailPage() {
           <div className="mt-3">
             <StatusBadge
               status={effectiveStatus}
-              reason={ticket.status === 'REJECTED' ? ticket.rejection_reason : undefined}
+              reason={normalizedTicketStatus === 'REJECTED' ? ticket.rejection_reason : undefined}
             />
           </div>
         </motion.div>
