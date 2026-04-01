@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   Calendar,
@@ -35,6 +35,7 @@ interface Event {
   ticket_price: number;
   max_tickets: number;
   is_paid: boolean;
+  category_id: string | null;
   category_name: string;
   society_id: string;
   society_name: string;
@@ -58,6 +59,7 @@ interface TicketPreview {
 
 interface UserStats {
   upcomingEvents: number;
+  totalTickets: number;
   pendingTickets: number;
   followedSocieties: number;
   unreadNotifications: number;
@@ -143,17 +145,28 @@ export default function HomePage() {
   const [pendingTickets, setPendingTickets] = useState<TicketPreview[]>([]);
   const [userStats, setUserStats] = useState<UserStats>({
     upcomingEvents: 0,
+    totalTickets: 0,
     pendingTickets: 0,
     followedSocieties: 0,
     unreadNotifications: 0,
   });
+
+  const categoryOptions = useMemo(
+    () => [
+      { value: "all", label: "All" },
+      ...categories.map((c) => ({ value: c.id, label: c.name })),
+    ],
+    [categories],
+  );
+
+  const nowMs = Date.now();
 
   useEffect(() => {
     setUserName(getUserName());
 
     Promise.all([
       fetch("/api/events/trending").then((r) => r.json()),
-      fetch("/api/events?limit=10").then((r) => r.json()),
+      fetch("/api/events?limit=100").then((r) => r.json()),
       fetch("/api/categories").then((r) => r.json()),
     ])
       .then(([trendingData, upcomingData, catData]) => {
@@ -199,19 +212,40 @@ export default function HomePage() {
           }
         })
         .catch(() => {});
+
+      // Fetch total ticket count for quick stats
+      fetch("/api/tickets")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data && Array.isArray(data)) {
+            setUserStats((prev) => ({ ...prev, totalTickets: data.length }));
+          }
+        })
+        .catch(() => {});
+
+      // Fetch followed / member societies count for quick stats
+      fetch("/api/my-societies")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data && Array.isArray(data)) {
+            setUserStats((prev) => ({ ...prev, followedSocieties: data.length }));
+          }
+        })
+        .catch(() => {});
     }
   }, []);
 
   const filteredUpcoming = upcoming.filter((e) => {
+    const isUpcoming = new Date(e.event_start).getTime() >= nowMs;
     const matchesCategory =
       activeCategory === "all" ||
-      e.category_name?.toLowerCase() === activeCategory;
+      e.category_id === activeCategory;
     const matchesSearch =
       !searchQuery ||
       e.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       e.society_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       e.location?.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
+    return isUpcoming && matchesCategory && matchesSearch;
   });
 
   return (
@@ -245,13 +279,7 @@ export default function HomePage() {
           placeholder: "Search events, societies...",
         }}
         filters={{
-          items: [
-            { value: "all", label: "All" },
-            ...categories.map((c) => ({
-              value: c.name.toLowerCase(),
-              label: c.name,
-            })),
-          ],
+          items: categoryOptions,
           active: activeCategory,
           onChange: setActiveCategory,
         }}
@@ -358,9 +386,7 @@ export default function HomePage() {
                 className="rounded-xl border border-border bg-card p-3 hover:border-brand-200 dark:hover:border-brand-900/40 transition-all duration-200 text-center active:scale-[0.97]"
               >
                 <Ticket className="w-5 h-5 text-brand-500 mx-auto mb-1" />
-                <p className="text-h3 text-foreground">
-                  {pendingTickets.length > 0 ? pendingTickets.length : "—"}
-                </p>
+                <p className="text-h3 text-foreground">{userStats.totalTickets}</p>
                 <p className="text-caption text-muted-foreground">Tickets</p>
               </Link>
               <Link
@@ -368,7 +394,7 @@ export default function HomePage() {
                 className="rounded-xl border border-border bg-card p-3 hover:border-brand-200 dark:hover:border-brand-900/40 transition-all duration-200 text-center active:scale-[0.97]"
               >
                 <Users className="w-5 h-5 text-brand-500 mx-auto mb-1" />
-                <p className="text-h3 text-foreground">—</p>
+                <p className="text-h3 text-foreground">{userStats.followedSocieties}</p>
                 <p className="text-caption text-muted-foreground">Societies</p>
               </Link>
             </motion.section>

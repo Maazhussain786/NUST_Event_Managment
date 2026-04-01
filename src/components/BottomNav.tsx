@@ -37,11 +37,11 @@ export default function BottomNav() {
     >
       <div
         className={cn(
-          'w-full rounded-2xl backdrop-blur-md shadow-[0_8px_30px_rgba(0,0,0,0.4)]',
+          'w-full rounded-2xl backdrop-blur-xl supports-[backdrop-filter]:backdrop-saturate-150 shadow-[0_10px_28px_rgba(0,0,0,0.22)]',
           // Light mode
-          'bg-white/90 border border-black/10',
+          'bg-white/62 border border-white/50',
           // Dark mode
-          'dark:bg-zinc-900/80 dark:border-white/10'
+          'dark:bg-zinc-900/48 dark:border-white/15'
         )}
       >
         <div className="flex items-center justify-between px-4 py-2">
