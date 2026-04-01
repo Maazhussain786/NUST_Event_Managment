@@ -18,14 +18,25 @@ export async function GET() {
     }
 
     const result = await query(`
-      SELECT u.id, u.email, u.full_name, u.status, u.created_at,
-             COUNT(al.id) AS action_count,
-             MAX(al.created_at) AS last_action_at
+      SELECT
+        u.id,
+        u.email,
+        u.full_name,
+        u.status,
+        u.created_at,
+        u.updated_at,
+        COUNT(al.id) AS action_count,
+        MAX(al.created_at) AS last_action_at,
+        GREATEST(
+          COALESCE(MAX(al.created_at), TO_TIMESTAMP(0)),
+          COALESCE(u.updated_at, TO_TIMESTAMP(0)),
+          COALESCE(u.created_at, TO_TIMESTAMP(0))
+        ) AS last_active_at
       FROM users u
       LEFT JOIN audit_logs al ON al.performed_by = u.id
       WHERE u.user_type = 'SUPER_ADMIN'
       GROUP BY u.id
-      ORDER BY u.created_at ASC
+      ORDER BY last_active_at DESC
     `);
 
     return NextResponse.json({

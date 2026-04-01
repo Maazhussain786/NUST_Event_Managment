@@ -162,7 +162,7 @@ export default function AdministratorsPage() {
                 <div className="col-span-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
                   <span className="flex items-center gap-1">
                     <Clock className="w-3 h-3" />
-                    {formatDate(admin.last_action_at)}
+                    {formatDate(admin.last_active_at ?? admin.last_action_at ?? admin.updated_at ?? admin.created_at)}
                   </span>
                 </div>
 

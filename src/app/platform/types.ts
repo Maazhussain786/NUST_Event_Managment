@@ -72,8 +72,10 @@ export interface Administrator {
   full_name: string;
   status: string;
   created_at: string;
+  updated_at?: string;
   action_count: string;
   last_action_at: string | null;
+  last_active_at?: string | null;
 }
 
 // ─── Societies ──────────────────────────────────────────────────────────────
