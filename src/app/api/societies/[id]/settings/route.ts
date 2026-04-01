@@ -1,114 +1,270 @@
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
-import { NextRequest, NextResponse } from 'next/server';
-import { query } from '@/lib/db';
-import { getCurrentUser } from '@/lib/auth';
+import { NextRequest, NextResponse } from "next/server";
+import { getClient, query } from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth";
+import {
+  buildLegacyPaymentFields,
+  listSocietyPaymentWallets,
+  normalizeWalletType,
+  type PaymentWallet,
+} from "@/lib/payment-wallets";
 
-// GET /api/societies/[id]/settings — get society settings
+const VALID_ROLES = [
+  "President",
+  "Vice President",
+  "Director",
+  "Deputy Director",
+  "Member",
+];
+
+const VALID_POLICIES = ["ALLOWED", "RESTRICTED", "DISABLED"];
+
+interface IncomingWallet {
+  id?: string;
+  wallet_type?: string;
+  account_title?: string;
+  account_number?: string | null;
+  iban?: string | null;
+  bank_name?: string | null;
+  branch_name?: string | null;
+  instructions?: string | null;
+  is_enabled?: boolean;
+  is_default?: boolean;
+  display_order?: number;
+}
+
+function asOptionalText(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeIban(value: unknown): string | null {
+  const text = asOptionalText(value);
+  if (!text) return null;
+  return text.replace(/\s+/g, "").toUpperCase();
+}
+
+function asBoolean(value: unknown, fallback: boolean): boolean {
+  if (typeof value === "boolean") return value;
+  return fallback;
+}
+
+function asSafeNumber(value: unknown, fallback: number): number {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function normalizeIncomingWallet(
+  wallet: IncomingWallet,
+  index: number,
+): { ok: true; value: Omit<PaymentWallet, "id"> & { id?: string } } | { ok: false; error: string } {
+  const walletType = normalizeWalletType(wallet.wallet_type);
+  if (!walletType) {
+    return { ok: false, error: `Wallet #${index + 1}: Invalid wallet type` };
+  }
+
+  const accountTitle = asOptionalText(wallet.account_title);
+  if (!accountTitle) {
+    return {
+      ok: false,
+      error: `Wallet #${index + 1}: Account holder name is required`,
+    };
+  }
+
+  const accountNumber = asOptionalText(wallet.account_number);
+  const iban = normalizeIban(wallet.iban);
+  const bankName = asOptionalText(wallet.bank_name);
+  const branchName = asOptionalText(wallet.branch_name);
+  const instructions = asOptionalText(wallet.instructions);
+
+  if ((walletType === "EASYPAISA" || walletType === "JAZZCASH") && !accountNumber) {
+    return {
+      ok: false,
+      error: `Wallet #${index + 1}: Wallet number is required for ${walletType}`,
+    };
+  }
+
+  if (walletType === "BANK") {
+    if (!iban) {
+      return {
+        ok: false,
+        error: `Wallet #${index + 1}: IBAN is required for bank account`,
+      };
+    }
+    if (!bankName) {
+      return {
+        ok: false,
+        error: `Wallet #${index + 1}: Bank name is required for bank account`,
+      };
+    }
+  }
+
+  return {
+    ok: true,
+    value: {
+      id: asOptionalText(wallet.id) || undefined,
+      wallet_type: walletType,
+      account_title: accountTitle,
+      account_number: accountNumber,
+      iban,
+      bank_name: bankName,
+      branch_name: branchName,
+      instructions,
+      is_enabled: asBoolean(wallet.is_enabled, true),
+      is_default: asBoolean(wallet.is_default, false),
+      display_order: asSafeNumber(wallet.display_order, index),
+    },
+  };
+}
+
+async function ensureWalletTableExists(client: Awaited<ReturnType<typeof getClient>>) {
+  const tableCheck = await client.query(
+    `SELECT 1
+     FROM information_schema.tables
+     WHERE table_schema = 'public'
+       AND table_name = 'society_payment_wallets'
+     LIMIT 1`,
+  );
+  return tableCheck.rows.length > 0;
+}
+
+async function buildSettingsResponse(societyId: string) {
+  const result = await query(`SELECT * FROM society_settings WHERE society_id = $1`, [
+    societyId,
+  ]);
+  const wallets = await listSocietyPaymentWallets(
+    (text, params) => query(text, params),
+    societyId,
+    { includeDisabled: true },
+  );
+
+  const defaults = {
+    society_id: societyId,
+    event_creation_role: "Director",
+    chat_management_role: "Vice President",
+    content_upload_role: "Deputy Director",
+    ticketing_enabled: true,
+    transfer_policy: "ALLOWED",
+    transfer_deadline_hours: 24,
+    payment_provider: null,
+    payment_recipient_name: null,
+    payment_account_number: null,
+    payment_iban: null,
+    payment_instructions: null,
+  };
+
+  const settings = result.rows[0] || defaults;
+  const activeWallet = wallets.find((wallet) => wallet.is_default && wallet.is_enabled) || null;
+
+  return {
+    ...settings,
+    payment_wallets: wallets,
+    active_wallet_id: activeWallet?.id || null,
+  };
+}
+
+// GET /api/societies/[id]/settings
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { id: string } },
 ) {
   try {
     const user = await getCurrentUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { id } = params;
 
-    // Check user is a member of this society
     const membership = await query(
-      `SELECT r.hierarchy_level FROM society_memberships sm
+      `SELECT r.hierarchy_level
+       FROM society_memberships sm
        JOIN roles r ON sm.role_id = r.id
        WHERE sm.user_id = $1 AND sm.society_id = $2 AND sm.is_active = TRUE`,
-      [user.userId, id]
-    );
-    if (membership.rows.length === 0 && user.userType !== 'SUPER_ADMIN') {
-      return NextResponse.json({ error: 'Not a member' }, { status: 403 });
-    }
-
-    const result = await query(
-      `SELECT * FROM society_settings WHERE society_id = $1`,
-      [id]
+      [user.userId, id],
     );
 
-    if (result.rows.length === 0) {
-      // Return defaults
-      return NextResponse.json({
-        society_id: id,
-        event_creation_role: 'Director',
-        chat_management_role: 'Vice President',
-        content_upload_role: 'Deputy Director',
-        ticketing_enabled: true,
-        transfer_policy: 'ALLOWED',
-        transfer_deadline_hours: 24,
-        payment_provider: null,
-        payment_recipient_name: null,
-        payment_account_number: null,
-        payment_iban: null,
-        payment_instructions: null,
-      });
+    if (membership.rows.length === 0 && user.userType !== "SUPER_ADMIN") {
+      return NextResponse.json({ error: "Not a member" }, { status: 403 });
     }
 
-    return NextResponse.json(result.rows[0]);
+    const payload = await buildSettingsResponse(id);
+    return NextResponse.json(payload);
   } catch (error) {
-    console.error('Get settings error:', error);
-    return NextResponse.json({ error: 'Failed' }, { status: 500 });
+    console.error("Get settings error:", error);
+    return NextResponse.json({ error: "Failed" }, { status: 500 });
   }
 }
 
-// PATCH /api/societies/[id]/settings — update society settings (President only)
+// PATCH /api/societies/[id]/settings
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { id: string } },
 ) {
+  const client = await getClient();
   try {
     const user = await getCurrentUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { id } = params;
+    const { id: societyId } = params;
 
-    // Check user is President or Super Admin
-    const membership = await query(
-      `SELECT r.name, r.hierarchy_level FROM society_memberships sm
+    const membership = await client.query(
+      `SELECT r.name
+       FROM society_memberships sm
        JOIN roles r ON sm.role_id = r.id
        WHERE sm.user_id = $1 AND sm.society_id = $2 AND sm.is_active = TRUE`,
-      [user.userId, id]
+      [user.userId, societyId],
     );
-    const isPresident = membership.rows.some((m: any) => m.name === 'President');
-    if (!isPresident && user.userType !== 'SUPER_ADMIN') {
-      return NextResponse.json({ error: 'Only the President can update settings' }, { status: 403 });
+    const isPresident = membership.rows.some(
+      (entry: { name: string }) => entry.name === "President",
+    );
+
+    if (!isPresident && user.userType !== "SUPER_ADMIN") {
+      return NextResponse.json(
+        { error: "Only the President can update settings" },
+        { status: 403 },
+      );
     }
 
     const body = await request.json();
-    const {
-      event_creation_role,
-      chat_management_role,
-      content_upload_role,
-      ticketing_enabled,
-      transfer_policy,
-      transfer_deadline_hours,
-      payment_provider,
-      payment_recipient_name,
-      payment_account_number,
-      payment_iban,
-      payment_instructions,
-    } = body;
+    const eventCreationRole = asOptionalText(body.event_creation_role);
+    const chatManagementRole = asOptionalText(body.chat_management_role);
+    const contentUploadRole = asOptionalText(body.content_upload_role);
+    const transferPolicy = asOptionalText(body.transfer_policy);
+    const ticketingEnabled =
+      typeof body.ticketing_enabled === "boolean" ? body.ticketing_enabled : null;
+    const transferDeadlineHours =
+      Number.isFinite(Number(body.transfer_deadline_hours))
+        ? Number(body.transfer_deadline_hours)
+        : null;
 
-    const validRoles = ['President', 'Vice President', 'Director', 'Deputy Director', 'Member'];
-    if (event_creation_role && !validRoles.includes(event_creation_role)) {
-      return NextResponse.json({ error: 'Invalid event_creation_role' }, { status: 400 });
+    if (eventCreationRole && !VALID_ROLES.includes(eventCreationRole)) {
+      return NextResponse.json({ error: "Invalid event_creation_role" }, { status: 400 });
     }
-    if (chat_management_role && !validRoles.includes(chat_management_role)) {
-      return NextResponse.json({ error: 'Invalid chat_management_role' }, { status: 400 });
+    if (chatManagementRole && !VALID_ROLES.includes(chatManagementRole)) {
+      return NextResponse.json({ error: "Invalid chat_management_role" }, { status: 400 });
     }
-
-    const validPolicies = ['ALLOWED', 'RESTRICTED', 'DISABLED'];
-    if (transfer_policy && !validPolicies.includes(transfer_policy)) {
-      return NextResponse.json({ error: 'Invalid transfer_policy' }, { status: 400 });
+    if (contentUploadRole && !VALID_ROLES.includes(contentUploadRole)) {
+      return NextResponse.json({ error: "Invalid content_upload_role" }, { status: 400 });
+    }
+    if (transferPolicy && !VALID_POLICIES.includes(transferPolicy)) {
+      return NextResponse.json({ error: "Invalid transfer_policy" }, { status: 400 });
     }
 
-    // Upsert settings
-    const result = await query(
+    const legacyProvider = asOptionalText(body.payment_provider);
+    const legacyRecipient = asOptionalText(body.payment_recipient_name);
+    const legacyAccountNumber = asOptionalText(body.payment_account_number);
+    const legacyIban = normalizeIban(body.payment_iban);
+    const legacyInstructions = asOptionalText(body.payment_instructions);
+
+    const incomingWallets = Array.isArray(body.payment_wallets)
+      ? (body.payment_wallets as IncomingWallet[])
+      : null;
+    const incomingActiveWalletId = asOptionalText(body.active_wallet_id);
+
+    await client.query("BEGIN");
+
+    await client.query(
       `INSERT INTO society_settings (
          society_id,
          event_creation_role,
@@ -123,7 +279,20 @@ export async function PATCH(
          payment_iban,
          payment_instructions
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       VALUES (
+         $1,
+         COALESCE($2, 'Director'),
+         COALESCE($3, 'Vice President'),
+         COALESCE($4, 'Deputy Director'),
+         COALESCE($5, TRUE),
+         COALESCE($6, 'ALLOWED'),
+         COALESCE($7, 24),
+         $8,
+         $9,
+         $10,
+         $11,
+         $12
+       )
        ON CONFLICT (society_id) DO UPDATE SET
          event_creation_role = COALESCE($2, society_settings.event_creation_role),
          chat_management_role = COALESCE($3, society_settings.chat_management_role),
@@ -136,27 +305,326 @@ export async function PATCH(
          payment_account_number = COALESCE($10, society_settings.payment_account_number),
          payment_iban = COALESCE($11, society_settings.payment_iban),
          payment_instructions = COALESCE($12, society_settings.payment_instructions),
-         updated_at = NOW()
-       RETURNING *`,
+         updated_at = NOW()`,
       [
-        id,
-        event_creation_role || 'Director',
-        chat_management_role || 'Vice President',
-        content_upload_role || 'Deputy Director',
-        ticketing_enabled ?? true,
-        transfer_policy || 'ALLOWED',
-        transfer_deadline_hours || 24,
-        payment_provider ?? null,
-        payment_recipient_name ?? null,
-        payment_account_number ?? null,
-        payment_iban ?? null,
-        payment_instructions ?? null,
-      ]
+        societyId,
+        eventCreationRole,
+        chatManagementRole,
+        contentUploadRole,
+        ticketingEnabled,
+        transferPolicy,
+        transferDeadlineHours,
+        legacyProvider,
+        legacyRecipient,
+        legacyAccountNumber,
+        legacyIban,
+        legacyInstructions,
+      ],
     );
 
-    return NextResponse.json(result.rows[0]);
+    if (incomingWallets || incomingActiveWalletId) {
+      const hasWalletTable = await ensureWalletTableExists(client);
+      if (!hasWalletTable) {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          {
+            error:
+              "Wallet table is not ready. Please run migration 018-society-multi-wallets.sql.",
+            code: "PAYMENT_WALLET_TABLE_MISSING",
+          },
+          { status: 409 },
+        );
+      }
+    }
+
+    if (incomingWallets) {
+      const normalizedWallets: Array<Omit<PaymentWallet, "id"> & { id?: string }> = [];
+      const duplicateKeys = new Set<string>();
+
+      for (let i = 0; i < incomingWallets.length; i += 1) {
+        const normalized = normalizeIncomingWallet(incomingWallets[i], i);
+        if (!normalized.ok) {
+          await client.query("ROLLBACK");
+          return NextResponse.json({ error: normalized.error }, { status: 400 });
+        }
+
+        const candidate = normalized.value;
+        const dedupeKey = [
+          candidate.wallet_type,
+          candidate.account_number || "",
+          candidate.iban || "",
+        ].join("|");
+        if (duplicateKeys.has(dedupeKey)) {
+          await client.query("ROLLBACK");
+          return NextResponse.json(
+            { error: `Wallet #${i + 1}: Duplicate wallet details are not allowed` },
+            { status: 400 },
+          );
+        }
+        duplicateKeys.add(dedupeKey);
+        normalizedWallets.push(candidate);
+      }
+
+      const existingWallets = await client.query(
+        `SELECT id
+         FROM society_payment_wallets
+         WHERE society_id = $1`,
+        [societyId],
+      );
+      const existingIds = new Set(existingWallets.rows.map((row: { id: string }) => row.id));
+
+      const resolvedWallets: PaymentWallet[] = [];
+
+      for (const wallet of normalizedWallets) {
+        if (wallet.id && existingIds.has(wallet.id)) {
+          const updated = await client.query(
+            `UPDATE society_payment_wallets
+             SET wallet_type = $3,
+                 account_title = $4,
+                 account_number = $5,
+                 iban = $6,
+                 bank_name = $7,
+                 branch_name = $8,
+                 instructions = $9,
+                 is_enabled = $10,
+                 display_order = $11,
+                 updated_at = NOW()
+             WHERE id = $1 AND society_id = $2
+             RETURNING
+               id,
+               wallet_type,
+               account_title,
+               account_number,
+               iban,
+               bank_name,
+               branch_name,
+               instructions,
+               is_enabled,
+               is_default,
+               display_order`,
+            [
+              wallet.id,
+              societyId,
+              wallet.wallet_type,
+              wallet.account_title,
+              wallet.account_number,
+              wallet.iban,
+              wallet.bank_name,
+              wallet.branch_name,
+              wallet.instructions,
+              wallet.is_enabled,
+              wallet.display_order,
+            ],
+          );
+          if (updated.rows[0]) {
+            resolvedWallets.push(updated.rows[0] as PaymentWallet);
+          }
+        } else {
+          const inserted = await client.query(
+            `INSERT INTO society_payment_wallets (
+               society_id,
+               wallet_type,
+               account_title,
+               account_number,
+               iban,
+               bank_name,
+               branch_name,
+               instructions,
+               is_enabled,
+               is_default,
+               display_order,
+               created_by
+             )
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, FALSE, $10, $11)
+             RETURNING
+               id,
+               wallet_type,
+               account_title,
+               account_number,
+               iban,
+               bank_name,
+               branch_name,
+               instructions,
+               is_enabled,
+               is_default,
+               display_order`,
+            [
+              societyId,
+              wallet.wallet_type,
+              wallet.account_title,
+              wallet.account_number,
+              wallet.iban,
+              wallet.bank_name,
+              wallet.branch_name,
+              wallet.instructions,
+              wallet.is_enabled,
+              wallet.display_order,
+              user.userId,
+            ],
+          );
+          if (inserted.rows[0]) {
+            resolvedWallets.push(inserted.rows[0] as PaymentWallet);
+          }
+        }
+      }
+
+      const resolvedIds = resolvedWallets.map((wallet) => wallet.id);
+      if (resolvedIds.length > 0) {
+        await client.query(
+          `DELETE FROM society_payment_wallets
+           WHERE society_id = $1
+             AND id <> ALL($2::uuid[])`,
+          [societyId, resolvedIds],
+        );
+      } else {
+        await client.query(`DELETE FROM society_payment_wallets WHERE society_id = $1`, [
+          societyId,
+        ]);
+      }
+
+      const enabledWallets = resolvedWallets.filter((wallet) => wallet.is_enabled);
+      let desiredActiveWalletId: string | null = null;
+
+      if (incomingActiveWalletId) {
+        const explicit = enabledWallets.find((wallet) => wallet.id === incomingActiveWalletId);
+        if (!explicit) {
+          await client.query("ROLLBACK");
+          return NextResponse.json(
+            { error: "Selected active wallet must be enabled and belong to this society" },
+            { status: 400 },
+          );
+        }
+        desiredActiveWalletId = explicit.id;
+      } else {
+        const preferredInput = normalizedWallets.find(
+          (wallet) =>
+            wallet.is_enabled &&
+            wallet.is_default &&
+            wallet.id &&
+            enabledWallets.some((resolved) => resolved.id === wallet.id),
+        );
+
+        if (preferredInput?.id) {
+          desiredActiveWalletId = preferredInput.id;
+        } else if (enabledWallets[0]) {
+          desiredActiveWalletId = enabledWallets[0].id;
+        }
+      }
+
+      await client.query(
+        `UPDATE society_payment_wallets
+         SET is_default = FALSE
+         WHERE society_id = $1`,
+        [societyId],
+      );
+
+      if (desiredActiveWalletId) {
+        await client.query(
+          `UPDATE society_payment_wallets
+           SET is_default = TRUE
+           WHERE society_id = $1
+             AND id = $2
+             AND is_enabled = TRUE`,
+          [societyId, desiredActiveWalletId],
+        );
+      }
+
+      const walletForLegacy = desiredActiveWalletId
+        ? enabledWallets.find((wallet) => wallet.id === desiredActiveWalletId) || null
+        : null;
+      const legacyFromWallet = buildLegacyPaymentFields(walletForLegacy);
+
+      await client.query(
+        `UPDATE society_settings
+         SET payment_provider = $2,
+             payment_recipient_name = $3,
+             payment_account_number = $4,
+             payment_iban = $5,
+             payment_instructions = $6,
+             updated_at = NOW()
+         WHERE society_id = $1`,
+        [
+          societyId,
+          legacyFromWallet.payment_provider,
+          legacyFromWallet.payment_recipient_name,
+          legacyFromWallet.payment_account_number,
+          legacyFromWallet.payment_iban,
+          legacyFromWallet.payment_instructions,
+        ],
+      );
+    } else if (incomingActiveWalletId) {
+      const activeWallet = await client.query(
+        `SELECT
+           id,
+           wallet_type,
+           account_title,
+           account_number,
+           iban,
+           bank_name,
+           branch_name,
+           instructions,
+           is_enabled,
+           is_default,
+           display_order
+         FROM society_payment_wallets
+         WHERE society_id = $1
+           AND id = $2
+           AND is_enabled = TRUE
+         LIMIT 1`,
+        [societyId, incomingActiveWalletId],
+      );
+
+      if (activeWallet.rows.length === 0) {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          { error: "Selected active wallet does not exist or is disabled" },
+          { status: 400 },
+        );
+      }
+
+      await client.query(
+        `UPDATE society_payment_wallets
+         SET is_default = FALSE
+         WHERE society_id = $1`,
+        [societyId],
+      );
+      await client.query(
+        `UPDATE society_payment_wallets
+         SET is_default = TRUE
+         WHERE society_id = $1 AND id = $2`,
+        [societyId, incomingActiveWalletId],
+      );
+
+      const legacyFromWallet = buildLegacyPaymentFields(activeWallet.rows[0]);
+      await client.query(
+        `UPDATE society_settings
+         SET payment_provider = $2,
+             payment_recipient_name = $3,
+             payment_account_number = $4,
+             payment_iban = $5,
+             payment_instructions = $6,
+             updated_at = NOW()
+         WHERE society_id = $1`,
+        [
+          societyId,
+          legacyFromWallet.payment_provider,
+          legacyFromWallet.payment_recipient_name,
+          legacyFromWallet.payment_account_number,
+          legacyFromWallet.payment_iban,
+          legacyFromWallet.payment_instructions,
+        ],
+      );
+    }
+
+    await client.query("COMMIT");
+
+    const payload = await buildSettingsResponse(societyId);
+    return NextResponse.json(payload);
   } catch (error) {
-    console.error('Update settings error:', error);
-    return NextResponse.json({ error: 'Failed' }, { status: 500 });
+    await client.query("ROLLBACK");
+    console.error("Update settings error:", error);
+    return NextResponse.json({ error: "Failed" }, { status: 500 });
+  } finally {
+    client.release();
   }
 }

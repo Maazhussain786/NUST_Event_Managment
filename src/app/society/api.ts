@@ -741,7 +741,7 @@ export function fetchSettings(societyId: string): Promise<SocietySettings> {
 export function updateSettings(
   societyId: string,
   data: Partial<SocietySettings>,
-): Promise<{ success: boolean }> {
+): Promise<SocietySettings> {
   return api(`${s(societyId)}/settings`, {
     method: "PATCH",
     body: JSON.stringify(data),

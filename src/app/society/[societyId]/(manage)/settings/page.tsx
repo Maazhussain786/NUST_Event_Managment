@@ -33,10 +33,16 @@ import {
   transferPresidency,
   SocietyApiError,
 } from '../../../api';
-import type { SocietySettings, SocietyProfile } from '../../../types';
+import type { SocietySettings, SocietyProfile, SocietyPaymentWallet, SocietyPaymentWalletType } from '../../../types';
 import { SmartImage } from '@/components/SmartImage';
 
 type TabKey = 'operations' | 'profile' | 'branding';
+
+function walletTypeLabel(type: SocietyPaymentWalletType): string {
+  if (type === 'EASYPAISA') return 'Easypaisa';
+  if (type === 'JAZZCASH') return 'JazzCash';
+  return 'Bank Account';
+}
 
 export default function SettingsPage() {
   const params = useParams();
@@ -55,7 +61,14 @@ export default function SettingsPage() {
       fetchSettings(societyId),
       fetchSocietyProfile(societyId),
     ])
-      .then(([s, p]) => { setSettings(s); setProfile(p); })
+      .then(([s, p]) => {
+        setSettings({
+          ...s,
+          payment_wallets: Array.isArray(s.payment_wallets) ? s.payment_wallets : [],
+          active_wallet_id: s.active_wallet_id || null,
+        });
+        setProfile(p);
+      })
       .catch(err => setError(err instanceof SocietyApiError ? err.message : 'Failed to load settings'))
       .finally(() => setLoading(false));
   }, [societyId]);
@@ -65,7 +78,26 @@ export default function SettingsPage() {
     setSaving(true);
     setSaveSuccess(false);
     try {
-      await updateSettings(societyId, settings);
+      const payment_wallets = settings.payment_wallets.map((wallet, index) => ({
+        ...wallet,
+        account_title: wallet.account_title?.trim() || '',
+        account_number: wallet.account_number?.trim() || null,
+        iban: wallet.iban?.trim() || null,
+        bank_name: wallet.bank_name?.trim() || null,
+        branch_name: wallet.branch_name?.trim() || null,
+        instructions: wallet.instructions?.trim() || null,
+        display_order: index,
+      }));
+      const active_wallet_id =
+        settings.active_wallet_id ||
+        payment_wallets.find((wallet) => wallet.is_default && wallet.is_enabled)?.id ||
+        null;
+
+      await updateSettings(societyId, {
+        ...settings,
+        payment_wallets,
+        active_wallet_id,
+      });
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2000);
     } catch (err) {
@@ -100,6 +132,81 @@ export default function SettingsPage() {
   ];
 
   const roleOptions = ['President', 'Vice President', 'Director', 'Deputy Director', 'Member'];
+
+  const addWallet = () => {
+    if (!settings) return;
+    const nextOrder = settings.payment_wallets.length;
+    const newWallet: SocietyPaymentWallet = {
+      wallet_type: 'EASYPAISA',
+      account_title: '',
+      account_number: '',
+      iban: null,
+      bank_name: null,
+      branch_name: null,
+      instructions: null,
+      is_enabled: true,
+      is_default: settings.payment_wallets.length === 0,
+      display_order: nextOrder,
+    };
+    setSettings({
+      ...settings,
+      payment_wallets: [...settings.payment_wallets, newWallet],
+      active_wallet_id: settings.active_wallet_id || null,
+    });
+  };
+
+  const updateWallet = (
+    index: number,
+    patch: Partial<SocietyPaymentWallet>,
+  ) => {
+    if (!settings) return;
+    const nextWallets = settings.payment_wallets.map((wallet, walletIndex) => {
+      if (walletIndex !== index) return wallet;
+      const updated = { ...wallet, ...patch };
+      if (updated.wallet_type !== 'BANK') {
+        updated.iban = null;
+        updated.bank_name = null;
+        updated.branch_name = null;
+      }
+      if (updated.wallet_type === 'BANK' && !updated.account_number) {
+        updated.account_number = null;
+      }
+      return updated;
+    });
+    setSettings({ ...settings, payment_wallets: nextWallets });
+  };
+
+  const removeWallet = (index: number) => {
+    if (!settings) return;
+    const wallet = settings.payment_wallets[index];
+    const nextWallets = settings.payment_wallets
+      .filter((_, walletIndex) => walletIndex !== index)
+      .map((item, order) => ({ ...item, display_order: order }));
+    const nextActive =
+      settings.active_wallet_id && settings.active_wallet_id === wallet?.id
+        ? nextWallets.find((item) => item.is_enabled)?.id || null
+        : settings.active_wallet_id;
+    setSettings({
+      ...settings,
+      payment_wallets: nextWallets,
+      active_wallet_id: nextActive || null,
+    });
+  };
+
+  const setActiveWallet = (targetIndex: number) => {
+    if (!settings) return;
+    const targetWallet = settings.payment_wallets[targetIndex];
+    if (!targetWallet || !targetWallet.is_enabled) return;
+    const nextWallets = settings.payment_wallets.map((wallet, walletIndex) => ({
+      ...wallet,
+      is_default: walletIndex === targetIndex,
+    }));
+    setSettings({
+      ...settings,
+      payment_wallets: nextWallets,
+      active_wallet_id: targetWallet.id || null,
+    });
+  };
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -200,60 +307,167 @@ export default function SettingsPage() {
             </div>
 
             <div className="pt-2 border-t border-border space-y-4">
-              <h4 className="text-sm font-semibold text-primary">Manual Payment Details</h4>
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="text-sm font-semibold text-primary">Payment Wallets</h4>
+                <button
+                  type="button"
+                  onClick={addWallet}
+                  className="px-3 py-1.5 rounded-lg border border-themed text-xs font-medium hover:bg-secondary transition-colors"
+                >
+                  + Add Wallet
+                </button>
+              </div>
               <p className="text-xs text-muted">
-                Students will see these details before submitting payment proof for paid events.
+                Configure multiple wallets for paid events. One enabled wallet should be marked active by default.
               </p>
 
-              <div>
-                <label className="block text-sm text-secondary mb-1">Provider / Method</label>
-                <input
-                  value={settings.payment_provider || ''}
-                  onChange={e => setSettings({ ...settings, payment_provider: e.target.value || null })}
-                  className="input-field text-sm w-full"
-                  placeholder="Bank Transfer, Easypaisa, JazzCash"
-                />
-              </div>
+              {settings.payment_wallets.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-themed p-4 text-xs text-muted text-center">
+                  No wallet added yet. Add at least one wallet so students can pay for paid events.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {settings.payment_wallets.map((wallet, walletIndex) => {
+                    const isActive = Boolean(
+                      wallet.is_enabled &&
+                      (wallet.is_default || (wallet.id && wallet.id === settings.active_wallet_id))
+                    );
+                    return (
+                      <div key={wallet.id || `wallet-${walletIndex}`} className="rounded-xl border border-themed p-3 space-y-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-semibold text-primary">
+                            Wallet #{walletIndex + 1}
+                            <span className="ml-2 text-[11px] text-muted">{walletTypeLabel(wallet.wallet_type)}</span>
+                          </p>
+                          <div className="flex items-center gap-2">
+                            {isActive ? (
+                              <span className="text-[11px] px-2 py-1 rounded-md bg-brand-500/15 text-brand-600">Active</span>
+                            ) : null}
+                            <button
+                              type="button"
+                              onClick={() => removeWallet(walletIndex)}
+                              className="text-[11px] px-2 py-1 rounded-md border border-themed hover:bg-secondary transition-colors"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
 
-              <div>
-                <label className="block text-sm text-secondary mb-1">Recipient Name</label>
-                <input
-                  value={settings.payment_recipient_name || ''}
-                  onChange={e => setSettings({ ...settings, payment_recipient_name: e.target.value || null })}
-                  className="input-field text-sm w-full"
-                  placeholder="NUST Developers Society"
-                />
-              </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs text-secondary mb-1">Wallet Type</label>
+                            <select
+                              value={wallet.wallet_type}
+                              onChange={(e) =>
+                                updateWallet(walletIndex, {
+                                  wallet_type: e.target.value as SocietyPaymentWalletType,
+                                })
+                              }
+                              className="input-field text-sm w-full"
+                            >
+                              <option value="EASYPAISA">Easypaisa</option>
+                              <option value="JAZZCASH">JazzCash</option>
+                              <option value="BANK">Bank Account</option>
+                            </select>
+                          </div>
 
-              <div>
-                <label className="block text-sm text-secondary mb-1">Account / Wallet Number</label>
-                <input
-                  value={settings.payment_account_number || ''}
-                  onChange={e => setSettings({ ...settings, payment_account_number: e.target.value || null })}
-                  className="input-field text-sm w-full"
-                  placeholder="03xx-xxxxxxx or bank account number"
-                />
-              </div>
+                          <div>
+                            <label className="block text-xs text-secondary mb-1">Account Holder Name</label>
+                            <input
+                              value={wallet.account_title || ''}
+                              onChange={(e) => updateWallet(walletIndex, { account_title: e.target.value })}
+                              className="input-field text-sm w-full"
+                              placeholder="Account title"
+                            />
+                          </div>
+                        </div>
 
-              <div>
-                <label className="block text-sm text-secondary mb-1">IBAN (optional)</label>
-                <input
-                  value={settings.payment_iban || ''}
-                  onChange={e => setSettings({ ...settings, payment_iban: e.target.value || null })}
-                  className="input-field text-sm w-full"
-                  placeholder="PKxx xxxx xxxx xxxx xxxx xxxx"
-                />
-              </div>
+                        {wallet.wallet_type === 'BANK' ? (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-xs text-secondary mb-1">IBAN</label>
+                              <input
+                                value={wallet.iban || ''}
+                                onChange={(e) => updateWallet(walletIndex, { iban: e.target.value })}
+                                className="input-field text-sm w-full"
+                                placeholder="PKxx..."
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-secondary mb-1">Bank Name</label>
+                              <input
+                                value={wallet.bank_name || ''}
+                                onChange={(e) => updateWallet(walletIndex, { bank_name: e.target.value })}
+                                className="input-field text-sm w-full"
+                                placeholder="Meezan Bank"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-secondary mb-1">Branch Name (optional)</label>
+                              <input
+                                value={wallet.branch_name || ''}
+                                onChange={(e) => updateWallet(walletIndex, { branch_name: e.target.value })}
+                                className="input-field text-sm w-full"
+                                placeholder="Blue Area Branch"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-secondary mb-1">Account Number (optional)</label>
+                              <input
+                                value={wallet.account_number || ''}
+                                onChange={(e) => updateWallet(walletIndex, { account_number: e.target.value })}
+                                className="input-field text-sm w-full"
+                                placeholder="Account number"
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            <label className="block text-xs text-secondary mb-1">Wallet Number</label>
+                            <input
+                              value={wallet.account_number || ''}
+                              onChange={(e) => updateWallet(walletIndex, { account_number: e.target.value })}
+                              className="input-field text-sm w-full"
+                              placeholder="03xx-xxxxxxx"
+                            />
+                          </div>
+                        )}
 
-              <div>
-                <label className="block text-sm text-secondary mb-1">Payment Instructions</label>
-                <textarea
-                  value={settings.payment_instructions || ''}
-                  onChange={e => setSettings({ ...settings, payment_instructions: e.target.value || null })}
-                  className="input-field text-sm w-full min-h-[90px]"
-                  placeholder="Transfer exact amount, then upload screenshot with transaction reference."
-                />
-              </div>
+                        <div>
+                          <label className="block text-xs text-secondary mb-1">Instructions (optional)</label>
+                          <textarea
+                            value={wallet.instructions || ''}
+                            onChange={(e) => updateWallet(walletIndex, { instructions: e.target.value })}
+                            className="input-field text-sm w-full min-h-[70px]"
+                            placeholder="Transfer instructions shown on registration screen"
+                          />
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-3">
+                          <label className="flex items-center gap-2 text-xs text-secondary">
+                            <input
+                              type="checkbox"
+                              checked={wallet.is_enabled}
+                              onChange={(e) => updateWallet(walletIndex, { is_enabled: e.target.checked })}
+                              className="w-4 h-4 rounded accent-brand-500"
+                            />
+                            Enabled
+                          </label>
+
+                          <button
+                            type="button"
+                            onClick={() => setActiveWallet(walletIndex)}
+                            disabled={!wallet.is_enabled}
+                            className="px-2.5 py-1.5 rounded-md border border-themed text-xs font-medium hover:bg-secondary transition-colors disabled:opacity-50"
+                          >
+                            Set As Active
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
 

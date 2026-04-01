@@ -48,6 +48,21 @@ interface UserRegistration {
   paymentProofStatus?: string | null;
   paymentRejectionReason?: string | null;
   hasProof?: boolean;
+  selectedWalletId?: string | null;
+}
+
+interface PaymentWallet {
+  id: string;
+  wallet_type: 'EASYPAISA' | 'JAZZCASH' | 'BANK';
+  account_title: string;
+  account_number: string | null;
+  iban: string | null;
+  bank_name: string | null;
+  branch_name: string | null;
+  instructions: string | null;
+  is_enabled: boolean;
+  is_default: boolean;
+  display_order: number;
 }
 
 interface PaymentDetails {
@@ -57,6 +72,8 @@ interface PaymentDetails {
   iban: string | null;
   instructions: string | null;
   configured: boolean;
+  wallets: PaymentWallet[];
+  active_wallet_id: string | null;
 }
 
 function EventDetailSkeleton() {
@@ -82,6 +99,13 @@ function EventDetailSkeleton() {
   );
 }
 
+function walletTypeLabel(type: PaymentWallet['wallet_type'] | null | undefined): string {
+  if (type === 'EASYPAISA') return 'Easypaisa';
+  if (type === 'JAZZCASH') return 'JazzCash';
+  if (type === 'BANK') return 'Bank Account';
+  return 'Wallet';
+}
+
 export default function EventDetailPage() {
   const router = useRouter();
   const params = useParams();
@@ -92,6 +116,7 @@ export default function EventDetailPage() {
   const [isFavorite, setIsFavorite] = useState(false);
   const [registering, setRegistering] = useState(false);
   const [paymentDetails, setPaymentDetails] = useState<PaymentDetails | null>(null);
+  const [selectedWalletId, setSelectedWalletId] = useState<string | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [transactionRef, setTransactionRef] = useState('');
   const [paymentNote, setPaymentNote] = useState('');
@@ -102,6 +127,7 @@ export default function EventDetailPage() {
   useEffect(() => {
     setUserRegistration({ hasTicket: false });
     setPaymentDetails(null);
+    setSelectedWalletId(null);
 
     fetch(`/api/events/${params.id}`)
       .then((r) => r.json())
@@ -110,11 +136,26 @@ export default function EventDetailPage() {
         if (data.userRegistration) {
           setUserRegistration(data.userRegistration);
         }
-        setPaymentDetails(data.paymentDetails || null);
+        const details: PaymentDetails | null = data.paymentDetails || null;
+        setPaymentDetails(details);
+        if (details?.wallets?.length) {
+          const preferred =
+            data?.userRegistration?.selectedWalletId &&
+            details.wallets.some((wallet) => wallet.id === data.userRegistration.selectedWalletId)
+              ? data.userRegistration.selectedWalletId
+              : details.active_wallet_id || details.wallets[0].id;
+          setSelectedWalletId(preferred || null);
+        }
       })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [params.id]);
+
+  const selectedWallet =
+    paymentDetails?.wallets?.find((wallet) => wallet.id === selectedWalletId) ||
+    paymentDetails?.wallets?.find((wallet) => wallet.id === paymentDetails.active_wallet_id) ||
+    paymentDetails?.wallets?.[0] ||
+    null;
 
   const handleCTA = async () => {
     if (!requireAuth('Sign in to buy tickets or register for events')) return;
@@ -186,8 +227,13 @@ export default function EventDetailPage() {
     try {
       let ticketId = userRegistration.ticketId;
       let paymentReference = userRegistration.paymentReference || null;
+      const walletIdForRequest = selectedWallet?.id || null;
 
-      const purchaseRes = await fetch(`/api/events/${event.id}/purchase-ticket`, { method: 'POST' });
+      const purchaseRes = await fetch(`/api/events/${event.id}/purchase-ticket`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wallet_id: walletIdForRequest }),
+      });
       const purchaseData = await purchaseRes.json();
 
       if (!purchaseRes.ok) {
@@ -208,6 +254,7 @@ export default function EventDetailPage() {
           ticketId,
           paymentReference,
           hasProof: false,
+          selectedWalletId: walletIdForRequest,
         });
       }
 
@@ -221,6 +268,9 @@ export default function EventDetailPage() {
       fd.append('event_id', event.id);
       if (paymentReference) {
         fd.append('payment_reference', paymentReference);
+      }
+      if (walletIdForRequest) {
+        fd.append('wallet_id', walletIdForRequest);
       }
       fd.append('transaction_reference', transactionRef.trim());
       fd.append('note', paymentNote.trim());
@@ -245,6 +295,7 @@ export default function EventDetailPage() {
         paymentReference: prev.paymentReference || paymentReference,
         hasProof: true,
         paymentProofStatus: 'PENDING',
+        selectedWalletId: walletIdForRequest,
       }));
 
       setShowPaymentModal(false);
@@ -547,17 +598,40 @@ export default function EventDetailPage() {
 
             <div className="rounded-xl border border-border bg-secondary/30 p-3 space-y-2">
               <p className="text-sm font-semibold text-foreground">Amount: Rs. {event.ticket_price}</p>
-              <p className="text-xs text-muted-foreground">Provider: {paymentDetails?.provider || 'N/A'}</p>
-              <p className="text-xs text-muted-foreground">Recipient: {paymentDetails?.recipient_name || 'N/A'}</p>
-              {(paymentDetails?.account_number || paymentDetails?.iban) && (
+              {paymentDetails?.wallets?.length ? (
+                <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground">Payment Wallet</label>
+                  <select
+                    value={selectedWallet?.id || ''}
+                    onChange={(e) => setSelectedWalletId(e.target.value)}
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs"
+                  >
+                    {paymentDetails.wallets.map((wallet) => (
+                      <option key={wallet.id} value={wallet.id}>
+                        {walletTypeLabel(wallet.wallet_type)} • {wallet.account_title}
+                        {wallet.is_default ? ' (Active)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
+              <p className="text-xs text-muted-foreground">
+                Method: {selectedWallet ? walletTypeLabel(selectedWallet.wallet_type) : paymentDetails?.provider || 'N/A'}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Recipient: {selectedWallet?.account_title || paymentDetails?.recipient_name || 'N/A'}
+              </p>
+              {(selectedWallet?.account_number || selectedWallet?.iban || paymentDetails?.account_number || paymentDetails?.iban) && (
                 <div className="space-y-1">
-                  {paymentDetails?.account_number && (
+                  {(selectedWallet?.account_number || paymentDetails?.account_number) && (
                     <div className="flex items-center justify-between gap-2 text-xs">
-                      <span className="text-muted-foreground">Account/Wallet: {paymentDetails.account_number}</span>
+                      <span className="text-muted-foreground">
+                        Account/Wallet: {selectedWallet?.account_number || paymentDetails?.account_number}
+                      </span>
                       <button
                         className="px-2 py-1 rounded-md bg-muted text-foreground"
                         onClick={() => {
-                          navigator.clipboard.writeText(paymentDetails.account_number || '');
+                          navigator.clipboard.writeText(selectedWallet?.account_number || paymentDetails?.account_number || '');
                           toast.success('Account number copied');
                         }}
                       >
@@ -565,13 +639,13 @@ export default function EventDetailPage() {
                       </button>
                     </div>
                   )}
-                  {paymentDetails?.iban && (
+                  {(selectedWallet?.iban || paymentDetails?.iban) && (
                     <div className="flex items-center justify-between gap-2 text-xs">
-                      <span className="text-muted-foreground">IBAN: {paymentDetails.iban}</span>
+                      <span className="text-muted-foreground">IBAN: {selectedWallet?.iban || paymentDetails?.iban}</span>
                       <button
                         className="px-2 py-1 rounded-md bg-muted text-foreground"
                         onClick={() => {
-                          navigator.clipboard.writeText(paymentDetails.iban || '');
+                          navigator.clipboard.writeText(selectedWallet?.iban || paymentDetails?.iban || '');
                           toast.success('IBAN copied');
                         }}
                       >
@@ -579,10 +653,18 @@ export default function EventDetailPage() {
                       </button>
                     </div>
                   )}
+                  {selectedWallet?.bank_name && (
+                    <p className="text-xs text-muted-foreground">
+                      Bank: {selectedWallet.bank_name}
+                      {selectedWallet.branch_name ? ` (${selectedWallet.branch_name})` : ''}
+                    </p>
+                  )}
                 </div>
               )}
-              {paymentDetails?.instructions && (
-                <p className="text-xs text-muted-foreground whitespace-pre-wrap">{paymentDetails.instructions}</p>
+              {(selectedWallet?.instructions || paymentDetails?.instructions) && (
+                <p className="text-xs text-muted-foreground whitespace-pre-wrap">
+                  {selectedWallet?.instructions || paymentDetails?.instructions}
+                </p>
               )}
               {userRegistration.paymentRejectionReason && (
                 <p className="text-xs text-red-600">Previous review note: {userRegistration.paymentRejectionReason}</p>

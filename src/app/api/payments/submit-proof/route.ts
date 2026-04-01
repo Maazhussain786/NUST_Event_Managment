@@ -26,6 +26,8 @@ export async function POST(req: NextRequest) {
     const eventId = String(formData.get('event_id') || '').trim();
     const transactionReference = String(formData.get('transaction_reference') || '').trim();
     const note = String(formData.get('note') || '').trim();
+    const walletId = String(formData.get('wallet_id') || '').trim();
+    const walletIdCandidate = /^[0-9a-fA-F-]{36}$/.test(walletId) ? walletId : '';
 
     if (!ticketId && !paymentReference) {
       return NextResponse.json({ error: 'payment_reference or ticket_id is required' }, { status: 400 });
@@ -232,6 +234,16 @@ export async function POST(req: NextRequest) {
     const ticket = ticketResult.rows[0];
     const resolvedTicketId = ticket.id as string;
 
+    const walletColumn = await client.query(
+      `SELECT 1
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'tickets'
+         AND column_name = 'selected_wallet_id'
+       LIMIT 1`
+    );
+    const hasSelectedWalletColumn = walletColumn.rows.length > 0;
+
     if (ticket.user_id !== user.userId && user.userType !== 'SUPER_ADMIN') {
       await client.query('ROLLBACK');
       return NextResponse.json({ error: 'You can only submit proof for your own ticket' }, { status: 403 });
@@ -260,6 +272,33 @@ export async function POST(req: NextRequest) {
     if (ticket.status === 'CANCELLED') {
       await client.query('ROLLBACK');
       return NextResponse.json({ error: 'Ticket is cancelled' }, { status: 409 });
+    }
+
+    if (walletIdCandidate && hasSelectedWalletColumn) {
+      const walletCheck = await client.query(
+        `SELECT id
+         FROM society_payment_wallets
+         WHERE id = $1
+           AND society_id = $2
+           AND is_enabled = TRUE
+         LIMIT 1`,
+        [walletIdCandidate, ticket.society_id]
+      );
+      if (walletCheck.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return NextResponse.json(
+          { error: 'Selected wallet is invalid for this event' },
+          { status: 400 }
+        );
+      }
+
+      await client.query(
+        `UPDATE tickets
+         SET selected_wallet_id = $2,
+             updated_at = NOW()
+         WHERE id = $1`,
+        [resolvedTicketId, walletIdCandidate]
+      );
     }
 
     const blobPath = generateBlobPath('payment', ticket.event_id, 'proof', file.name);

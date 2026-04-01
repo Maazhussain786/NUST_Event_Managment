@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { Suspense, useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
   UserCheck, Search, Download, Filter, Calendar,
@@ -11,7 +11,7 @@ import { PageLoader, ErrorState, EmptyState, StatusBadge } from '../../../_compo
 import type { EventParticipant, SocietyEvent } from '../../../types';
 import { SmartImage } from '@/components/SmartImage';
 
-export default function ParticipantsPage() {
+function ParticipantsPageContent() {
   const { societyId } = useParams<{ societyId: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -182,6 +182,14 @@ export default function ParticipantsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function ParticipantsPage() {
+  return (
+    <Suspense fallback={<PageLoader />}>
+      <ParticipantsPageContent />
+    </Suspense>
   );
 }
 

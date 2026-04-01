@@ -1,8 +1,9 @@
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
-import { NextRequest, NextResponse } from 'next/server';
-import { getClient } from '@/lib/db';
-import { getCurrentUser } from '@/lib/auth';
+import { NextRequest, NextResponse } from "next/server";
+import { getClient } from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth";
+import { getSocietyPaymentDetails } from "@/lib/payment-wallets";
 
 /**
  * POST /api/events/[id]/purchase-ticket
@@ -10,247 +11,288 @@ import { getCurrentUser } from '@/lib/auth';
  * Purchase a ticket for a paid event.
  *
  * Rules:
- *   - Event must be paid (is_paid = TRUE)
- *   - User must be ACTIVE and not suspended in society
- *   - Society must be APPROVED
- *   - Cannot exceed max_participants (checked via participants_count on locked row)
- *   - Cannot purchase twice (UNIQUE constraint)
- *   - Registration deadline must not have passed
- *   - Event must not be cancelled/completed
- *
- * Returns payment payload (simulated gateway).
- * Ticket created with status = PENDING.
- * participants_count is NOT incremented here — only on APPROVED (payment confirm).
+ * - Event must be paid
+ * - User must be active and not suspended
+ * - Society must be approved
+ * - Capacity cannot be exceeded
+ * - Duplicate purchases are blocked
+ * - Registration must still be open
+ * - Event must not be cancelled/completed
  */
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const client = await getClient();
   try {
     const user = await getCurrentUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { id: eventId } = await params;
 
-    await client.query('BEGIN');
-
-    // ── Verify user is active ─────────────────────────────────────────
-    const userCheck = await client.query(
-      `SELECT id, status FROM users WHERE id = $1`,
-      [user.userId]
-    );
-    if (userCheck.rows.length === 0 || userCheck.rows[0].status !== 'ACTIVE') {
-      await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'Your account is not active' }, { status: 403 });
+    let requestedWalletId: string | null = null;
+    try {
+      const body = await req.json();
+      if (body && typeof body.wallet_id === "string" && body.wallet_id.trim()) {
+        requestedWalletId = body.wallet_id.trim();
+      }
+    } catch {
+      requestedWalletId = null;
     }
 
-    // ── Fetch event with lock ─────────────────────────────────────────
+    await client.query("BEGIN");
+
+    const userCheck = await client.query(
+      `SELECT id, status
+       FROM users
+       WHERE id = $1`,
+      [user.userId],
+    );
+    if (userCheck.rows.length === 0 || userCheck.rows[0].status !== "ACTIVE") {
+      await client.query("ROLLBACK");
+      return NextResponse.json({ error: "Your account is not active" }, { status: 403 });
+    }
+
     const eventResult = await client.query(
-      `SELECT e.id, e.title, e.society_id, e.is_cancelled, e.status,
-              e.is_paid, e.ticket_price, e.max_participants, e.participants_count,
-              e.event_start, e.event_end, e.registration_end, e.visibility,
-              e.created_by,
-              s.status AS society_status, s.name AS society_name
+      `SELECT
+         e.id,
+         e.title,
+         e.society_id,
+         e.is_cancelled,
+         e.status,
+         e.is_paid,
+         e.ticket_price,
+         e.max_participants,
+         e.participants_count,
+         e.event_start,
+         e.event_end,
+         e.registration_end,
+         e.visibility,
+         e.created_by,
+         s.status AS society_status,
+         s.name AS society_name
        FROM events e
        JOIN societies s ON e.society_id = s.id
        WHERE e.id = $1
        FOR UPDATE OF e`,
-      [eventId]
+      [eventId],
     );
     if (eventResult.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'Event not found' }, { status: 404 });
+      await client.query("ROLLBACK");
+      return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
-
     const event = eventResult.rows[0];
 
-    const paymentDetailsResult = await client.query(
-      `SELECT column_name
-       FROM information_schema.columns
-       WHERE table_schema = 'public'
-         AND table_name = 'society_settings'
-         AND column_name IN ('payment_provider', 'payment_recipient_name', 'payment_account_number', 'payment_iban', 'payment_instructions')`
-    );
-
-    let paymentDetails: {
-      provider: string | null;
-      recipient_name: string | null;
-      account_number: string | null;
-      iban: string | null;
-      instructions: string | null;
-      configured: boolean;
-    } | null = null;
-
-    if (paymentDetailsResult.rows.length >= 5) {
-      const settingsResult = await client.query(
-        `SELECT
-           payment_provider,
-           payment_recipient_name,
-           payment_account_number,
-           payment_iban,
-           payment_instructions
-         FROM society_settings
-         WHERE society_id = $1`,
-        [event.society_id]
-      );
-      const settings = settingsResult.rows[0] || {};
-      paymentDetails = {
-        provider: settings.payment_provider ?? null,
-        recipient_name: settings.payment_recipient_name ?? null,
-        account_number: settings.payment_account_number ?? null,
-        iban: settings.payment_iban ?? null,
-        instructions: settings.payment_instructions ?? null,
-        configured: !!(settings.payment_provider && settings.payment_recipient_name && (settings.payment_account_number || settings.payment_iban)),
-      };
-    }
-
-    if (!paymentDetails?.configured) {
-      await client.query('ROLLBACK');
-      return NextResponse.json(
-        {
-          error: 'Payment details are not configured for this society. Please ask society leadership to update payment settings first.',
-          code: 'PAYMENT_DETAILS_MISSING',
-        },
-        { status: 409 }
-      );
-    }
-
-    // ── Must be paid event ────────────────────────────────────────────
     if (!event.is_paid) {
-      await client.query('ROLLBACK');
+      await client.query("ROLLBACK");
       return NextResponse.json(
-        { error: 'This is a free event. Use /register instead.' },
-        { status: 400 }
+        { error: "This is a free event. Use /register instead." },
+        { status: 400 },
       );
     }
 
-    // ── Society must be APPROVED ──────────────────────────────────────
-    if (event.society_status !== 'APPROVED') {
-      await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'Society is not active' }, { status: 409 });
+    if (event.society_status !== "APPROVED") {
+      await client.query("ROLLBACK");
+      return NextResponse.json({ error: "Society is not active" }, { status: 409 });
     }
 
-    // ── Event must not be cancelled or completed ──────────────────────
-    if (event.is_cancelled || event.status === 'CANCELLED') {
-      await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'Event is cancelled' }, { status: 409 });
-    }
-    if (event.status === 'COMPLETED' || event.status === 'ARCHIVED') {
-      await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'Event has already ended' }, { status: 409 });
+    if (event.is_cancelled || event.status === "CANCELLED") {
+      await client.query("ROLLBACK");
+      return NextResponse.json({ error: "Event is cancelled" }, { status: 409 });
     }
 
-    // ── Registration deadline ─────────────────────────────────────────
+    if (event.status === "COMPLETED" || event.status === "ARCHIVED") {
+      await client.query("ROLLBACK");
+      return NextResponse.json({ error: "Event has already ended" }, { status: 409 });
+    }
+
     if (event.registration_end && new Date(event.registration_end) < new Date()) {
-      await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'Registration deadline has passed' }, { status: 409 });
+      await client.query("ROLLBACK");
+      return NextResponse.json({ error: "Registration deadline has passed" }, { status: 409 });
     }
 
-    // ── MEMBERS_ONLY visibility check ─────────────────────────────────
-    if (event.visibility === 'MEMBERS_ONLY') {
+    if (event.visibility === "MEMBERS_ONLY") {
       const memberCheck = await client.query(
-        `SELECT 1 FROM society_memberships
-         WHERE user_id = $1 AND society_id = $2 AND is_active = TRUE AND suspended_at IS NULL`,
-        [user.userId, event.society_id]
+        `SELECT 1
+         FROM society_memberships
+         WHERE user_id = $1
+           AND society_id = $2
+           AND is_active = TRUE
+           AND suspended_at IS NULL`,
+        [user.userId, event.society_id],
       );
-      if (memberCheck.rows.length === 0 && user.userType !== 'SUPER_ADMIN') {
-        await client.query('ROLLBACK');
-        return NextResponse.json({ error: 'This event is for society members only' }, { status: 403 });
-      }
-    }
-
-    // ── Suspension check ──────────────────────────────────────────────
-    const suspCheck = await client.query(
-      `SELECT 1 FROM society_memberships
-       WHERE user_id = $1 AND society_id = $2 AND suspended_at IS NOT NULL`,
-      [user.userId, event.society_id]
-    );
-    if (suspCheck.rows.length > 0) {
-      await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'You are suspended from this society' }, { status: 403 });
-    }
-
-    // ── Self-purchase protection ──────────────────────────────────────
-    // Block event creator from buying their own event
-    if (event.created_by === user.userId) {
-      await client.query('ROLLBACK');
-      return NextResponse.json(
-        { error: 'Event organizers cannot purchase tickets for their own events' },
-        { status: 403 }
-      );
-    }
-    // Block society president/VP (hierarchy >= 8) from buying own society events
-    if (user.userType !== 'SUPER_ADMIN') {
-      const orgCheck = await client.query(
-        `SELECT r.hierarchy_level FROM society_memberships sm
-         JOIN roles r ON sm.role_id = r.id
-         WHERE sm.user_id = $1 AND sm.society_id = $2 AND sm.is_active = TRUE
-         AND r.hierarchy_level >= 8`,
-        [user.userId, event.society_id]
-      );
-      if (orgCheck.rows.length > 0) {
-        await client.query('ROLLBACK');
+      if (memberCheck.rows.length === 0 && user.userType !== "SUPER_ADMIN") {
+        await client.query("ROLLBACK");
         return NextResponse.json(
-          { error: 'Society leadership cannot purchase tickets for their own society events' },
-          { status: 403 }
+          { error: "This event is for society members only" },
+          { status: 403 },
         );
       }
     }
 
-    // ── Capacity check (PENDING + APPROVED both count toward cap) ─────
-    // For paid events, we check pending tickets too to prevent over-selling
+    const suspendedCheck = await client.query(
+      `SELECT 1
+       FROM society_memberships
+       WHERE user_id = $1
+         AND society_id = $2
+         AND suspended_at IS NOT NULL`,
+      [user.userId, event.society_id],
+    );
+    if (suspendedCheck.rows.length > 0) {
+      await client.query("ROLLBACK");
+      return NextResponse.json({ error: "You are suspended from this society" }, { status: 403 });
+    }
+
+    if (event.created_by === user.userId) {
+      await client.query("ROLLBACK");
+      return NextResponse.json(
+        { error: "Event organizers cannot purchase tickets for their own events" },
+        { status: 403 },
+      );
+    }
+
+    if (user.userType !== "SUPER_ADMIN") {
+      const orgCheck = await client.query(
+        `SELECT r.hierarchy_level
+         FROM society_memberships sm
+         JOIN roles r ON sm.role_id = r.id
+         WHERE sm.user_id = $1
+           AND sm.society_id = $2
+           AND sm.is_active = TRUE
+           AND r.hierarchy_level >= 8`,
+        [user.userId, event.society_id],
+      );
+      if (orgCheck.rows.length > 0) {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          { error: "Society leadership cannot purchase tickets for their own society events" },
+          { status: 403 },
+        );
+      }
+    }
+
+    const paymentDetails = await getSocietyPaymentDetails(
+      (text, values) => client.query(text, values),
+      event.society_id,
+    );
+
+    if (!paymentDetails.configured || paymentDetails.wallets.length === 0) {
+      await client.query("ROLLBACK");
+      return NextResponse.json(
+        {
+          error:
+            "Payment details are not configured for this society. Please ask society leadership to update payment settings first.",
+          code: "PAYMENT_DETAILS_MISSING",
+        },
+        { status: 409 },
+      );
+    }
+
+    const selectedWallet =
+      (requestedWalletId
+        ? paymentDetails.wallets.find((wallet) => wallet.id === requestedWalletId)
+        : null) ||
+      paymentDetails.wallets.find((wallet) => wallet.id === paymentDetails.active_wallet_id) ||
+      paymentDetails.wallets[0];
+    const selectedWalletIdForTicket =
+      selectedWallet && /^[0-9a-fA-F-]{36}$/.test(selectedWallet.id)
+        ? selectedWallet.id
+        : null;
+
+    if (requestedWalletId && !selectedWallet) {
+      await client.query("ROLLBACK");
+      return NextResponse.json(
+        { error: "Selected wallet is invalid or unavailable", code: "INVALID_WALLET" },
+        { status: 400 },
+      );
+    }
+
+    const selectedWalletColumn = await client.query(
+      `SELECT 1
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'tickets'
+         AND column_name = 'selected_wallet_id'
+       LIMIT 1`,
+    );
+    const hasSelectedWalletColumn = selectedWalletColumn.rows.length > 0;
+
     if (event.max_participants) {
       const ticketCount = await client.query(
-        `SELECT COUNT(*) AS cnt FROM tickets
-         WHERE event_id = $1 AND status IN ('PENDING', 'APPROVED')`,
-        [eventId]
+        `SELECT COUNT(*) AS cnt
+         FROM tickets
+         WHERE event_id = $1
+           AND status IN ('PENDING', 'APPROVED')`,
+        [eventId],
       );
       const currentCount = parseInt(ticketCount.rows[0].cnt, 10);
       if (currentCount >= event.max_participants) {
-        await client.query('ROLLBACK');
-        return NextResponse.json({ error: 'Event has reached maximum capacity' }, { status: 409 });
+        await client.query("ROLLBACK");
+        return NextResponse.json({ error: "Event has reached maximum capacity" }, { status: 409 });
       }
     }
 
-    // ── Duplicate check ──────────────────────────────────────────────
     const existingTicket = await client.query(
-      `SELECT id, status, payment_reference FROM tickets WHERE event_id = $1 AND user_id = $2`,
-      [eventId, user.userId]
+      `SELECT id, status, payment_reference
+       FROM tickets
+       WHERE event_id = $1 AND user_id = $2`,
+      [eventId, user.userId],
     );
+
     if (existingTicket.rows.length > 0) {
-      const t = existingTicket.rows[0];
-      if (t.status === 'PENDING') {
-        await client.query('ROLLBACK');
+      const ticket = existingTicket.rows[0];
+
+      if (ticket.status === "PENDING") {
+        await client.query("ROLLBACK");
         return NextResponse.json(
           {
-            error: 'You already have a pending ticket for this event',
-            ticketId: t.id,
-            paymentReference: t.payment_reference,
+            error: "You already have a pending ticket for this event",
+            ticketId: ticket.id,
+            paymentReference: ticket.payment_reference,
             ticket: {
-              id: t.id,
-              status: 'PENDING',
-              paymentReference: t.payment_reference,
+              id: ticket.id,
+              status: "PENDING",
+              paymentReference: ticket.payment_reference,
             },
           },
-          { status: 409 }
+          { status: 409 },
         );
       }
-      if (t.status === 'APPROVED') {
-        await client.query('ROLLBACK');
-        return NextResponse.json({ error: 'You already have an approved ticket' }, { status: 409 });
+
+      if (ticket.status === "APPROVED") {
+        await client.query("ROLLBACK");
+        return NextResponse.json({ error: "You already have an approved ticket" }, { status: 409 });
       }
-      // If REJECTED or CANCELLED, allow re-purchase by updating the old row
-      if (t.status === 'REJECTED' || t.status === 'CANCELLED') {
-        const updated = await client.query(
-          `UPDATE tickets
-           SET status = 'PENDING', payment_reference = uuid_generate_v4(),
-               purchased_at = NOW(), approved_at = NULL, approved_by = NULL,
-               cancelled_at = NULL, checked_in_at = NULL, updated_at = NOW()
-           WHERE id = $1
-           RETURNING id, payment_reference`,
-          [t.id]
-        );
+
+      if (ticket.status === "REJECTED" || ticket.status === "CANCELLED") {
+        const updateSql = hasSelectedWalletColumn
+          ? `UPDATE tickets
+             SET status = 'PENDING',
+                 payment_reference = uuid_generate_v4(),
+                 selected_wallet_id = $2,
+                 purchased_at = NOW(),
+                 approved_at = NULL,
+                 approved_by = NULL,
+                 cancelled_at = NULL,
+                 checked_in_at = NULL,
+                 updated_at = NOW()
+             WHERE id = $1
+             RETURNING id, payment_reference`
+          : `UPDATE tickets
+             SET status = 'PENDING',
+                 payment_reference = uuid_generate_v4(),
+                 purchased_at = NOW(),
+                 approved_at = NULL,
+                 approved_by = NULL,
+                 cancelled_at = NULL,
+                 checked_in_at = NULL,
+                 updated_at = NOW()
+             WHERE id = $1
+             RETURNING id, payment_reference`;
+        const updateValues = hasSelectedWalletColumn
+          ? [ticket.id, selectedWalletIdForTicket]
+          : [ticket.id];
+        const updated = await client.query(updateSql, updateValues);
 
         try {
           await client.query(
@@ -260,41 +302,51 @@ export async function POST(
               user.userId,
               event.society_id,
               updated.rows[0].id,
-              JSON.stringify({ status: 'PENDING', payment_reference: updated.rows[0].payment_reference }),
-              JSON.stringify({ eventTitle: event.title, action: 'ticket_re_purchased' }),
-            ]
+              JSON.stringify({
+                status: "PENDING",
+                payment_reference: updated.rows[0].payment_reference,
+              }),
+              JSON.stringify({
+                eventTitle: event.title,
+                action: "ticket_re_purchased",
+              }),
+            ],
           );
         } catch (auditErr) {
-          // Some deployments have stricter/older audit enums; ticket purchase should still succeed.
-          console.warn('Audit log skipped for ticket re-purchase:', auditErr);
+          console.warn("Audit log skipped for ticket re-purchase:", auditErr);
         }
 
-        await client.query('COMMIT');
-
-        return NextResponse.json({
-          success: true,
-          ticket: {
-            id: updated.rows[0].id,
-            status: 'PENDING',
-            paymentReference: updated.rows[0].payment_reference,
+        await client.query("COMMIT");
+        return NextResponse.json(
+          {
+            success: true,
+            ticket: {
+              id: updated.rows[0].id,
+              status: "PENDING",
+              paymentReference: updated.rows[0].payment_reference,
+              selectedWalletId: selectedWallet?.id || null,
+            },
+            paymentDetails,
+            message: "Ticket request re-submitted. Pending approval by society.",
           },
-          paymentDetails,
-          message: 'Ticket request re-submitted. Pending approval by society.',
-        }, { status: 200 });
+          { status: 200 },
+        );
       }
     }
 
-    // ── Create ticket ─────────────────────────────────────────────────
-    const ticketResult = await client.query(
-      `INSERT INTO tickets (event_id, user_id, status, payment_reference)
-       VALUES ($1, $2, 'PENDING', uuid_generate_v4())
-       RETURNING id, payment_reference`,
-      [eventId, user.userId]
-    );
+    const insertSql = hasSelectedWalletColumn
+      ? `INSERT INTO tickets (event_id, user_id, status, payment_reference, selected_wallet_id)
+         VALUES ($1, $2, 'PENDING', uuid_generate_v4(), $3)
+         RETURNING id, payment_reference`
+      : `INSERT INTO tickets (event_id, user_id, status, payment_reference)
+         VALUES ($1, $2, 'PENDING', uuid_generate_v4())
+         RETURNING id, payment_reference`;
+    const insertValues = hasSelectedWalletColumn
+      ? [eventId, user.userId, selectedWalletIdForTicket]
+      : [eventId, user.userId];
+    const ticketResult = await client.query(insertSql, insertValues);
+    const createdTicket = ticketResult.rows[0];
 
-    const ticket = ticketResult.rows[0];
-
-    // ── Audit log ─────────────────────────────────────────────────────
     try {
       await client.query(
         `INSERT INTO audit_logs (action, performed_by, society_id, target_type, target_id, new_value, metadata)
@@ -302,22 +354,23 @@ export async function POST(
         [
           user.userId,
           event.society_id,
-          ticket.id,
-          JSON.stringify({ status: 'PENDING', payment_reference: ticket.payment_reference }),
+          createdTicket.id,
+          JSON.stringify({
+            status: "PENDING",
+            payment_reference: createdTicket.payment_reference,
+          }),
           JSON.stringify({
             eventTitle: event.title,
             societyName: event.society_name,
             ticketPrice: event.ticket_price,
-            action: 'ticket_purchased',
+            action: "ticket_purchased",
           }),
-        ]
+        ],
       );
     } catch (auditErr) {
-      // Some deployments have stricter/older audit enums; ticket purchase should still succeed.
-      console.warn('Audit log skipped for ticket purchase:', auditErr);
+      console.warn("Audit log skipped for ticket purchase:", auditErr);
     }
 
-    // ── Notify society approvers ─────────────────────────────────────
     try {
       const approvers = await client.query(
         `SELECT DISTINCT sm.user_id
@@ -329,7 +382,7 @@ export async function POST(
            AND sm.is_active = TRUE
            AND p.name = 'VERIFY_PAYMENTS'
            AND sm.user_id != $2`,
-        [event.society_id, user.userId]
+        [event.society_id, user.userId],
       );
       for (const approver of approvers.rows) {
         await client.query(
@@ -337,38 +390,44 @@ export async function POST(
            VALUES ($1, $2, $3, $4)`,
           [
             approver.user_id,
-            'New Ticket Request',
-            `${user.fullName || 'A student'} requested a ticket for "${event.title}" (Rs. ${event.ticket_price})`,
+            "New Ticket Request",
+            `${user.fullName || "A student"} requested a ticket for "${event.title}" (Rs. ${event.ticket_price})`,
             `/society/${event.society_id}/approvals`,
-          ]
+          ],
         );
       }
     } catch (notifErr) {
-      // Don't fail the ticket purchase if notification fails
-      console.error('Failed to notify approvers:', notifErr);
+      console.error("Failed to notify approvers:", notifErr);
     }
 
-    await client.query('COMMIT');
+    await client.query("COMMIT");
 
-    return NextResponse.json({
-      success: true,
-      ticket: {
-        id: ticket.id,
-        status: 'PENDING',
-        paymentReference: ticket.payment_reference,
+    return NextResponse.json(
+      {
+        success: true,
+        ticket: {
+          id: createdTicket.id,
+          status: "PENDING",
+          paymentReference: createdTicket.payment_reference,
+          selectedWalletId: selectedWallet?.id || null,
+        },
+        paymentDetails,
+        message: "Ticket request submitted. Pending approval by society.",
       },
-      paymentDetails,
-      message: 'Ticket request submitted. Pending approval by society.',
-    }, { status: 201 });
+      { status: 201 },
+    );
   } catch (error) {
-    await client.query('ROLLBACK');
+    await client.query("ROLLBACK");
 
-    if (error instanceof Error && error.message.includes('uq_ticket_event_user')) {
-      return NextResponse.json({ error: 'You already have a ticket for this event' }, { status: 409 });
+    if (error instanceof Error && error.message.includes("uq_ticket_event_user")) {
+      return NextResponse.json(
+        { error: "You already have a ticket for this event" },
+        { status: 409 },
+      );
     }
 
-    console.error('Ticket purchase error:', error);
-    return NextResponse.json({ error: 'Failed to purchase ticket' }, { status: 500 });
+    console.error("Ticket purchase error:", error);
+    return NextResponse.json({ error: "Failed to purchase ticket" }, { status: 500 });
   } finally {
     client.release();
   }

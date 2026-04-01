@@ -412,11 +412,29 @@ export interface SocietySettings {
   ticketing_enabled: boolean;
   transfer_policy: 'ALLOWED' | 'RESTRICTED' | 'DISABLED';
   transfer_deadline_hours: number;
-  payment_provider: string | null;
-  payment_recipient_name: string | null;
-  payment_account_number: string | null;
-  payment_iban: string | null;
-  payment_instructions: string | null;
+  payment_wallets: SocietyPaymentWallet[];
+  active_wallet_id: string | null;
+  payment_provider?: string | null;
+  payment_recipient_name?: string | null;
+  payment_account_number?: string | null;
+  payment_iban?: string | null;
+  payment_instructions?: string | null;
+}
+
+export type SocietyPaymentWalletType = 'EASYPAISA' | 'JAZZCASH' | 'BANK';
+
+export interface SocietyPaymentWallet {
+  id?: string;
+  wallet_type: SocietyPaymentWalletType;
+  account_title: string;
+  account_number: string | null;
+  iban: string | null;
+  bank_name: string | null;
+  branch_name: string | null;
+  instructions: string | null;
+  is_enabled: boolean;
+  is_default: boolean;
+  display_order: number;
 }
 
 // ─── Society Profile (Public Branding) ──────────────────────────────────────

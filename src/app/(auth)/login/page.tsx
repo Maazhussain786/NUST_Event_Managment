@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
@@ -12,7 +12,7 @@ import { setLocalUser, syncUserFromSession } from '@/lib/client-auth';
 
 const ease = [0.25, 0.1, 0.25, 1] as const;
 
-export default function LoginPage() {
+function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
@@ -185,5 +185,13 @@ export default function LoginPage() {
         )}
       </motion.div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-background" />}>
+      <LoginPageContent />
+    </Suspense>
   );
 }

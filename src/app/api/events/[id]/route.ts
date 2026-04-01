@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { CONTAINERS, resolveMediaFields } from "@/lib/blob";
+import { getSocietyPaymentDetails } from "@/lib/payment-wallets";
 
 export async function GET(
   req: Request,
@@ -58,49 +59,26 @@ export async function GET(
       paymentProofStatus?: string | null;
       paymentRejectionReason?: string | null;
       hasProof?: boolean;
+      selectedWalletId?: string | null;
     } = { hasTicket: false };
+    const paymentDetails = event.is_paid
+      ? await getSocietyPaymentDetails(
+          (text, params) => query(text, params),
+          event.society_id,
+        )
+      : null;
 
-    let paymentDetails: {
-      provider: string | null;
-      recipient_name: string | null;
-      account_number: string | null;
-      iban: string | null;
-      instructions: string | null;
-      configured: boolean;
-    } | null = null;
-
-    const paymentSettingCols = await query(
-      `SELECT column_name
-       FROM information_schema.columns
-       WHERE table_schema = 'public'
-         AND table_name = 'society_settings'
-         AND column_name IN ('payment_provider', 'payment_recipient_name', 'payment_account_number', 'payment_iban', 'payment_instructions')`
-    );
-    const hasPaymentSettingsCols = paymentSettingCols.rows.length >= 5;
-
-    if (event.is_paid && hasPaymentSettingsCols) {
-      const settings = await query(
-        `SELECT
-           payment_provider,
-           payment_recipient_name,
-           payment_account_number,
-           payment_iban,
-           payment_instructions
-         FROM society_settings
-         WHERE society_id = $1`,
-        [event.society_id]
-      );
-
-      const row = settings.rows[0] || {};
-      paymentDetails = {
-        provider: row.payment_provider ?? null,
-        recipient_name: row.payment_recipient_name ?? null,
-        account_number: row.payment_account_number ?? null,
-        iban: row.payment_iban ?? null,
-        instructions: row.payment_instructions ?? null,
-        configured: !!(row.payment_provider && row.payment_recipient_name && (row.payment_account_number || row.payment_iban)),
-      };
-    }
+    const ticketSelectedWalletColumn = event.is_paid
+      ? await query(
+          `SELECT 1
+           FROM information_schema.columns
+           WHERE table_schema = 'public'
+             AND table_name = 'tickets'
+             AND column_name = 'selected_wallet_id'
+           LIMIT 1`,
+        )
+      : { rows: [] };
+    const hasSelectedWalletColumn = ticketSelectedWalletColumn.rows.length > 0;
 
     if (user) {
       if (event.is_paid) {
@@ -110,6 +88,7 @@ export async function GET(
              t.id,
              t.status,
              t.payment_reference,
+             ${hasSelectedWalletColumn ? "t.selected_wallet_id," : "NULL::uuid AS selected_wallet_id,"}
              pp.status AS payment_proof_status,
              pp.rejection_reason,
              CASE WHEN pp.id IS NOT NULL THEN TRUE ELSE FALSE END AS has_proof
@@ -141,6 +120,7 @@ export async function GET(
             paymentProofStatus: row.payment_proof_status ?? null,
             paymentRejectionReason: row.rejection_reason ?? null,
             hasProof: !!row.has_proof,
+            selectedWalletId: row.selected_wallet_id ?? null,
           };
         }
       } else {
