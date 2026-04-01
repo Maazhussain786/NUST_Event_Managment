@@ -215,6 +215,8 @@ export function createEvent(data: {
   ticket_price?: number;
   max_tickets?: number;
   society_id: string;
+  cohost_society_ids?: string[];
+  include_nust_administration?: boolean;
 }): Promise<{ success: boolean; id: string }> {
   return api("/api/admin/events", {
     method: "POST",
@@ -412,6 +414,8 @@ export function createUniversityEvent(data: {
   society_id?: string;
   is_pinned?: boolean;
   priority_rank?: number;
+  cohost_society_ids?: string[];
+  include_nust_administration?: boolean;
 }): Promise<{ success: boolean; id: string }> {
   return api("/api/admin/university-events", {
     method: "POST",

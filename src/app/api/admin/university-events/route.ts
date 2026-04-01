@@ -103,6 +103,28 @@ async function ensureTable() {
   return true;
 }
 
+async function ensureEventCohostsTable() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS event_cohosts (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      event_id UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+      cohost_type TEXT NOT NULL CHECK (cohost_type IN ('SOCIETY', 'NUST_ADMIN')),
+      society_id UUID REFERENCES societies(id),
+      status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'REMOVED')),
+      source_request_id UUID REFERENCES platform_cohost_requests(id) ON DELETE SET NULL,
+      added_by UUID REFERENCES users(id),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT chk_event_cohosts_society_required
+        CHECK (
+          (cohost_type = 'SOCIETY' AND society_id IS NOT NULL)
+          OR
+          (cohost_type = 'NUST_ADMIN' AND society_id IS NULL)
+        )
+    )
+  `);
+}
+
 export async function GET() {
   try {
     const user = await getCurrentUser();
@@ -162,6 +184,7 @@ export async function POST(req: NextRequest) {
     }
 
     await ensureTable();
+    await ensureEventCohostsTable();
 
     const {
       title,
@@ -175,6 +198,8 @@ export async function POST(req: NextRequest) {
       is_pinned,
       priority_rank,
       society_id,
+      cohost_society_ids,
+      include_nust_administration,
     } = await req.json();
 
     const resolvedBannerUrl = await resolveBannerUrl(banner_url);
@@ -249,6 +274,51 @@ export async function POST(req: NextRequest) {
 
     const eventId = eventResult.rows[0].id;
 
+    const uniqueCohostSocietyIds = Array.isArray(cohost_society_ids)
+      ? Array.from(
+          new Set(
+            cohost_society_ids
+              .filter((value: unknown): value is string => typeof value === "string")
+              .map((value: string) => value.trim())
+              .filter((value: string) => value.length > 0 && value !== societyId),
+          ),
+        )
+      : [];
+
+    if (uniqueCohostSocietyIds.length > 0) {
+      const validCohostSocieties = await query(
+        `SELECT id
+         FROM societies
+         WHERE id = ANY($1::uuid[])
+           AND status = 'APPROVED'
+           AND deleted_at IS NULL`,
+        [uniqueCohostSocietyIds],
+      );
+
+      for (const row of validCohostSocieties.rows) {
+        await query(
+          `INSERT INTO event_cohosts (event_id, cohost_type, society_id, status, added_by)
+           VALUES ($1, 'SOCIETY', $2, 'ACTIVE', $3)
+           ON CONFLICT DO NOTHING`,
+          [eventId, row.id, user.userId],
+        );
+      }
+    }
+
+    const includeNustAdmin =
+      include_nust_administration === undefined
+        ? true
+        : Boolean(include_nust_administration);
+
+    if (includeNustAdmin) {
+      await query(
+        `INSERT INTO event_cohosts (event_id, cohost_type, society_id, status, added_by)
+         VALUES ($1, 'NUST_ADMIN', NULL, 'ACTIVE', $2)
+         ON CONFLICT DO NOTHING`,
+        [eventId, user.userId],
+      );
+    }
+
     // Mark as university event
     await query(
       `INSERT INTO platform_university_events (event_id, is_pinned, priority_rank, created_by)
@@ -264,7 +334,12 @@ export async function POST(req: NextRequest) {
         user.userId,
         eventId,
         JSON.stringify({ type: "UNIVERSITY_EVENT", title }),
-        JSON.stringify({ createdBy: user.email, isPinned: is_pinned || false }),
+        JSON.stringify({
+          createdBy: user.email,
+          isPinned: is_pinned || false,
+          include_nust_administration: includeNustAdmin,
+          cohost_society_ids: uniqueCohostSocietyIds,
+        }),
       ],
     );
 

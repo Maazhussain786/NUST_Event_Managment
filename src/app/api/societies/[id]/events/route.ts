@@ -58,6 +58,21 @@ export async function POST(
     const location = body.location ?? body.venue ?? null;
     const registrationEnd =
       body.registration_end ?? body.registration_deadline ?? null;
+    const requestNustAdminCohost = Boolean(
+      body.request_nust_administration_cohost,
+    );
+    const requestedSocietyCohostIds = Array.isArray(
+      body.cohost_society_request_ids,
+    )
+      ? body.cohost_society_request_ids
+          .filter((value: unknown): value is string => typeof value === "string")
+          .map((value: string) => value.trim())
+          .filter((value: string) => value.length > 0)
+      : [];
+    const cohostRequestReason =
+      typeof body.cohost_request_reason === "string"
+        ? body.cohost_request_reason.trim() || null
+        : null;
     const rawTicketPrice = body.ticket_price;
     const normalizedTicketPrice =
       rawTicketPrice === undefined ||
@@ -251,6 +266,95 @@ export async function POST(
     );
 
     const newEvent = insertResult.rows[0];
+
+    if (requestNustAdminCohost || requestedSocietyCohostIds.length > 0) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS platform_cohost_requests (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          event_id UUID NOT NULL REFERENCES events(id),
+          requesting_society_id UUID NOT NULL REFERENCES societies(id),
+          host_society_id UUID NOT NULL REFERENCES societies(id),
+          requested_by UUID NOT NULL REFERENCES users(id),
+          status TEXT NOT NULL DEFAULT 'PENDING',
+          reason TEXT,
+          admin_note TEXT,
+          approved_by UUID REFERENCES users(id),
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          expires_at TIMESTAMPTZ,
+          request_type TEXT NOT NULL DEFAULT 'SOCIETY' CHECK (request_type IN ('SOCIETY', 'NUST_ADMIN')),
+          cohost_society_id UUID REFERENCES societies(id),
+          decided_at TIMESTAMPTZ
+        )
+      `);
+
+      if (requestNustAdminCohost) {
+        await client.query(
+          `INSERT INTO platform_cohost_requests (
+             event_id,
+             requesting_society_id,
+             host_society_id,
+             requested_by,
+             status,
+             reason,
+             request_type,
+             cohost_society_id
+           )
+           VALUES ($1, $2, $3, $4, 'PENDING', $5, 'NUST_ADMIN', NULL)
+           ON CONFLICT DO NOTHING`,
+          [newEvent.id, societyId, societyId, user.userId, cohostRequestReason],
+        );
+      }
+
+      const uniqueSocietyTargets = Array.from(
+        new Set(
+          requestedSocietyCohostIds.filter(
+            (targetId: string) => targetId !== societyId,
+          ),
+        ),
+      );
+
+      if (uniqueSocietyTargets.length > 0) {
+        const approvedSocieties = await client.query(
+          `SELECT id
+           FROM societies
+           WHERE id = ANY($1::uuid[])
+             AND status = 'APPROVED'
+             AND deleted_at IS NULL`,
+          [uniqueSocietyTargets],
+        );
+
+        for (const row of approvedSocieties.rows) {
+          await client.query(
+            `INSERT INTO platform_cohost_requests (
+               event_id,
+               requesting_society_id,
+               host_society_id,
+               requested_by,
+               status,
+               reason,
+               request_type,
+               cohost_society_id
+             )
+             VALUES ($1, $2, $3, $4, 'PENDING', $5, 'SOCIETY', $6)
+             ON CONFLICT DO NOTHING`,
+            [newEvent.id, societyId, societyId, user.userId, cohostRequestReason, row.id],
+          );
+        }
+      }
+
+      await client.query(
+        `INSERT INTO notifications (user_id, title, body, link)
+         SELECT id, $1, $2, $3
+         FROM users
+         WHERE user_type = 'SUPER_ADMIN'`,
+        [
+          "Co-Host Request Submitted",
+          `${society.rows[0].name} submitted co-host request(s) for event \"${title.trim()}\"`,
+          "/platform/cohost-requests",
+        ],
+      );
+    }
 
     // ── Audit log with IP ─────────────────────────────────────────────
     await writeAuditLog(

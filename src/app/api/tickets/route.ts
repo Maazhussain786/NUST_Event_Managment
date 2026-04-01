@@ -18,6 +18,26 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    await query(`
+      CREATE TABLE IF NOT EXISTS event_cohosts (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        event_id UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+        cohost_type TEXT NOT NULL CHECK (cohost_type IN ('SOCIETY', 'NUST_ADMIN')),
+        society_id UUID REFERENCES societies(id),
+        status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'REMOVED')),
+        source_request_id UUID REFERENCES platform_cohost_requests(id) ON DELETE SET NULL,
+        added_by UUID REFERENCES users(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CONSTRAINT chk_event_cohosts_society_required
+          CHECK (
+            (cohost_type = 'SOCIETY' AND society_id IS NOT NULL)
+            OR
+            (cohost_type = 'NUST_ADMIN' AND society_id IS NULL)
+          )
+      )
+    `);
+
     const ticketNumberColumn = await query(
       `SELECT 1
        FROM information_schema.columns
@@ -69,7 +89,17 @@ export async function GET(req: NextRequest) {
           e.thumbnail_url AS event_thumbnail,
           e.is_paid,
           e.is_cancelled,
-          s.name AS society_name,
+          CASE
+            WHEN creator.user_type = 'SUPER_ADMIN' THEN
+              CONCAT_WS(' | ', s.name, 'NUST Administration', NULLIF(ch.cohost_society_names, ''))
+            ELSE
+              CONCAT_WS(
+                ' | ',
+                s.name,
+                CASE WHEN ch.has_nust_admin THEN 'NUST Administration' ELSE NULL END,
+                NULLIF(ch.cohost_society_names, '')
+              )
+          END AS society_name,
           s.logo_url AS society_logo,
           CASE WHEN qr.id IS NOT NULL THEN TRUE ELSE FALSE END AS has_qr,
           pp.proof_url AS payment_proof_url,
@@ -80,6 +110,20 @@ export async function GET(req: NextRequest) {
         FROM tickets t
         JOIN events e ON t.event_id = e.id
         JOIN societies s ON e.society_id = s.id
+        LEFT JOIN users creator ON creator.id = e.created_by
+        LEFT JOIN LATERAL (
+          SELECT
+            BOOL_OR(eco.cohost_type = 'NUST_ADMIN' AND eco.status = 'ACTIVE') AS has_nust_admin,
+            STRING_AGG(DISTINCT sc.name, ' | ') FILTER (
+              WHERE eco.cohost_type = 'SOCIETY'
+                AND eco.status = 'ACTIVE'
+                AND sc.id IS NOT NULL
+                AND sc.id != e.society_id
+            ) AS cohost_society_names
+          FROM event_cohosts eco
+          LEFT JOIN societies sc ON sc.id = eco.society_id
+          WHERE eco.event_id = e.id
+        ) ch ON TRUE
         LEFT JOIN ticket_qr_codes qr ON qr.ticket_id = t.id AND qr.is_active = TRUE
         LEFT JOIN LATERAL (
           SELECT
@@ -119,7 +163,17 @@ export async function GET(req: NextRequest) {
           e.thumbnail_url AS event_thumbnail,
           e.is_paid,
           e.is_cancelled,
-          s.name AS society_name,
+          CASE
+            WHEN creator.user_type = 'SUPER_ADMIN' THEN
+              CONCAT_WS(' | ', s.name, 'NUST Administration', NULLIF(ch.cohost_society_names, ''))
+            ELSE
+              CONCAT_WS(
+                ' | ',
+                s.name,
+                CASE WHEN ch.has_nust_admin THEN 'NUST Administration' ELSE NULL END,
+                NULLIF(ch.cohost_society_names, '')
+              )
+          END AS society_name,
           s.logo_url AS society_logo,
           CASE WHEN qr.id IS NOT NULL THEN TRUE ELSE FALSE END AS has_qr,
           NULL::TEXT AS payment_proof_url,
@@ -130,6 +184,20 @@ export async function GET(req: NextRequest) {
         FROM event_registrations er
         JOIN events e ON er.event_id = e.id
         JOIN societies s ON e.society_id = s.id
+        LEFT JOIN users creator ON creator.id = e.created_by
+        LEFT JOIN LATERAL (
+          SELECT
+            BOOL_OR(eco.cohost_type = 'NUST_ADMIN' AND eco.status = 'ACTIVE') AS has_nust_admin,
+            STRING_AGG(DISTINCT sc.name, ' | ') FILTER (
+              WHERE eco.cohost_type = 'SOCIETY'
+                AND eco.status = 'ACTIVE'
+                AND sc.id IS NOT NULL
+                AND sc.id != e.society_id
+            ) AS cohost_society_names
+          FROM event_cohosts eco
+          LEFT JOIN societies sc ON sc.id = eco.society_id
+          WHERE eco.event_id = e.id
+        ) ch ON TRUE
         LEFT JOIN ticket_qr_codes qr ON qr.registration_id = er.id AND qr.is_active = TRUE
         WHERE er.user_id = $1
           AND er.cancelled_at IS NULL`,

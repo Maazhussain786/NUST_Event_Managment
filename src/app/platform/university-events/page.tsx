@@ -46,6 +46,8 @@ export default function UniversityEventsPage() {
     title: "",
     description: "",
     society_id: "",
+    cohost_society_ids: [] as string[],
+    include_nust_administration: true,
     event_start: "",
     event_end: "",
     location: "",
@@ -124,6 +126,8 @@ export default function UniversityEventsPage() {
       title: "",
       description: "",
       society_id: "",
+      cohost_society_ids: [],
+      include_nust_administration: true,
       event_start: "",
       event_end: "",
       location: "",
@@ -151,6 +155,8 @@ export default function UniversityEventsPage() {
         title: form.title,
         description: form.description || undefined,
         society_id: form.society_id || undefined,
+        cohost_society_ids: form.cohost_society_ids,
+        include_nust_administration: form.include_nust_administration,
         event_start: form.event_start,
         event_end: form.event_end,
         location: form.location || undefined,
@@ -393,7 +399,13 @@ export default function UniversityEventsPage() {
                 className="input-field w-full"
                 value={form.society_id}
                 onChange={(e) =>
-                  setForm({ ...form, society_id: e.target.value })
+                  setForm({
+                    ...form,
+                    society_id: e.target.value,
+                    cohost_society_ids: form.cohost_society_ids.filter(
+                      (id) => id !== e.target.value,
+                    ),
+                  })
                 }
               >
                 <option value="">Select host society (optional)</option>
@@ -403,6 +415,46 @@ export default function UniversityEventsPage() {
                   </option>
                 ))}
               </select>
+
+              <label
+                className="text-xs font-medium block"
+                style={{ color: "var(--text-secondary)" }}
+              >
+                Additional co-host societies
+              </label>
+              <select
+                multiple
+                className="input-field w-full min-h-[96px]"
+                value={form.cohost_society_ids}
+                onChange={(e) => {
+                  const values = Array.from(e.target.selectedOptions)
+                    .map((opt) => opt.value)
+                    .filter((value) => value !== form.society_id);
+                  setForm({ ...form, cohost_society_ids: values });
+                }}
+              >
+                {societies
+                  .filter((soc) => soc.id !== form.society_id)
+                  .map((soc) => (
+                    <option key={soc.id} value={soc.id}>
+                      {soc.name}
+                    </option>
+                  ))}
+              </select>
+
+              <label className="flex items-center gap-2 text-xs text-muted">
+                <input
+                  type="checkbox"
+                  checked={form.include_nust_administration}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      include_nust_administration: e.target.checked,
+                    })
+                  }
+                />
+                Add NUST Administration as co-host
+              </label>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>

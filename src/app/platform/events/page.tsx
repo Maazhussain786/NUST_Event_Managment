@@ -86,6 +86,8 @@ export default function EventsPage() {
     ticket_price: "",
     max_tickets: "",
     society_id: "",
+    cohost_society_ids: [] as string[],
+    include_nust_administration: true,
   });
 
   useEffect(() => {
@@ -184,6 +186,8 @@ export default function EventsPage() {
           ? Number(createForm.max_tickets)
           : undefined,
         society_id: createForm.society_id,
+        cohost_society_ids: createForm.cohost_society_ids,
+        include_nust_administration: createForm.include_nust_administration,
       });
 
       if (createBannerFile && created.id) {
@@ -200,6 +204,8 @@ export default function EventsPage() {
         ticket_price: "",
         max_tickets: "",
         society_id: "",
+        cohost_society_ids: [],
+        include_nust_administration: true,
       });
       setCreateBannerFile(null);
       if (createBannerPreview.startsWith("blob:")) {
@@ -643,7 +649,13 @@ export default function EventsPage() {
                 className="input-field w-full"
                 value={createForm.society_id}
                 onChange={(e) =>
-                  setCreateForm({ ...createForm, society_id: e.target.value })
+                  setCreateForm({
+                    ...createForm,
+                    society_id: e.target.value,
+                    cohost_society_ids: createForm.cohost_society_ids.filter(
+                      (id) => id !== e.target.value,
+                    ),
+                  })
                 }
               >
                 <option value="">Select host society *</option>
@@ -653,6 +665,45 @@ export default function EventsPage() {
                   </option>
                 ))}
               </select>
+
+              <label
+                className="text-xs font-medium block"
+                style={{ color: "var(--text-secondary)" }}
+              >
+                Additional co-host societies
+              </label>
+              <select
+                multiple
+                className="input-field w-full min-h-[96px]"
+                value={createForm.cohost_society_ids}
+                onChange={(e) => {
+                  const values = Array.from(e.target.selectedOptions)
+                    .map((opt) => opt.value)
+                    .filter((value) => value !== createForm.society_id);
+                  setCreateForm({ ...createForm, cohost_society_ids: values });
+                }}
+              >
+                {societies
+                  .filter((soc) => soc.id !== createForm.society_id)
+                  .map((soc) => (
+                    <option key={soc.id} value={soc.id}>
+                      {soc.name}
+                    </option>
+                  ))}
+              </select>
+              <label className="flex items-center gap-2 text-xs text-muted">
+                <input
+                  type="checkbox"
+                  checked={createForm.include_nust_administration}
+                  onChange={(e) =>
+                    setCreateForm({
+                      ...createForm,
+                      include_nust_administration: e.target.checked,
+                    })
+                  }
+                />
+                Add NUST Administration as co-host
+              </label>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>

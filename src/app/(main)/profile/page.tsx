@@ -297,7 +297,7 @@ export default function ProfilePage() {
               <div className="rounded-xl border border-border bg-card overflow-hidden divide-y divide-border">
                 {mySocieties.map((soc) => (
                   <button
-                    key={soc.id + soc.role_name}
+                    key={soc.id}
                     onClick={() => {
                       if (soc.status === 'APPROVED') router.push(`/society/${soc.id}/dashboard`);
                     }}

@@ -152,6 +152,9 @@ export function createSocietyEvent(
     registration_deadline?: string;
     banner_url?: string;
     thumbnail_url?: string;
+    request_nust_administration_cohost?: boolean;
+    cohost_society_request_ids?: string[];
+    cohost_request_reason?: string;
   },
 ): Promise<{ success: boolean; event: { id: string; status: string } }> {
   const payload = {

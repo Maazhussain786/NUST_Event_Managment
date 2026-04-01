@@ -11,6 +11,26 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS event_cohosts (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        event_id UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+        cohost_type TEXT NOT NULL CHECK (cohost_type IN ('SOCIETY', 'NUST_ADMIN')),
+        society_id UUID REFERENCES societies(id),
+        status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'REMOVED')),
+        source_request_id UUID REFERENCES platform_cohost_requests(id) ON DELETE SET NULL,
+        added_by UUID REFERENCES users(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CONSTRAINT chk_event_cohosts_society_required
+          CHECK (
+            (cohost_type = 'SOCIETY' AND society_id IS NOT NULL)
+            OR
+            (cohost_type = 'NUST_ADMIN' AND society_id IS NULL)
+          )
+      )
+    `);
+
     const { id } = await params;
     const user = await getCurrentUser();
 
@@ -20,20 +40,58 @@ export async function GET(
               e.registration_start, e.registration_end, e.category_id, e.is_cancelled,
               e.max_participants, e.participants_count,
               ec.name AS category_name,
-              s.id AS society_id, s.name AS society_name, s.logo_url AS society_logo,
-              -- For paid events: count approved tickets
-              COUNT(DISTINCT t.id) FILTER (WHERE t.status = 'APPROVED') AS tickets_sold,
-              -- For paid events: count pending + approved (reserved capacity)
-              COUNT(DISTINCT t.id) FILTER (WHERE t.status IN ('PENDING', 'APPROVED')) AS tickets_reserved,
-              COALESCE(AVG(r.score), 0)::numeric(3,2) AS avg_rating,
-              COUNT(DISTINCT r.id) AS rating_count
+              s.id AS society_id,
+              CASE
+                WHEN creator.user_type = 'SUPER_ADMIN' THEN
+                  CONCAT_WS(' | ', s.name, 'NUST Administration', NULLIF(ch.cohost_society_names, ''))
+                ELSE
+                  CONCAT_WS(
+                    ' | ',
+                    s.name,
+                    CASE WHEN ch.has_nust_admin THEN 'NUST Administration' ELSE NULL END,
+                    NULLIF(ch.cohost_society_names, '')
+                  )
+              END AS society_name,
+              s.logo_url AS society_logo,
+              COALESCE(tc.tickets_sold, 0) AS tickets_sold,
+              COALESCE(tc.tickets_reserved, 0) AS tickets_reserved,
+              COALESCE(rt.avg_rating, 0)::numeric(3,2) AS avg_rating,
+              COALESCE(rt.rating_count, 0) AS rating_count,
+              COALESCE(ch.has_nust_admin, FALSE) AS has_nust_administration,
+              COALESCE(ch.cohost_society_names, '') AS cohost_society_names
        FROM events e
        LEFT JOIN event_categories ec ON e.category_id = ec.id
        JOIN societies s ON e.society_id = s.id
-       LEFT JOIN tickets t ON e.id = t.event_id
-       LEFT JOIN ratings r ON r.target_type = 'EVENT' AND r.target_id = e.id
+       LEFT JOIN users creator ON creator.id = e.created_by
+       LEFT JOIN LATERAL (
+         SELECT
+           COUNT(DISTINCT t.id) FILTER (WHERE t.status = 'APPROVED') AS tickets_sold,
+           COUNT(DISTINCT t.id) FILTER (WHERE t.status IN ('PENDING', 'APPROVED')) AS tickets_reserved
+         FROM tickets t
+         WHERE t.event_id = e.id
+       ) tc ON TRUE
+       LEFT JOIN LATERAL (
+         SELECT
+           COALESCE(AVG(r.score), 0) AS avg_rating,
+           COUNT(DISTINCT r.id) AS rating_count
+         FROM ratings r
+         WHERE r.target_type = 'EVENT' AND r.target_id = e.id
+       ) rt ON TRUE
+       LEFT JOIN LATERAL (
+         SELECT
+           BOOL_OR(eco.cohost_type = 'NUST_ADMIN' AND eco.status = 'ACTIVE') AS has_nust_admin,
+           STRING_AGG(DISTINCT sc.name, ' | ') FILTER (
+             WHERE eco.cohost_type = 'SOCIETY'
+               AND eco.status = 'ACTIVE'
+               AND sc.id IS NOT NULL
+               AND sc.id != e.society_id
+           ) AS cohost_society_names
+         FROM event_cohosts eco
+         LEFT JOIN societies sc ON sc.id = eco.society_id
+         WHERE eco.event_id = e.id
+       ) ch ON TRUE
        WHERE e.id = $1 AND e.deleted_at IS NULL
-       GROUP BY e.id, ec.name, s.id`,
+      `,
       [id],
     );
 

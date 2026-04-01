@@ -524,7 +524,9 @@ export interface CoHostRequest {
   requesting_society_id: string;
   requesting_society_name: string;
   host_society_id: string;
+  cohost_society_id: string | null;
   host_society_name: string;
+  request_type: "SOCIETY" | "NUST_ADMIN";
   requested_by_name: string;
   status: CoHostRequestStatus;
   reason: string | null;

@@ -31,6 +31,34 @@ interface School {
 
 const ease = [0.25, 0.1, 0.25, 1] as const;
 
+function dedupeSocieties(list: Society[]): Society[] {
+  const byIdentity = new Map<string, Society>();
+
+  for (const item of list) {
+    const normalizedName = item.name.trim().toLowerCase();
+    const key = `${item.id}|${normalizedName}`;
+    const existing = byIdentity.get(key);
+
+    if (!existing || item.member_count > existing.member_count) {
+      byIdentity.set(key, item);
+    }
+  }
+
+  const byNameAndSchool = new Map<string, Society>();
+  for (const item of Array.from(byIdentity.values())) {
+    const name = item.name.trim().toLowerCase();
+    const school = item.school_id ?? 'nust-wide';
+    const key = `${name}|${school}`;
+    const existing = byNameAndSchool.get(key);
+
+    if (!existing || item.member_count > existing.member_count) {
+      byNameAndSchool.set(key, item);
+    }
+  }
+
+  return Array.from(byNameAndSchool.values());
+}
+
 export default function SocietiesPage() {
   const [societies, setSocieties] = useState<Society[]>([]);
   const [schools, setSchools] = useState<School[]>([]);
@@ -40,11 +68,11 @@ export default function SocietiesPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/societies').then((r) => r.json()),
+      fetch('/api/societies?limit=100').then((r) => r.json()),
       fetch('/api/schools').then((r) => r.json()),
     ])
       .then(([socData, schoolData]) => {
-        setSocieties(socData.societies || []);
+        setSocieties(dedupeSocieties(socData.societies || []));
         setSchools(schoolData.schools || []);
       })
       .catch(console.error)
