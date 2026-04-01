@@ -50,6 +50,7 @@ export default function UniversityEventsPage() {
     include_nust_administration: true,
     event_start: "",
     event_end: "",
+    registration_deadline: "",
     location: "",
     ticket_price: "",
     max_tickets: "",
@@ -75,6 +76,7 @@ export default function UniversityEventsPage() {
   const [editBannerPreview, setEditBannerPreview] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [societies, setSocieties] = useState<AdminSociety[]>([]);
+  const [defaultHostSocietyId, setDefaultHostSocietyId] = useState("");
 
   useEffect(() => {
     return () => {
@@ -110,10 +112,25 @@ export default function UniversityEventsPage() {
       .then((rows) => {
         if (!active) return;
         setSocieties(rows);
+
+        const nustAdmin = rows.find(
+          (soc) => soc.name.trim().toLowerCase() === "nust administration",
+        );
+        const nextDefault = nustAdmin?.id || rows[0]?.id || "";
+        setDefaultHostSocietyId(nextDefault);
+        setForm((prev) =>
+          prev.society_id
+            ? prev
+            : {
+                ...prev,
+                society_id: nextDefault,
+              },
+        );
       })
       .catch(() => {
         if (!active) return;
         setSocieties([]);
+        setDefaultHostSocietyId("");
       });
 
     return () => {
@@ -125,11 +142,12 @@ export default function UniversityEventsPage() {
     setForm({
       title: "",
       description: "",
-      society_id: "",
+      society_id: defaultHostSocietyId,
       cohost_society_ids: [],
       include_nust_administration: true,
       event_start: "",
       event_end: "",
+      registration_deadline: "",
       location: "",
       ticket_price: "",
       max_tickets: "",
@@ -159,6 +177,7 @@ export default function UniversityEventsPage() {
         include_nust_administration: form.include_nust_administration,
         event_start: form.event_start,
         event_end: form.event_end,
+        registration_deadline: form.registration_deadline || undefined,
         location: form.location || undefined,
         ticket_price: form.ticket_price ? Number(form.ticket_price) : undefined,
         max_tickets: form.max_tickets ? Number(form.max_tickets) : undefined,
@@ -489,6 +508,23 @@ export default function UniversityEventsPage() {
                     }
                   />
                 </div>
+              </div>
+
+              <div>
+                <label
+                  className="text-xs font-medium mb-1 block"
+                  style={{ color: "var(--text-secondary)" }}
+                >
+                  Registration Last Date
+                </label>
+                <input
+                  type="datetime-local"
+                  className="input-field w-full"
+                  value={form.registration_deadline}
+                  onChange={(e) =>
+                    setForm({ ...form, registration_deadline: e.target.value })
+                  }
+                />
               </div>
 
               <input

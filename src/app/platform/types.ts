@@ -135,6 +135,7 @@ export interface AdminEvent {
   description: string;
   start_date: string;
   end_date: string | null;
+  registration_deadline?: string | null;
   venue: string;
   status: EventStatus;
   capacity: number;
@@ -495,6 +496,7 @@ export interface UniversityEvent {
   banner_url: string | null;
   event_start: string;
   event_end: string | null;
+  registration_deadline?: string | null;
   location: string | null;
   status: string;
   ticket_price: string;

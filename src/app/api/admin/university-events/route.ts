@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { CONTAINERS, resolveMediaFields } from "@/lib/blob";
+import { ensureNustAdministrationSociety } from "@/lib/nustAdministrationSociety";
 
 function extractMetaImage(html: string): string | null {
   const ogImageMatch = html.match(
@@ -136,7 +137,7 @@ export async function GET() {
     if (!tableReady) return NextResponse.json([]);
 
     const result = await query(`
-            SELECT e.id, e.title, e.description, e.event_start, e.event_end,
+            SELECT e.id, e.title, e.description, e.event_start, e.event_end, e.registration_end AS registration_deadline,
              e.location, e.status, e.banner_url, e.ticket_price,
              e.max_tickets, e.created_at,
              COALESCE(pu.is_pinned, false) AS is_pinned,
@@ -195,6 +196,7 @@ export async function POST(req: NextRequest) {
       banner_url,
       ticket_price,
       max_tickets,
+      registration_deadline,
       is_pinned,
       priority_rank,
       society_id,
@@ -238,11 +240,7 @@ export async function POST(req: NextRequest) {
 
       societyId = selectedSociety.rows[0].id;
     } else {
-      // Backward-compatible fallback: first approved NUST-wide society.
-      const nustSociety = await query(
-        `SELECT id FROM societies WHERE is_nust_wide = true AND status = 'APPROVED' LIMIT 1`,
-      );
-      societyId = nustSociety.rows[0]?.id || null;
+      societyId = await ensureNustAdministrationSociety(user.userId);
     }
 
     if (!societyId) {
@@ -252,17 +250,36 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const normalizedRegistrationDeadline =
+      registration_deadline === undefined ||
+      registration_deadline === null ||
+      String(registration_deadline).trim() === ""
+        ? null
+        : String(registration_deadline);
+
+    if (
+      normalizedRegistrationDeadline &&
+      new Date(normalizedRegistrationDeadline).getTime() >
+        new Date(event_end).getTime()
+    ) {
+      return NextResponse.json(
+        { error: "registration_deadline must be on or before event_end" },
+        { status: 400 },
+      );
+    }
+
     // Create the event
     const eventResult = await query(
-      `INSERT INTO events (title, description, event_start, event_end, location,
+      `INSERT INTO events (title, description, event_start, event_end, registration_end, location,
                            banner_url, ticket_price, max_tickets, society_id, created_by, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'APPROVED')
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'APPROVED')
        RETURNING id`,
       [
         title,
         description || null,
         event_start,
         event_end,
+        normalizedRegistrationDeadline,
         location || null,
         resolvedBannerUrl,
         ticket_price || 0,
@@ -337,6 +354,7 @@ export async function POST(req: NextRequest) {
         JSON.stringify({
           createdBy: user.email,
           isPinned: is_pinned || false,
+          registration_deadline: normalizedRegistrationDeadline,
           include_nust_administration: includeNustAdmin,
           cohost_society_ids: uniqueCohostSocietyIds,
         }),

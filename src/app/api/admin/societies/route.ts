@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { CONTAINERS, resolveMediaFields } from '@/lib/blob';
+import { ensureNustAdministrationSociety } from '@/lib/nustAdministrationSociety';
 
 // GET /api/admin/societies?status=PENDING
 export async function GET(req: NextRequest) {
@@ -12,6 +13,8 @@ export async function GET(req: NextRequest) {
     if (!user || user.userType !== 'SUPER_ADMIN') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
+
+    await ensureNustAdministrationSociety(user.userId);
 
     const status = req.nextUrl.searchParams.get('status');
 

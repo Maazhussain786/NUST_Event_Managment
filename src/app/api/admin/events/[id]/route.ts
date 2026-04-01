@@ -66,6 +66,7 @@ export async function PATCH(
       body.description !== undefined ||
       body.event_start !== undefined ||
       body.event_end !== undefined ||
+      body.registration_deadline !== undefined ||
       body.location !== undefined ||
       body.ticket_price !== undefined ||
       body.max_tickets !== undefined ||
@@ -94,6 +95,15 @@ export async function PATCH(
         idx++;
         sets.push(`event_end = $${idx}`);
         vals.push(body.event_end);
+      }
+      if (body.registration_deadline !== undefined) {
+        idx++;
+        sets.push(`registration_end = $${idx}`);
+        vals.push(
+          body.registration_deadline === "" || body.registration_deadline === null
+            ? null
+            : body.registration_deadline,
+        );
       }
       if (body.location !== undefined) {
         idx++;

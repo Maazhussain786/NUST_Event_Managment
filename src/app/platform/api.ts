@@ -71,6 +71,41 @@ async function api<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
+function normalizeSocietyIdentity(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function dedupeAdminSocieties(rows: AdminSociety[]): AdminSociety[] {
+  const map = new Map<string, AdminSociety>();
+
+  for (const row of rows) {
+    const key = `${normalizeSocietyIdentity(row.name)}|${(row.category || "").trim().toLowerCase()}`;
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, row);
+      continue;
+    }
+
+    const existingMembers = Number(existing.member_count || 0);
+    const currentMembers = Number(row.member_count || 0);
+    const shouldReplace =
+      (existing.status !== "APPROVED" && row.status === "APPROVED") ||
+      currentMembers > existingMembers;
+
+    if (shouldReplace) {
+      map.set(key, row);
+    }
+  }
+
+  return Array.from(map.values()).sort((a, b) => {
+    const aIsNustAdmin = normalizeSocietyIdentity(a.name) === "nust administration";
+    const bIsNustAdmin = normalizeSocietyIdentity(b.name) === "nust administration";
+    if (aIsNustAdmin && !bIsNustAdmin) return -1;
+    if (!aIsNustAdmin && bIsNustAdmin) return 1;
+    return a.name.localeCompare(b.name);
+  });
+}
+
 // ─── Overview (Command Center) ──────────────────────────────────────────────
 
 export function fetchStats(): Promise<PlatformStats> {
@@ -123,7 +158,9 @@ export function reactivateUser(id: string): Promise<{ success: boolean }> {
 
 export function fetchSocieties(status?: string): Promise<AdminSociety[]> {
   const qs = status ? `?status=${status}` : "";
-  return api<AdminSociety[]>(`/api/admin/societies${qs}`);
+  return api<AdminSociety[]>(`/api/admin/societies${qs}`).then((rows) =>
+    dedupeAdminSocieties(rows),
+  );
 }
 
 export function patchSociety(
@@ -211,6 +248,7 @@ export function createEvent(data: {
   description?: string;
   event_start: string;
   event_end: string;
+  registration_deadline?: string;
   location?: string;
   ticket_price?: number;
   max_tickets?: number;
@@ -262,6 +300,7 @@ export function updateEvent(
     description?: string;
     event_start?: string;
     event_end?: string;
+    registration_deadline?: string;
     location?: string;
     ticket_price?: number;
     max_tickets?: number;
@@ -407,6 +446,7 @@ export function createUniversityEvent(data: {
   description?: string;
   event_start: string;
   event_end: string;
+  registration_deadline?: string;
   location?: string;
   banner_url?: string;
   ticket_price?: number;

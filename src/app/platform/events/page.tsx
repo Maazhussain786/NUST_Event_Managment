@@ -65,6 +65,7 @@ export default function EventsPage() {
     description: "",
     event_start: "",
     event_end: "",
+    registration_deadline: "",
     location: "",
     ticket_price: "",
     max_tickets: "",
@@ -77,11 +78,13 @@ export default function EventsPage() {
   const [togglingPinId, setTogglingPinId] = useState<string | null>(null);
 
   const [societies, setSocieties] = useState<AdminSociety[]>([]);
+  const [defaultHostSocietyId, setDefaultHostSocietyId] = useState("");
   const [createForm, setCreateForm] = useState({
     title: "",
     description: "",
     event_start: "",
     event_end: "",
+    registration_deadline: "",
     location: "",
     ticket_price: "",
     max_tickets: "",
@@ -124,10 +127,25 @@ export default function EventsPage() {
       .then((rows) => {
         if (!active) return;
         setSocieties(rows);
+
+        const nustAdmin = rows.find(
+          (soc) => soc.name.trim().toLowerCase() === "nust administration",
+        );
+        const nextDefault = nustAdmin?.id || rows[0]?.id || "";
+        setDefaultHostSocietyId(nextDefault);
+        setCreateForm((prev) =>
+          prev.society_id
+            ? prev
+            : {
+                ...prev,
+                society_id: nextDefault,
+              },
+        );
       })
       .catch(() => {
         if (!active) return;
         setSocieties([]);
+        setDefaultHostSocietyId("");
       });
 
     return () => {
@@ -178,6 +196,7 @@ export default function EventsPage() {
         description: createForm.description.trim() || undefined,
         event_start: createForm.event_start,
         event_end: createForm.event_end,
+        registration_deadline: createForm.registration_deadline || undefined,
         location: createForm.location.trim() || undefined,
         ticket_price: createForm.ticket_price
           ? Number(createForm.ticket_price)
@@ -200,10 +219,11 @@ export default function EventsPage() {
         description: "",
         event_start: "",
         event_end: "",
+        registration_deadline: "",
         location: "",
         ticket_price: "",
         max_tickets: "",
-        society_id: "",
+        society_id: defaultHostSocietyId,
         cohost_society_ids: [],
         include_nust_administration: true,
       });
@@ -254,6 +274,7 @@ export default function EventsPage() {
       description: evt.description || "",
       event_start: toLocalInput(evt.start_date),
       event_end: toLocalInput(evt.end_date || evt.start_date),
+      registration_deadline: toLocalInput(evt.registration_deadline || null),
       location: evt.venue || "",
       ticket_price: evt.ticket_price ? String(evt.ticket_price) : "",
       max_tickets: evt.capacity ? String(evt.capacity) : "",
@@ -285,6 +306,7 @@ export default function EventsPage() {
         description: editForm.description.trim(),
         event_start: editForm.event_start,
         event_end: editForm.event_end,
+        registration_deadline: editForm.registration_deadline || undefined,
         location: editForm.location.trim(),
         ticket_price: editForm.ticket_price ? Number(editForm.ticket_price) : 0,
         max_tickets: editForm.max_tickets ? Number(editForm.max_tickets) : 0,
@@ -746,6 +768,26 @@ export default function EventsPage() {
                 </div>
               </div>
 
+              <div>
+                <label
+                  className="text-xs font-medium mb-1 block"
+                  style={{ color: "var(--text-secondary)" }}
+                >
+                  Registration Last Date
+                </label>
+                <input
+                  type="datetime-local"
+                  className="input-field w-full"
+                  value={createForm.registration_deadline}
+                  onChange={(e) =>
+                    setCreateForm({
+                      ...createForm,
+                      registration_deadline: e.target.value,
+                    })
+                  }
+                />
+              </div>
+
               <input
                 className="input-field w-full"
                 placeholder="Venue / Location"
@@ -885,6 +927,26 @@ export default function EventsPage() {
                     }
                   />
                 </div>
+              </div>
+
+              <div>
+                <label
+                  className="text-xs font-medium mb-1 block"
+                  style={{ color: "var(--text-secondary)" }}
+                >
+                  Registration Last Date
+                </label>
+                <input
+                  type="datetime-local"
+                  className="input-field w-full"
+                  value={editForm.registration_deadline}
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      registration_deadline: e.target.value,
+                    })
+                  }
+                />
               </div>
 
               <input

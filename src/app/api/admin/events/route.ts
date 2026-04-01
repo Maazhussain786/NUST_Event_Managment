@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { CONTAINERS, resolveMediaFields } from "@/lib/blob";
+import { ensureNustAdministrationSociety } from "@/lib/nustAdministrationSociety";
 
 async function ensurePlatformEventControlsTable() {
   await query(`
@@ -59,8 +60,8 @@ export async function GET(req: NextRequest) {
     }
 
     const result = await query(
-      `SELECT e.id, e.title, e.description, e.event_start AS start_date,
-              e.event_end AS end_date, e.location AS venue,
+            `SELECT e.id, e.title, e.description, e.event_start AS start_date,
+              e.event_end AS end_date, e.registration_end AS registration_deadline, e.location AS venue,
               e.status, e.max_tickets AS capacity, e.ticket_price,
           e.banner_url, e.created_at,
           COALESCE(pec.is_pinned, FALSE) AS is_pinned,
@@ -107,6 +108,7 @@ export async function POST(req: NextRequest) {
       description,
       event_start,
       event_end,
+      registration_deadline,
       location,
       ticket_price,
       max_tickets,
@@ -119,9 +121,9 @@ export async function POST(req: NextRequest) {
     await ensurePlatformEventControlsTable();
     await ensureEventCohostsTable();
 
-    if (!title || !event_start || !event_end || !society_id) {
+    if (!title || !event_start || !event_end) {
       return NextResponse.json(
-        { error: "title, event_start, event_end and society_id are required" },
+        { error: "title, event_start and event_end are required" },
         { status: 400 },
       );
     }
@@ -133,15 +135,43 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const societyCheck = await query(
-      `SELECT id FROM societies
-       WHERE id = $1 AND status = 'APPROVED' AND deleted_at IS NULL
-       LIMIT 1`,
-      [society_id],
-    );
-    if (!societyCheck.rows.length) {
+    let hostSocietyId =
+      typeof society_id === "string" && society_id.trim().length > 0
+        ? society_id.trim()
+        : null;
+
+    if (hostSocietyId) {
+      const societyCheck = await query(
+        `SELECT id FROM societies
+         WHERE id = $1 AND status = 'APPROVED' AND deleted_at IS NULL
+         LIMIT 1`,
+        [hostSocietyId],
+      );
+      if (!societyCheck.rows.length) {
+        return NextResponse.json(
+          { error: "Selected society is not available for event creation" },
+          { status: 400 },
+        );
+      }
+      hostSocietyId = societyCheck.rows[0].id;
+    } else {
+      hostSocietyId = await ensureNustAdministrationSociety(user.userId);
+    }
+
+    const normalizedRegistrationDeadline =
+      registration_deadline === undefined ||
+      registration_deadline === null ||
+      String(registration_deadline).trim() === ""
+        ? null
+        : String(registration_deadline);
+
+    if (
+      normalizedRegistrationDeadline &&
+      new Date(normalizedRegistrationDeadline).getTime() >
+        new Date(event_end).getTime()
+    ) {
       return NextResponse.json(
-        { error: "Selected society is not available for event creation" },
+        { error: "registration_deadline must be on or before event_end" },
         { status: 400 },
       );
     }
@@ -156,15 +186,15 @@ export async function POST(req: NextRequest) {
       `INSERT INTO events (
         society_id, title, description, location,
         is_paid, ticket_price, max_tickets,
-        event_start, event_end, created_by, status, is_cancelled
+        event_start, event_end, registration_end, created_by, status, is_cancelled
       ) VALUES (
         $1, $2, $3, $4,
         $5, $6, $7,
-        $8, $9, $10, 'APPROVED', FALSE
+        $8, $9, $10, $11, 'APPROVED', FALSE
       )
       RETURNING id`,
       [
-        society_id,
+        hostSocietyId,
         String(title).trim(),
         description ? String(description).trim() : null,
         location ? String(location).trim() : null,
@@ -173,6 +203,7 @@ export async function POST(req: NextRequest) {
         normalizedMaxTickets,
         event_start,
         event_end,
+        normalizedRegistrationDeadline,
         user.userId,
       ],
     );
@@ -185,7 +216,7 @@ export async function POST(req: NextRequest) {
             cohost_society_ids
               .filter((value: unknown): value is string => typeof value === "string")
               .map((value: string) => value.trim())
-              .filter((value: string) => value.length > 0 && value !== society_id),
+              .filter((value: string) => value.length > 0 && value !== hostSocietyId),
           ),
         )
       : [];
@@ -242,8 +273,9 @@ export async function POST(req: NextRequest) {
         eventId,
         JSON.stringify({
           source: "SUPER_ADMIN_PLATFORM_EVENTS",
-          society_id,
+          society_id: hostSocietyId,
           title: String(title).trim(),
+          registration_deadline: normalizedRegistrationDeadline,
           include_nust_administration: includeNustAdmin,
           cohost_society_ids: uniqueCohostSocietyIds,
         }),
