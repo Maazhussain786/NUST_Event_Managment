@@ -181,6 +181,7 @@ export default function EventsPage() {
                     .map((event, i) => (
                       <motion.div
                         key={event.id}
+                        className="h-full"
                         initial={{ opacity: 0, y: 12 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: i * 0.03, ease }}
