@@ -81,6 +81,7 @@ function AttendeeStack({ count }: { count: number }) {
 
 export default function EventCard({ event, variant = 'default' }: EventCardProps) {
   const isFree = !event.is_paid || !event.ticket_price;
+  const formattedPrice = Number(event.ticket_price || 0).toLocaleString('en-PK');
   const date = new Date(event.event_start);
   const day = date.getDate();
   const month = date.toLocaleDateString('en-PK', { month: 'short' }).toUpperCase();
@@ -132,20 +133,17 @@ export default function EventCard({ event, variant = 'default' }: EventCardProps
                   {event.society_logo ? <AvatarImage src={event.society_logo} alt={event.society_name || ''} /> : null}
                   <AvatarFallback className="text-[7px]">{event.society_name?.[0] || 'S'}</AvatarFallback>
                 </Avatar>
-                <span className="text-caption text-muted-foreground truncate max-w-[80px]">{event.society_name}</span>
+                <span className="text-caption text-muted-foreground truncate">{event.society_name}</span>
                 {attendeeCount > 0 && (
-                  <>
-                    <span className="text-muted-foreground/30">·</span>
-                    <AttendeeStack count={attendeeCount} />
-                  </>
+                  <span className="text-[10px] text-muted-foreground whitespace-nowrap">{attendeeCount} going</span>
                 )}
               </div>
-              <div className="flex items-center gap-1.5 shrink-0 whitespace-nowrap">
+              <div className="flex flex-col items-end justify-center gap-1 shrink-0 min-w-[86px]">
                 {relativeTime && (
                   <span className="text-[10px] font-medium text-brand-600 dark:text-brand-400 whitespace-nowrap">{relativeTime}</span>
                 )}
                 <Badge variant={isFree ? 'success' : 'default'} size="sm" className="whitespace-nowrap">
-                  {isFree ? 'Free' : `Rs. ${event.ticket_price}`}
+                  {isFree ? 'Free' : `Rs. ${formattedPrice}`}
                 </Badge>
               </div>
             </div>
@@ -230,7 +228,7 @@ export default function EventCard({ event, variant = 'default' }: EventCardProps
             )}
           </div>
           <Badge variant={isFree ? 'success' : 'default'} size="sm">
-            {isFree ? 'Free' : `Rs. ${event.ticket_price}`}
+            {isFree ? 'Free' : `Rs. ${formattedPrice}`}
           </Badge>
         </div>
       </motion.div>

@@ -25,6 +25,7 @@ interface Event {
   society_name: string;
   society_logo: string | null;
   tickets_sold: number;
+  registration_end?: string | null;
 }
 
 interface Category {
@@ -61,6 +62,46 @@ function groupByDate(events: Event[]): { label: string; events: Event[] }[] {
   if (thisWeek.length) groups.push({ label: 'This Week', events: thisWeek });
   if (later.length) groups.push({ label: 'Coming Up', events: later });
   return groups;
+}
+
+function isEventRegistrationOpen(event: Event): boolean {
+  const now = new Date();
+  const eventStart = new Date(event.event_start);
+
+  if (eventStart <= now) return false;
+
+  if (event.max_tickets && event.max_tickets > 0) {
+    const sold = Number(event.tickets_sold || 0);
+    if (sold >= event.max_tickets) return false;
+  }
+
+  if (event.registration_end) {
+    const registrationEnd = new Date(event.registration_end);
+    if (!Number.isNaN(registrationEnd.getTime()) && registrationEnd <= now) return false;
+  }
+
+  return true;
+}
+
+function pickFeaturedEvent(events: Event[]): Event | null {
+  if (!events.length) return null;
+
+  const now = Date.now();
+  const registrationOpen = events.filter(isEventRegistrationOpen);
+
+  if (registrationOpen.length > 0) {
+    return [...registrationOpen].sort((a, b) => {
+      const soldDelta = Number(b.tickets_sold || 0) - Number(a.tickets_sold || 0);
+      if (soldDelta !== 0) return soldDelta;
+      return new Date(a.event_start).getTime() - new Date(b.event_start).getTime();
+    })[0];
+  }
+
+  const upcoming = events
+    .filter((event) => new Date(event.event_start).getTime() > now)
+    .sort((a, b) => new Date(a.event_start).getTime() - new Date(b.event_start).getTime());
+
+  return upcoming[0] || null;
 }
 
 function EventsSkeleton() {
@@ -111,7 +152,7 @@ export default function EventsPage() {
   });
 
   const grouped = groupByDate(filtered);
-  const featured = filtered.length > 0 ? filtered[0] : null;
+  const featured = pickFeaturedEvent(filtered);
 
   return (
     <AnimatedPage className="min-h-screen bg-background">

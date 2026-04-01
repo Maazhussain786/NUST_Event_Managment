@@ -38,7 +38,7 @@ export async function GET(req: Request) {
 
     let sql = `
       SELECT e.id, e.title, e.description, e.banner_url, e.location,
-             e.event_start, e.event_end, e.ticket_price, e.max_tickets, e.is_paid,
+              e.event_start, e.event_end, e.registration_end, e.ticket_price, e.max_tickets, e.is_paid,
              e.category_id, ec.name AS category_name,
              s.id AS society_id,
              CASE
