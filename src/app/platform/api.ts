@@ -31,6 +31,8 @@ import type {
   BlackoutDate,
   EmergencyStatus,
   SocietyTransferMember,
+  SocietyProfileAdmin,
+  SocietyAlbumAdmin,
 } from "./types";
 
 // ─── Base Fetch ─────────────────────────────────────────────────────────────
@@ -223,6 +225,100 @@ export function updateStorageLimit(
   return api(`/api/admin/societies/${id}/storage-limit`, {
     method: "PATCH",
     body: JSON.stringify({ storage_limit_bytes: storageLimitBytes }),
+  });
+}
+
+export async function fetchNustAdministrationSociety(): Promise<AdminSociety> {
+  const societies = await fetchSocieties();
+  const record = societies.find(
+    (row) => normalizeSocietyIdentity(row.name) === "nust administration",
+  );
+
+  if (!record) {
+    throw new Error("NUST Administration society is not available.");
+  }
+
+  return record;
+}
+
+export function fetchSocietyProfileAdmin(
+  societyId: string,
+): Promise<SocietyProfileAdmin> {
+  return api<SocietyProfileAdmin>(`/api/societies/${societyId}/profile`);
+}
+
+export function updateSocietyProfileAdmin(
+  societyId: string,
+  data: Partial<SocietyProfileAdmin>,
+): Promise<{ success: boolean; profile: SocietyProfileAdmin }> {
+  return api(`/api/societies/${societyId}/profile`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export function fetchSocietyAlbumsAdmin(
+  societyId: string,
+): Promise<SocietyAlbumAdmin[]> {
+  return api<{ albums: SocietyAlbumAdmin[] }>(
+    `/api/societies/${societyId}/albums`,
+  ).then((res) => res.albums || []);
+}
+
+export function createSocietyAlbumAdmin(
+  societyId: string,
+  data: {
+    name: string;
+    description?: string;
+    category?: "GENERAL" | "EVENTS" | "ACHIEVEMENTS" | "TEAM" | "OTHER";
+  },
+): Promise<{ success: boolean; album: SocietyAlbumAdmin }> {
+  return api(`/api/societies/${societyId}/albums`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteSocietyAlbumAdmin(
+  societyId: string,
+  albumId: string,
+): Promise<{ success: boolean }> {
+  return api(`/api/societies/${societyId}/albums/${albumId}`, {
+    method: "DELETE",
+  });
+}
+
+export function uploadSocietyMediaAdmin(
+  societyId: string,
+  type: "logo" | "cover" | "gallery",
+  file: File,
+  albumId?: string,
+): Promise<{ success: boolean; data: { url: string } }> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const search = new URLSearchParams();
+  search.set("societyId", societyId);
+  search.set("type", type);
+  if (albumId) {
+    search.set("albumId", albumId);
+  }
+
+  return fetch(`/api/upload/society-media?${search.toString()}`, {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  }).then(async (res) => {
+    if (!res.ok) {
+      let body: ApiError;
+      try {
+        body = await res.json();
+      } catch {
+        body = { error: `HTTP ${res.status}` };
+      }
+      throw new PlatformApiError(res.status, body);
+    }
+    return res.json();
   });
 }
 

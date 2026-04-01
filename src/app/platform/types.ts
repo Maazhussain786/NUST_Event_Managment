@@ -623,3 +623,38 @@ export interface EmergencyFlag {
   enabled: boolean;
   severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 }
+
+// ─── NUST Administration Management ────────────────────────────────────────
+
+export interface SocietyProfileAdmin {
+  society_id: string;
+  tagline: string | null;
+  cover_url: string | null;
+  mission: string | null;
+  established_year: number | null;
+  faculty_advisor: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  office_location: string | null;
+  social_links: Record<string, unknown> | null;
+  primary_color: string | null;
+  accent_color: string | null;
+  ticket_footer_text: string | null;
+  is_public: boolean;
+  member_approval: boolean;
+  auto_approve_ticket: boolean;
+  pin_announcement: string | null;
+  featured_event_id: string | null;
+}
+
+export interface SocietyAlbumAdmin {
+  id: string;
+  name: string;
+  description: string | null;
+  category: "GENERAL" | "EVENTS" | "ACHIEVEMENTS" | "TEAM" | "OTHER";
+  photo_count: number;
+  created_at: string;
+  updated_at: string;
+  created_by_name: string | null;
+  cover_photo_url: string | null;
+}
