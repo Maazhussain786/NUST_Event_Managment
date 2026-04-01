@@ -36,6 +36,7 @@ const ease = [0.25, 0.1, 0.25, 1] as const;
 
 function groupByDate(events: Event[]): { label: string; events: Event[] }[] {
   const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
   const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
   const weekEnd = new Date(todayEnd.getTime() + 7 * 24 * 60 * 60 * 1000);
 
@@ -43,8 +44,13 @@ function groupByDate(events: Event[]): { label: string; events: Event[] }[] {
   const thisWeek: Event[] = [];
   const later: Event[] = [];
 
-  events.forEach((e) => {
+  const upcomingEvents = [...events].sort(
+    (a, b) => new Date(a.event_start).getTime() - new Date(b.event_start).getTime(),
+  );
+
+  upcomingEvents.forEach((e) => {
     const d = new Date(e.event_start);
+    if (d < todayStart) return;
     if (d <= todayEnd) today.push(e);
     else if (d <= weekEnd) thisWeek.push(e);
     else later.push(e);

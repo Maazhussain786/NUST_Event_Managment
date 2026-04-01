@@ -28,11 +28,23 @@ CREATE INDEX IF NOT EXISTS idx_event_cohosts_event_id
 CREATE INDEX IF NOT EXISTS idx_event_cohosts_society_id
   ON event_cohosts(society_id, cohost_type, status);
 
-CREATE UNIQUE INDEX IF NOT EXISTS ux_event_cohost_society_active
-  ON event_cohosts(event_id, society_id, cohost_type, status);
+DO $$
+BEGIN
+  EXECUTE '
+    CREATE UNIQUE INDEX IF NOT EXISTS ux_event_cohost_society_active
+      ON event_cohosts(event_id, society_id)
+      WHERE cohost_type = ''SOCIETY'' AND status = ''ACTIVE''
+  ';
+END $$;
 
-CREATE UNIQUE INDEX IF NOT EXISTS ux_event_cohost_nust_admin_active
-  ON event_cohosts(event_id, cohost_type, status);
+DO $$
+BEGIN
+  EXECUTE '
+    CREATE UNIQUE INDEX IF NOT EXISTS ux_event_cohost_nust_admin_active
+      ON event_cohosts(event_id)
+      WHERE cohost_type = ''NUST_ADMIN'' AND status = ''ACTIVE''
+  ';
+END $$;
 
 -- 2) Extend request table semantics without breaking existing rows
 DO $$
@@ -100,8 +112,20 @@ CREATE INDEX IF NOT EXISTS idx_platform_cohost_requests_event_status
 CREATE INDEX IF NOT EXISTS idx_platform_cohost_requests_request_type
   ON platform_cohost_requests(request_type);
 
-CREATE UNIQUE INDEX IF NOT EXISTS ux_pending_society_cohost_request
-  ON platform_cohost_requests(event_id, requesting_society_id, cohost_society_id, status, request_type);
+DO $$
+BEGIN
+  EXECUTE '
+    CREATE UNIQUE INDEX IF NOT EXISTS ux_pending_society_cohost_request
+      ON platform_cohost_requests(event_id, requesting_society_id, cohost_society_id)
+      WHERE status = ''PENDING'' AND request_type = ''SOCIETY''
+  ';
+END $$;
 
-CREATE UNIQUE INDEX IF NOT EXISTS ux_pending_nust_admin_request
-  ON platform_cohost_requests(event_id, requesting_society_id, status, request_type);
+DO $$
+BEGIN
+  EXECUTE '
+    CREATE UNIQUE INDEX IF NOT EXISTS ux_pending_nust_admin_request
+      ON platform_cohost_requests(event_id, requesting_society_id)
+      WHERE status = ''PENDING'' AND request_type = ''NUST_ADMIN''
+  ';
+END $$;
