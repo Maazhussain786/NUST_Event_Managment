@@ -43,9 +43,41 @@ export async function GET(
       [id],
     );
 
+    const profileResult = await query(
+      `SELECT tagline, cover_url, mission, established_year, faculty_advisor,
+              contact_email, contact_phone, office_location, social_links,
+              primary_color, accent_color, pin_announcement
+       FROM society_profiles
+       WHERE society_id = $1
+       LIMIT 1`,
+      [id],
+    );
+
     // Fetch wings
     const wingsResult = await query(
       `SELECT w.id, w.name, w.description FROM wings w WHERE w.society_id = $1 ORDER BY w.name`,
+      [id],
+    );
+
+    const membersResult = await query(
+      `SELECT
+          sm.id AS membership_id,
+          u.id AS user_id,
+          u.full_name,
+          u.avatar_url,
+          r.name AS role_name,
+          r.hierarchy_level,
+          w.name AS wing_name,
+          p.name AS portfolio_name,
+          sm.assigned_at
+       FROM society_memberships sm
+       JOIN users u ON u.id = sm.user_id
+       JOIN roles r ON r.id = sm.role_id
+       LEFT JOIN wings w ON w.id = sm.wing_id
+       LEFT JOIN portfolios p ON p.id = sm.portfolio_id
+       WHERE sm.society_id = $1
+         AND sm.is_active = TRUE
+       ORDER BY r.hierarchy_level DESC, sm.assigned_at ASC, u.full_name ASC`,
       [id],
     );
 
@@ -78,6 +110,26 @@ export async function GET(
       ),
     );
 
+    const profile = profileResult.rows[0]
+      ? resolveMediaFields(
+          profileResult.rows[0],
+          {
+            cover_url: CONTAINERS.SOCIETY_MEDIA,
+          },
+          24 * 60,
+        )
+      : null;
+
+    const members = membersResult.rows.map((row) =>
+      resolveMediaFields(
+        row,
+        {
+          avatar_url: CONTAINERS.PROFILE_PICTURES,
+        },
+        24 * 60,
+      ),
+    );
+
     const portfoliosByWing = new Map<
       string,
       Array<{ id: string; name: string }>
@@ -105,8 +157,10 @@ export async function GET(
 
     return NextResponse.json({
       society,
+      profile,
       events,
       wings,
+      members,
     });
   } catch (error: unknown) {
     const message =

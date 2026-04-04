@@ -1,20 +1,25 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
   Users,
   Star,
   Calendar,
-  MapPin,
   Loader2,
   X,
+  Building2,
+  Shield,
+  Sparkles,
+  Mail,
+  Phone,
+  MapPin,
 } from "lucide-react";
-import { useRouter, useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import EventCard from "@/components/EventCard";
+import { SmartImage } from "@/components/SmartImage";
 import { useAuth } from "@/components/AuthProvider";
-import { SmartImage } from '@/components/SmartImage';
 
 interface Society {
   id: string;
@@ -30,11 +35,38 @@ interface Society {
   created_at: string;
 }
 
+interface SocietyProfile {
+  tagline?: string | null;
+  cover_url?: string | null;
+  mission?: string | null;
+  established_year?: number | null;
+  faculty_advisor?: string | null;
+  contact_email?: string | null;
+  contact_phone?: string | null;
+  office_location?: string | null;
+  social_links?: Record<string, string> | null;
+  primary_color?: string | null;
+  accent_color?: string | null;
+  pin_announcement?: string | null;
+}
+
 interface Wing {
   id: string;
   name: string;
   description: string;
   portfolios?: Array<{ id: string; name: string }>;
+}
+
+interface SocietyMember {
+  membership_id: string;
+  user_id: string;
+  full_name: string;
+  avatar_url: string | null;
+  role_name: string;
+  hierarchy_level: number;
+  wing_name: string | null;
+  portfolio_name: string | null;
+  assigned_at: string;
 }
 
 interface Event {
@@ -53,17 +85,27 @@ interface Event {
   society_logo: string | null;
 }
 
+const hierarchyLabel = (level: number) => {
+  if (level >= 4) return "Executive Leadership";
+  if (level === 3) return "Directors";
+  if (level === 2) return "Deputy Directors";
+  return "Members";
+};
+
 export default function SocietyDetailPage() {
   const router = useRouter();
   const params = useParams();
   const { requireAuth, isLoggedIn } = useAuth();
+
   const [society, setSociety] = useState<Society | null>(null);
+  const [profile, setProfile] = useState<SocietyProfile | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
   const [wings, setWings] = useState<Wing[]>([]);
-  const [activeTab, setActiveTab] = useState<"about" | "events" | "wings">(
-    "about",
-  );
+  const [members, setMembers] = useState<SocietyMember[]>([]);
+
+  const [activeTab, setActiveTab] = useState<"about" | "members" | "events" | "wings">("about");
   const [loading, setLoading] = useState(true);
+
   const [joinStatusLoading, setJoinStatusLoading] = useState(false);
   const [joinSubmitting, setJoinSubmitting] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
@@ -74,12 +116,7 @@ export default function SocietyDetailPage() {
     role_name?: string;
     request: null | {
       id: string;
-      status:
-        | "PENDING"
-        | "INTERVIEW_SCHEDULED"
-        | "APPROVED"
-        | "REJECTED"
-        | "WITHDRAWN";
+      status: "PENDING" | "INTERVIEW_SCHEDULED" | "APPROVED" | "REJECTED" | "WITHDRAWN";
       review_notes?: string | null;
       interview_scheduled_at?: string | null;
       interview_mode?: string | null;
@@ -89,6 +126,7 @@ export default function SocietyDetailPage() {
       created_at: string;
     };
   }>({ is_member: false, request: null });
+
   const [joinForm, setJoinForm] = useState({
     phone: "",
     department: "",
@@ -107,8 +145,10 @@ export default function SocietyDetailPage() {
       .then((r) => r.json())
       .then((data) => {
         setSociety(data.society);
+        setProfile(data.profile || null);
         setEvents(data.events || []);
         setWings(data.wings || []);
+        setMembers(data.members || []);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -126,15 +166,14 @@ export default function SocietyDetailPage() {
     })
       .then(async (res) => {
         if (res.status === 401) return null;
-        const payload = await res.json();
-        return payload;
+        return await res.json();
       })
       .then((payload) => {
         if (!payload) return;
         setJoinStatus(payload);
       })
       .catch(() => {
-        // Keep UI usable even if status endpoint fails.
+        // Keep page usable even if this endpoint fails.
       })
       .finally(() => setJoinStatusLoading(false));
   }, [params.id, isLoggedIn]);
@@ -150,6 +189,7 @@ export default function SocietyDetailPage() {
       setJoinError("Motivation is required.");
       return;
     }
+
     const hasWingOptions = wings.length > 0;
     const selectedWing = wings.find((w) => w.id === joinForm.preferred_wing_id);
     const selectedWingPortfolios = selectedWing?.portfolios || [];
@@ -158,36 +198,29 @@ export default function SocietyDetailPage() {
       setJoinError("Please select a preferred wing.");
       return;
     }
-    if (
-      hasWingOptions &&
-      selectedWingPortfolios.length > 0 &&
-      !joinForm.preferred_portfolio_id
-    ) {
+    if (hasWingOptions && selectedWingPortfolios.length > 0 && !joinForm.preferred_portfolio_id) {
       setJoinError("Please select a preferred portfolio.");
       return;
     }
 
     setJoinSubmitting(true);
     setJoinError(null);
+
     try {
-      const response = await fetch(
-        `/api/societies/${params.id}/join-requests`,
-        {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ...joinForm,
-            preferred_wing_id: joinForm.preferred_wing_id || undefined,
-            preferred_portfolio_id:
-              joinForm.preferred_portfolio_id || undefined,
-            skills: joinForm.skills
-              .split(",")
-              .map((s) => s.trim())
-              .filter(Boolean),
-          }),
-        },
-      );
+      const response = await fetch(`/api/societies/${params.id}/join-requests`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...joinForm,
+          preferred_wing_id: joinForm.preferred_wing_id || undefined,
+          preferred_portfolio_id: joinForm.preferred_portfolio_id || undefined,
+          skills: joinForm.skills
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean),
+        }),
+      });
 
       const data = await response.json();
       if (!response.ok) {
@@ -203,13 +236,9 @@ export default function SocietyDetailPage() {
         },
       }));
       setShowJoinModal(false);
-      setJoinToast(
-        "Join request submitted. You will be notified after review.",
-      );
+      setJoinToast("Join request submitted. You will be notified after review.");
     } catch (err) {
-      setJoinError(
-        err instanceof Error ? err.message : "Failed to submit join request",
-      );
+      setJoinError(err instanceof Error ? err.message : "Failed to submit join request");
     } finally {
       setJoinSubmitting(false);
     }
@@ -219,18 +248,11 @@ export default function SocietyDetailPage() {
   const hasWingOptions = wings.length > 0;
   const selectedWing = wings.find((w) => w.id === joinForm.preferred_wing_id);
   const availablePortfolios = selectedWing?.portfolios || [];
-  const needsPortfolioSelection =
-    hasWingOptions &&
-    !!joinForm.preferred_wing_id &&
-    availablePortfolios.length > 0;
+  const needsPortfolioSelection = hasWingOptions && !!joinForm.preferred_wing_id && availablePortfolios.length > 0;
+
   const joinButtonLabel = (() => {
     if (joinStatusLoading) return "Checking...";
-    if (joinStatus.is_member) {
-      if (!joinStatus.role_name || joinStatus.role_name === "Member") {
-        return "Already a Member";
-      }
-      return `Member · ${joinStatus.role_name}`;
-    }
+    if (joinStatus.is_member) return joinStatus.role_name ? `Member · ${joinStatus.role_name}` : "Already a Member";
     if (requestStatus === "PENDING") return "Request Pending";
     if (requestStatus === "INTERVIEW_SCHEDULED") return "Interview Scheduled";
     if (requestStatus === "APPROVED") return "Approved";
@@ -244,6 +266,16 @@ export default function SocietyDetailPage() {
     requestStatus === "INTERVIEW_SCHEDULED" ||
     requestStatus === "APPROVED";
 
+  const groupedMembers = useMemo(() => {
+    const groups = new Map<number, SocietyMember[]>();
+    for (const member of members) {
+      const bucket = groups.get(member.hierarchy_level) || [];
+      bucket.push(member);
+      groups.set(member.hierarchy_level, bucket);
+    }
+    return Array.from(groups.entries()).sort((a, b) => b[0] - a[0]);
+  }, [members]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -253,141 +285,138 @@ export default function SocietyDetailPage() {
   }
 
   if (!society) {
-    return (
-      <div className="min-h-screen flex items-center justify-center text-muted">
-        Society not found
-      </div>
-    );
+    return <div className="min-h-screen flex items-center justify-center text-muted">Society not found</div>;
   }
 
   const tabs = [
     { key: "about", label: "About" },
+    { key: "members", label: `Members (${members.length})` },
     { key: "events", label: `Events (${events.length})` },
     { key: "wings", label: `Wings (${wings.length})` },
   ] as const;
 
   return (
-    <div className="min-h-screen" style={{ background: "var(--bg-primary)" }}>
-      {/* Header Banner */}
-      <div className="relative h-48 bg-gradient-to-br from-brand-500 to-brand-700">
-        <button
-          onClick={() => router.back()}
-          className="absolute top-12 left-4 z-10 w-10 h-10 rounded-2xl bg-black/30 backdrop-blur-md flex items-center justify-center text-white"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </button>
-      </div>
+    <div className="min-h-screen pb-20" style={{ background: "var(--bg-primary)" }}>
+      <section className="relative overflow-hidden">
+        <div className="h-56 md:h-64 w-full relative">
+          {profile?.cover_url ? (
+            <SmartImage src={profile.cover_url} alt={`${society.name} cover`} className="w-full h-full object-cover" />
+          ) : (
+            <div
+              className="w-full h-full"
+              style={{
+                background: profile?.primary_color
+                  ? `linear-gradient(120deg, ${profile.primary_color} 0%, ${profile.accent_color || "#f59e0b"} 100%)`
+                  : "linear-gradient(120deg, #fb923c 0%, #f97316 55%, #ea580c 100%)",
+              }}
+            />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-b from-black/15 via-black/30 to-[var(--bg-primary)]" />
 
-      {/* Society Info */}
-      <div className="px-5 -mt-16 relative z-10">
-        <div className="flex items-end gap-4 mb-4">
-          <div
-            className="w-24 h-24 rounded-2xl flex items-center justify-center text-3xl font-bold text-brand-500 shrink-0 border-4"
-            style={{
-              background: "var(--bg-primary)",
-              borderColor: "var(--bg-primary)",
-            }}
+          <button
+            onClick={() => router.back()}
+            className="absolute top-6 left-4 z-10 w-10 h-10 rounded-2xl bg-black/35 backdrop-blur-md flex items-center justify-center text-white"
+            aria-label="Go back"
           >
-            {society.logo_url ? (
-              <SmartImage
-                src={society.logo_url}
-                alt={society.name}
-                className="w-full h-full rounded-2xl object-cover"
-              />
-            ) : (
-              society.name[0]
-            )}
-          </div>
-          <div className="pb-1">
-            <h1 className="text-xl font-bold text-primary">{society.name}</h1>
-            <p className="text-muted text-sm">
-              {society.is_nust_wide
-                ? "NUST-Wide"
-                : society.school_abbr || "Society"}
-            </p>
-          </div>
+            <ArrowLeft className="w-5 h-5" />
+          </button>
         </div>
 
-        {/* Stats */}
-        <div className="flex gap-4 mb-6">
-          <div className="flex items-center gap-1 text-sm text-secondary">
-            <Users className="w-4 h-4 text-brand-500" />
-            <span className="font-semibold text-primary">
-              {society.member_count}
-            </span>{" "}
-            members
-          </div>
-          <div className="flex items-center gap-1 text-sm text-secondary">
-            <Star className="w-4 h-4 text-amber-500" />
-            <span className="font-semibold text-primary">
-              {society.avg_rating}
-            </span>
-            <span>({society.rating_count})</span>
-          </div>
-          <div className="flex items-center gap-1 text-sm text-secondary">
-            <Calendar className="w-4 h-4 text-brand-500" />
-            <span>{events.length} events</span>
-          </div>
-        </div>
-
-        {/* Join Button */}
-        <button
-          onClick={() => {
-            if (!requireAuth("Sign in to join societies")) return;
-            if (!joinDisabled) {
-              setJoinError(null);
-              setShowJoinModal(true);
-            }
-          }}
-          disabled={joinDisabled}
-          className={`btn-primary w-full mb-3 ${joinDisabled ? "opacity-70 cursor-not-allowed" : ""}`}
-        >
-          {joinButtonLabel}
-        </button>
-
-        {joinStatus.request?.status === "INTERVIEW_SCHEDULED" && (
-          <div className="card p-3 mb-6 text-sm">
-            <p className="text-primary font-medium mb-1">Interview scheduled</p>
-            {joinStatus.request.interview_scheduled_at && (
-              <p className="text-secondary">
-                {new Date(
-                  joinStatus.request.interview_scheduled_at,
-                ).toLocaleString()}
-              </p>
-            )}
-            {joinStatus.request.interview_mode && (
-              <p className="text-muted">
-                Mode: {joinStatus.request.interview_mode}
-              </p>
-            )}
-            {joinStatus.request.interview_location && (
-              <p className="text-muted">
-                Location: {joinStatus.request.interview_location}
-              </p>
-            )}
-            {joinStatus.request.interview_meeting_link && (
-              <a
-                href={joinStatus.request.interview_meeting_link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-brand-500 underline"
+        <div className="px-5 -mt-14 relative z-20">
+          <div className="card p-4 md:p-5">
+            <div className="flex items-start gap-4">
+              <div
+                className="w-20 h-20 rounded-2xl shrink-0 border"
+                style={{ borderColor: "var(--border-primary)", background: "var(--bg-secondary)" }}
               >
-                Open meeting link
-              </a>
+                {society.logo_url ? (
+                  <SmartImage src={society.logo_url} alt={society.name} className="w-full h-full rounded-2xl object-cover" />
+                ) : (
+                  <div className="w-full h-full rounded-2xl flex items-center justify-center text-2xl font-bold text-brand-500">
+                    {society.name[0]}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <h1 className="text-2xl font-bold text-primary leading-tight">{society.name}</h1>
+                <p className="text-sm text-muted mt-1">
+                  {profile?.tagline || (society.is_nust_wide ? "NUST-Wide Society" : society.school_name || society.school_abbr || "Society")}
+                </p>
+
+                <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                  <span className="rounded-full px-2.5 py-1 bg-brand-500/10 text-brand-500 font-medium inline-flex items-center gap-1">
+                    <Users className="w-3 h-3" /> {society.member_count} members
+                  </span>
+                  <span className="rounded-full px-2.5 py-1 bg-amber-500/10 text-amber-600 dark:text-amber-400 font-medium inline-flex items-center gap-1">
+                    <Star className="w-3 h-3" /> {Number(society.avg_rating || 0).toFixed(2)} ({society.rating_count})
+                  </span>
+                  <span className="rounded-full px-2.5 py-1 bg-blue-500/10 text-blue-600 dark:text-blue-400 font-medium inline-flex items-center gap-1">
+                    <Calendar className="w-3 h-3" /> {events.length} events
+                  </span>
+                  <span className="rounded-full px-2.5 py-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-medium inline-flex items-center gap-1">
+                    <Building2 className="w-3 h-3" /> {wings.length} wings
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                if (!requireAuth("Sign in to join societies")) return;
+                if (!joinDisabled) {
+                  setJoinError(null);
+                  setShowJoinModal(true);
+                }
+              }}
+              disabled={joinDisabled}
+              className={`btn-primary w-full mt-4 ${joinDisabled ? "opacity-70 cursor-not-allowed" : ""}`}
+            >
+              {joinButtonLabel}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <div className="px-5 mt-4 space-y-4">
+        {(profile?.pin_announcement || profile?.faculty_advisor || profile?.contact_email || profile?.contact_phone || profile?.office_location) && (
+          <div className="card p-4 space-y-3">
+            {profile?.pin_announcement && (
+              <div className="rounded-xl px-3 py-2.5 bg-brand-500/10 text-brand-600 dark:text-brand-400 text-sm font-medium inline-flex items-start gap-2 w-full">
+                <Sparkles className="w-4 h-4 mt-0.5 shrink-0" />
+                <span>{profile.pin_announcement}</span>
+              </div>
             )}
-            {joinStatus.request.interview_notes && (
-              <p className="text-muted mt-1">
-                {joinStatus.request.interview_notes}
-              </p>
-            )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-sm">
+              {profile?.faculty_advisor && (
+                <div className="rounded-xl px-3 py-2 border border-border bg-surface-50 dark:bg-surface-900/30 inline-flex items-center gap-2 text-secondary">
+                  <Shield className="w-4 h-4 text-brand-500" />
+                  Faculty Advisor: {profile.faculty_advisor}
+                </div>
+              )}
+              {profile?.contact_email && (
+                <div className="rounded-xl px-3 py-2 border border-border bg-surface-50 dark:bg-surface-900/30 inline-flex items-center gap-2 text-secondary">
+                  <Mail className="w-4 h-4 text-brand-500" />
+                  {profile.contact_email}
+                </div>
+              )}
+              {profile?.contact_phone && (
+                <div className="rounded-xl px-3 py-2 border border-border bg-surface-50 dark:bg-surface-900/30 inline-flex items-center gap-2 text-secondary">
+                  <Phone className="w-4 h-4 text-brand-500" />
+                  {profile.contact_phone}
+                </div>
+              )}
+              {profile?.office_location && (
+                <div className="rounded-xl px-3 py-2 border border-border bg-surface-50 dark:bg-surface-900/30 inline-flex items-center gap-2 text-secondary">
+                  <MapPin className="w-4 h-4 text-brand-500" />
+                  {profile.office_location}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
-        {/* Tabs */}
-        <div
-          className="flex mb-4"
-          style={{ borderBottom: "1px solid var(--border-primary)" }}
-        >
+        <div className="flex mb-1" style={{ borderBottom: "1px solid var(--border-primary)" }}>
           {tabs.map((tab) => (
             <button
               key={tab.key}
@@ -398,38 +427,77 @@ export default function SocietyDetailPage() {
             >
               {tab.label}
               {activeTab === tab.key && (
-                <motion.div
-                  layoutId="societyTab"
-                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-500"
-                />
+                <motion.div layoutId="societyTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-500" />
               )}
             </button>
           ))}
         </div>
 
-        {/* Tab Content */}
         {activeTab === "about" && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="pb-6"
-          >
-            <p className="text-secondary leading-relaxed">
-              {society.description || "No description available."}
-            </p>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3 pb-6">
+            <div className="card p-4">
+              <h3 className="text-sm font-semibold text-primary mb-2">About Society</h3>
+              <p className="text-secondary leading-relaxed">{society.description || "No description available."}</p>
+            </div>
+            {profile?.mission && (
+              <div className="card p-4">
+                <h3 className="text-sm font-semibold text-primary mb-2">Mission</h3>
+                <p className="text-secondary leading-relaxed">{profile.mission}</p>
+              </div>
+            )}
+          </motion.div>
+        )}
+
+        {activeTab === "members" && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3 pb-6">
+            {groupedMembers.length > 0 ? (
+              groupedMembers.map(([level, people]) => (
+                <div key={level} className="card p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold text-primary">{hierarchyLabel(level)}</h3>
+                    <span className="text-xs text-muted">{people.length} members</span>
+                  </div>
+
+                  <div className="space-y-2">
+                    {people.map((member) => (
+                      <div
+                        key={member.membership_id}
+                        className="rounded-xl border border-border px-3 py-2.5 bg-surface-50 dark:bg-surface-900/30"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl overflow-hidden bg-brand-500/10 shrink-0">
+                            {member.avatar_url ? (
+                              <SmartImage src={member.avatar_url} alt={member.full_name} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-brand-500 font-semibold">
+                                {member.full_name.charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold text-primary truncate">{member.full_name}</p>
+                            <p className="text-xs text-muted truncate">
+                              {member.role_name}
+                              {member.wing_name ? ` • ${member.wing_name}` : ""}
+                              {member.portfolio_name ? ` • ${member.portfolio_name}` : ""}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-center text-muted py-8">No members found</p>
+            )}
           </motion.div>
         )}
 
         {activeTab === "events" && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="space-y-3 pb-6"
-          >
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3 pb-6">
             {events.length > 0 ? (
-              events.map((event) => (
-                <EventCard key={event.id} event={event} variant="compact" />
-              ))
+              events.map((event) => <EventCard key={event.id} event={event} variant="compact" />)
             ) : (
               <p className="text-center text-muted py-8">No upcoming events</p>
             )}
@@ -437,24 +505,25 @@ export default function SocietyDetailPage() {
         )}
 
         {activeTab === "wings" && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="space-y-3 pb-6"
-          >
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3 pb-6">
             {wings.length > 0 ? (
               wings.map((wing) => (
                 <div key={wing.id} className="card p-4">
                   <h3 className="text-primary font-semibold">{wing.name}</h3>
-                  <p className="text-muted text-sm mt-1">
-                    {wing.description || "No description"}
-                  </p>
+                  <p className="text-muted text-sm mt-1">{wing.description || "No description"}</p>
+                  {wing.portfolios && wing.portfolios.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {wing.portfolios.map((portfolio) => (
+                        <span key={portfolio.id} className="text-xs rounded-full px-2.5 py-1 bg-brand-500/10 text-brand-500">
+                          {portfolio.name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))
             ) : (
-              <p className="text-center text-muted py-8">
-                No wings created yet
-              </p>
+              <p className="text-center text-muted py-8">No wings created yet</p>
             )}
           </motion.div>
         )}
@@ -464,13 +533,8 @@ export default function SocietyDetailPage() {
         <div className="fixed inset-0 z-[120] bg-black/60 flex items-center justify-center p-4">
           <div className="card w-full max-w-xl p-5 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-lg font-semibold text-primary">
-                Join Society Application
-              </h3>
-              <button
-                onClick={() => setShowJoinModal(false)}
-                className="btn-ghost p-1.5"
-              >
+              <h3 className="text-lg font-semibold text-primary">Join Society Application</h3>
+              <button onClick={() => setShowJoinModal(false)} className="btn-ghost p-1.5">
                 <X size={16} />
               </button>
             </div>
@@ -481,17 +545,13 @@ export default function SocietyDetailPage() {
                   className="input-field"
                   placeholder="Phone"
                   value={joinForm.phone}
-                  onChange={(e) =>
-                    setJoinForm((p) => ({ ...p, phone: e.target.value }))
-                  }
+                  onChange={(e) => setJoinForm((p) => ({ ...p, phone: e.target.value }))}
                 />
                 <input
                   className="input-field"
                   placeholder="Department"
                   value={joinForm.department}
-                  onChange={(e) =>
-                    setJoinForm((p) => ({ ...p, department: e.target.value }))
-                  }
+                  onChange={(e) => setJoinForm((p) => ({ ...p, department: e.target.value }))}
                 />
               </div>
 
@@ -500,20 +560,13 @@ export default function SocietyDetailPage() {
                   className="input-field"
                   placeholder="Year/Semester"
                   value={joinForm.year_of_study}
-                  onChange={(e) =>
-                    setJoinForm((p) => ({
-                      ...p,
-                      year_of_study: e.target.value,
-                    }))
-                  }
+                  onChange={(e) => setJoinForm((p) => ({ ...p, year_of_study: e.target.value }))}
                 />
                 <input
                   className="input-field"
                   placeholder="Availability (e.g. weekdays 4-7pm)"
                   value={joinForm.availability}
-                  onChange={(e) =>
-                    setJoinForm((p) => ({ ...p, availability: e.target.value }))
-                  }
+                  onChange={(e) => setJoinForm((p) => ({ ...p, availability: e.target.value }))}
                 />
               </div>
 
@@ -521,9 +574,7 @@ export default function SocietyDetailPage() {
                 className="input-field"
                 placeholder="Skills (comma separated)"
                 value={joinForm.skills}
-                onChange={(e) =>
-                  setJoinForm((p) => ({ ...p, skills: e.target.value }))
-                }
+                onChange={(e) => setJoinForm((p) => ({ ...p, skills: e.target.value }))}
               />
 
               {hasWingOptions ? (
@@ -556,10 +607,7 @@ export default function SocietyDetailPage() {
                         preferred_portfolio_id: e.target.value,
                       }))
                     }
-                    disabled={
-                      !joinForm.preferred_wing_id ||
-                      availablePortfolios.length === 0
-                    }
+                    disabled={!joinForm.preferred_wing_id || availablePortfolios.length === 0}
                   >
                     <option value="">
                       {joinForm.preferred_wing_id
@@ -576,12 +624,9 @@ export default function SocietyDetailPage() {
                   </select>
                 </>
               ) : (
-                <div
-                  className="rounded-xl px-4 py-3 text-sm text-muted"
-                  style={{ border: "1px solid var(--border-primary)" }}
-                >
-                  This society has not configured wings yet. You can still submit
-                  your request without selecting wing or portfolio.
+                <div className="rounded-xl px-4 py-3 text-sm text-muted" style={{ border: "1px solid var(--border-primary)" }}>
+                  This society has not configured wings yet. You can still submit your request without selecting wing or
+                  portfolio.
                 </div>
               )}
 
@@ -589,44 +634,28 @@ export default function SocietyDetailPage() {
                 className="input-field min-h-[90px]"
                 placeholder="Why do you want to join? *"
                 value={joinForm.motivation}
-                onChange={(e) =>
-                  setJoinForm((p) => ({ ...p, motivation: e.target.value }))
-                }
+                onChange={(e) => setJoinForm((p) => ({ ...p, motivation: e.target.value }))}
               />
 
               <textarea
                 className="input-field min-h-[80px]"
                 placeholder="Prior experience (optional)"
                 value={joinForm.prior_experience}
-                onChange={(e) =>
-                  setJoinForm((p) => ({
-                    ...p,
-                    prior_experience: e.target.value,
-                  }))
-                }
+                onChange={(e) => setJoinForm((p) => ({ ...p, prior_experience: e.target.value }))}
               />
 
               <textarea
                 className="input-field min-h-[80px]"
                 placeholder="How will you contribute? (optional)"
                 value={joinForm.expected_contribution}
-                onChange={(e) =>
-                  setJoinForm((p) => ({
-                    ...p,
-                    expected_contribution: e.target.value,
-                  }))
-                }
+                onChange={(e) => setJoinForm((p) => ({ ...p, expected_contribution: e.target.value }))}
               />
 
               {joinError && <p className="text-sm text-red-500">{joinError}</p>}
             </div>
 
             <div className="flex justify-end gap-2 mt-4">
-              <button
-                className="btn-ghost px-4 py-2"
-                onClick={() => setShowJoinModal(false)}
-                disabled={joinSubmitting}
-              >
+              <button className="btn-ghost px-4 py-2" onClick={() => setShowJoinModal(false)} disabled={joinSubmitting}>
                 Cancel
               </button>
               <button
@@ -654,5 +683,3 @@ export default function SocietyDetailPage() {
     </div>
   );
 }
-
-
