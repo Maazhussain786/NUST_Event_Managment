@@ -15,11 +15,18 @@ import {
   Mail,
   Phone,
   MapPin,
+  Globe,
+  Instagram,
+  Linkedin,
+  Youtube,
+  Facebook,
+  Twitter,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import EventCard from "@/components/EventCard";
 import { SmartImage } from "@/components/SmartImage";
 import { useAuth } from "@/components/AuthProvider";
+import type { LucideIcon } from "lucide-react";
 
 interface Society {
   id: string;
@@ -83,6 +90,130 @@ interface Event {
   society_id: string;
   society_name: string;
   society_logo: string | null;
+}
+
+type SocialPlatform =
+  | "instagram"
+  | "linkedin"
+  | "youtube"
+  | "x"
+  | "facebook"
+  | "website";
+
+interface SocialLinkItem {
+  platform: SocialPlatform;
+  label: string;
+  href: string;
+  icon: LucideIcon;
+}
+
+const SOCIAL_PLATFORM_MAP: Record<
+  SocialPlatform,
+  { label: string; icon: LucideIcon; hosts: string[]; aliases: string[] }
+> = {
+  instagram: {
+    label: "Instagram",
+    icon: Instagram,
+    hosts: ["instagram.com", "www.instagram.com"],
+    aliases: ["instagram", "insta", "instagram_url"],
+  },
+  linkedin: {
+    label: "LinkedIn",
+    icon: Linkedin,
+    hosts: ["linkedin.com", "www.linkedin.com"],
+    aliases: ["linkedin", "linkedin_url"],
+  },
+  youtube: {
+    label: "YouTube",
+    icon: Youtube,
+    hosts: ["youtube.com", "www.youtube.com", "youtu.be"],
+    aliases: ["youtube", "youtube_url", "yt", "yt_url"],
+  },
+  x: {
+    label: "X",
+    icon: Twitter,
+    hosts: ["x.com", "www.x.com", "twitter.com", "www.twitter.com"],
+    aliases: ["x", "x_url", "twitter", "twitter_url"],
+  },
+  facebook: {
+    label: "Facebook",
+    icon: Facebook,
+    hosts: ["facebook.com", "www.facebook.com", "fb.com", "www.fb.com"],
+    aliases: ["facebook", "facebook_url", "fb", "fb_url"],
+  },
+  website: {
+    label: "Website",
+    icon: Globe,
+    hosts: [],
+    aliases: ["website", "site", "url", "web", "homepage"],
+  },
+};
+
+function normalizeUrl(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const withProtocol = /^https?:\/\//i.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
+
+  try {
+    const parsed = new URL(withProtocol);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return null;
+    }
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
+function buildSocialLinks(socialLinks: SocietyProfile["social_links"]): SocialLinkItem[] {
+  if (!socialLinks || typeof socialLinks !== "object") return [];
+
+  const normalizedInput = Object.entries(socialLinks).reduce<Record<string, string>>(
+    (acc, [key, value]) => {
+      if (typeof value === "string") {
+        acc[key.trim().toLowerCase()] = value;
+      }
+      return acc;
+    },
+    {},
+  );
+
+  const output: SocialLinkItem[] = [];
+
+  (Object.keys(SOCIAL_PLATFORM_MAP) as SocialPlatform[]).forEach((platform) => {
+    const config = SOCIAL_PLATFORM_MAP[platform];
+    const raw = config.aliases
+      .map((alias) => normalizedInput[alias])
+      .find((candidate) => !!candidate?.trim());
+
+    if (!raw) return;
+
+    const href = normalizeUrl(raw);
+    if (!href) return;
+
+    if (config.hosts.length > 0) {
+      try {
+        const host = new URL(href).hostname.toLowerCase();
+        const matches = config.hosts.some(
+          (allowed) => host === allowed || host.endsWith(`.${allowed}`),
+        );
+        if (!matches) return;
+      } catch {
+        return;
+      }
+    }
+
+    output.push({
+      platform,
+      label: config.label,
+      href,
+      icon: config.icon,
+    });
+  });
+
+  return output;
 }
 
 const hierarchyLabel = (level: number) => {
@@ -276,6 +407,11 @@ export default function SocietyDetailPage() {
     return Array.from(groups.entries()).sort((a, b) => b[0] - a[0]);
   }, [members]);
 
+  const socialLinks = useMemo(
+    () => buildSocialLinks(profile?.social_links || null),
+    [profile?.social_links],
+  );
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -379,7 +515,12 @@ export default function SocietyDetailPage() {
       </section>
 
       <div className="px-5 mt-4 space-y-4">
-        {(profile?.pin_announcement || profile?.faculty_advisor || profile?.contact_email || profile?.contact_phone || profile?.office_location) && (
+        {(profile?.pin_announcement ||
+          profile?.faculty_advisor ||
+          profile?.contact_email ||
+          profile?.contact_phone ||
+          profile?.office_location ||
+          socialLinks.length > 0) && (
           <div className="card p-4 space-y-3">
             {profile?.pin_announcement && (
               <div className="rounded-xl px-3 py-2.5 bg-brand-500/10 text-brand-600 dark:text-brand-400 text-sm font-medium inline-flex items-start gap-2 w-full">
@@ -413,6 +554,29 @@ export default function SocietyDetailPage() {
                 </div>
               )}
             </div>
+
+            {socialLinks.length > 0 && (
+              <div className="pt-1">
+                <p className="text-xs font-semibold text-muted mb-2">Social Links</p>
+                <div className="flex flex-wrap gap-2">
+                  {socialLinks.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <a
+                        key={item.platform}
+                        href={item.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium border border-border bg-surface-50 dark:bg-surface-900/30 hover:border-brand-400 hover:text-brand-500 transition-colors"
+                      >
+                        <Icon className="w-3.5 h-3.5" />
+                        {item.label}
+                      </a>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
