@@ -34,6 +34,16 @@ export async function GET(req: NextRequest) {
       return res;
     }
 
+    // Activity heartbeat used by admin dashboard "Last Active".
+    // Throttle writes to avoid updating on every request burst.
+    await query(
+      `UPDATE users
+       SET updated_at = NOW()
+       WHERE id = $1
+         AND (updated_at IS NULL OR updated_at < NOW() - INTERVAL '5 minutes')`,
+      [user.id]
+    );
+
     let avatarUrl: string | null = null;
     if (user.avatar_url) {
       try {

@@ -6,6 +6,7 @@ import { LogIn, X, UserCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import {
   AUTH_STATE_CHANGED_EVENT,
+  clearLocalAuth,
   getLocalUser,
   syncUserFromSession,
 } from '@/lib/client-auth';
@@ -122,7 +123,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   Create Account
                 </button>
                 <button
-                  onClick={() => setShowPrompt(false)}
+                  onClick={() => {
+                    clearLocalAuth();
+                    setShowPrompt(false);
+                    router.push('/home');
+                  }}
                   className="mt-1 text-xs transition-colors text-muted hover:text-secondary"
                 >
                   Continue as Guest

@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { GoogleSignInButton } from '@/components/GoogleSignInButton';
-import { setLocalUser, syncUserFromSession } from '@/lib/client-auth';
+import { clearLocalAuth, setLocalUser, syncUserFromSession } from '@/lib/client-auth';
 
 const ease = [0.25, 0.1, 0.25, 1] as const;
 
@@ -170,6 +170,17 @@ export default function RegisterPage() {
             Sign in
           </Link>
         </p>
+
+        <button
+          type="button"
+          onClick={() => {
+            clearLocalAuth();
+            window.location.href = '/home';
+          }}
+          className="w-full mt-2 text-center text-[13px] text-muted-foreground hover:text-foreground transition-colors"
+        >
+          Join as Guest
+        </button>
       </motion.div>
     </div>
   );
