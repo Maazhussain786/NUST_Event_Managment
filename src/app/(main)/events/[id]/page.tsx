@@ -78,7 +78,7 @@ interface PaymentDetails {
 
 function EventDetailSkeleton() {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background app-shell-bleed-top">
       <Skeleton className="h-[52vh] min-h-[320px] w-full" />
       <div className="relative -mt-6 rounded-t-[2rem] bg-background pt-6 pb-28 px-5 space-y-5">
         <Skeleton className="h-7 w-56" />
@@ -349,11 +349,12 @@ export default function EventDetailPage() {
     d.toLocaleDateString('en-PK', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
   const formatTime = (d: Date) =>
     d.toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit', hour12: true });
+  const formattedPrice = isFree ? 'Free' : `Rs. ${Number(event.ticket_price || 0).toLocaleString('en-PK')}`;
 
   return (
     <div className="min-h-screen bg-background">
       {/* ── Hero banner ── */}
-      <div className="relative h-[52vh] min-h-[320px]">
+      <div className="relative h-[50vh] min-h-[320px] max-h-[460px] overflow-hidden">
         {event.banner_url ? (
           <Image
             src={event.banner_url}
@@ -364,18 +365,22 @@ export default function EventDetailPage() {
             sizes="100vw"
           />
         ) : (
-          <div className="w-full h-full bg-gradient-to-br from-brand-400 via-brand-500 to-surface-900" />
+          <div className="w-full h-full bg-[radial-gradient(circle_at_25%_20%,#f59e0b_0%,#d97706_38%,#111827_100%)]" />
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/30" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-black/25" />
+        <div className="absolute -bottom-16 -right-10 w-60 h-60 rounded-full bg-brand-500/20 blur-3xl" />
 
         {/* Top controls */}
-        <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 pt-12 z-10 safe-top">
+        <div
+          className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 z-10"
+          style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' }}
+        >
           <Button
             variant="ghost"
             size="icon"
             onClick={() => router.back()}
             aria-label="Go back"
-            className="bg-black/30 backdrop-blur-md text-white hover:bg-black/50 rounded-xl"
+            className="bg-black/35 backdrop-blur-md text-white hover:bg-black/55 rounded-xl border border-white/10"
           >
             <ArrowLeft className="w-5 h-5" />
           </Button>
@@ -388,7 +393,7 @@ export default function EventDetailPage() {
                 setIsFavorite(!isFavorite);
               }}
               aria-label={isFavorite ? 'Remove from favorites' : 'Save to favorites'}
-              className="bg-black/30 backdrop-blur-md text-white hover:bg-black/50 rounded-xl"
+              className="bg-black/35 backdrop-blur-md text-white hover:bg-black/55 rounded-xl border border-white/10"
             >
               <Heart className={cn('w-5 h-5', isFavorite && 'fill-red-500 text-red-500')} />
             </Button>
@@ -396,7 +401,7 @@ export default function EventDetailPage() {
               variant="ghost"
               size="icon"
               aria-label="Share event"
-              className="bg-black/30 backdrop-blur-md text-white hover:bg-black/50 rounded-xl"
+              className="bg-black/35 backdrop-blur-md text-white hover:bg-black/55 rounded-xl border border-white/10"
             >
               <Share2 className="w-5 h-5" />
             </Button>
@@ -404,59 +409,69 @@ export default function EventDetailPage() {
         </div>
 
         {/* Title overlay */}
-        <div className="absolute bottom-0 left-0 right-0 p-5 z-10">
+        <div className="absolute bottom-0 left-0 right-0 p-5 pb-12 z-10">
           {event.category_name && (
             <Badge variant="solid" size="md" className="mb-2">
               {event.category_name}
             </Badge>
           )}
-          <h1 className="text-display text-white leading-tight">{event.title}</h1>
+          <h1 className="text-display text-white leading-tight drop-shadow-[0_4px_24px_rgba(0,0,0,0.6)]">{event.title}</h1>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <span className="text-[11px] px-2.5 py-1 rounded-full bg-white/10 text-white/90 border border-white/15">
+              {formatDate(startDate)}
+            </span>
+            <span className="text-[11px] px-2.5 py-1 rounded-full bg-white/10 text-white/90 border border-white/15">
+              {event.location || 'Venue TBA'}
+            </span>
+          </div>
         </div>
       </div>
 
       {/* ── Content sheet ── */}
-      <div className="relative -mt-6 rounded-t-[2rem] bg-background z-20 pt-6 pb-28">
+      <div className="relative -mt-8 rounded-t-[2rem] bg-background z-20 pt-6 pb-[calc(10rem+env(safe-area-inset-bottom,0px))] shadow-[0_-16px_40px_rgba(0,0,0,0.35)]">
         {/* Society link */}
-        <Link
-          href={`/societies/${event.society_id}`}
-          className="mx-5 flex items-center gap-3 p-3 rounded-xl bg-card border border-border hover:border-brand-200 dark:hover:border-brand-900/40 transition-colors mb-5"
-        >
-          <Avatar size="md" className="rounded-xl">
-            {event.society_logo ? <AvatarImage src={event.society_logo} alt={event.society_name} /> : null}
-            <AvatarFallback className="rounded-xl text-sm font-bold">
-              {event.society_name?.[0] || 'S'}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1 min-w-0">
-            <p className="text-body-sm font-semibold text-foreground truncate">{event.society_name}</p>
-            <p className="text-caption text-muted-foreground">Organizer</p>
-          </div>
-        </Link>
+        <div className="mx-5 mb-5 rounded-2xl bg-gradient-to-r from-brand-500/25 via-brand-500/10 to-transparent p-[1px]">
+          <Link
+            href={`/societies/${event.society_id}`}
+            className="flex items-center gap-3 p-3 rounded-2xl bg-card/95 border border-border/70 hover:border-brand-200 dark:hover:border-brand-900/40 transition-colors"
+          >
+            <Avatar size="md" className="rounded-xl ring-1 ring-border/70">
+              {event.society_logo ? <AvatarImage src={event.society_logo} alt={event.society_name} /> : null}
+              <AvatarFallback className="rounded-xl text-sm font-bold">
+                {event.society_name?.[0] || 'S'}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <p className="text-body-sm font-semibold text-foreground truncate">{event.society_name}</p>
+              <p className="text-caption text-muted-foreground">Organizer</p>
+            </div>
+          </Link>
+        </div>
 
         {/* Quick info cards */}
         <div className="px-5 grid grid-cols-2 gap-2.5 mb-6">
-          <div className="rounded-xl bg-card border border-border p-3">
+          <div className="rounded-2xl bg-card border border-border/80 p-3.5 shadow-sm">
             <div className="flex items-center gap-2 mb-1">
               <Calendar className="w-4 h-4 text-brand-500" />
               <span className="text-caption text-muted-foreground">Date</span>
             </div>
             <p className="text-body-sm font-semibold text-foreground">{formatDate(startDate)}</p>
           </div>
-          <div className="rounded-xl bg-card border border-border p-3">
+          <div className="rounded-2xl bg-card border border-border/80 p-3.5 shadow-sm">
             <div className="flex items-center gap-2 mb-1">
               <Clock className="w-4 h-4 text-brand-500" />
               <span className="text-caption text-muted-foreground">Time</span>
             </div>
             <p className="text-body-sm font-semibold text-foreground">{formatTime(startDate)} – {formatTime(endDate)}</p>
           </div>
-          <div className="rounded-xl bg-card border border-border p-3">
+          <div className="rounded-2xl bg-card border border-border/80 p-3.5 shadow-sm">
             <div className="flex items-center gap-2 mb-1">
               <MapPin className="w-4 h-4 text-brand-500" />
               <span className="text-caption text-muted-foreground">Venue</span>
             </div>
             <p className="text-body-sm font-semibold text-foreground truncate">{event.location || 'TBA'}</p>
           </div>
-          <div className="rounded-xl bg-card border border-border p-3">
+          <div className="rounded-2xl bg-card border border-border/80 p-3.5 shadow-sm">
             <div className="flex items-center gap-2 mb-1">
               <Users className="w-4 h-4 text-brand-500" />
               <span className="text-caption text-muted-foreground">Spots</span>
@@ -493,10 +508,12 @@ export default function EventDetailPage() {
 
         {/* About */}
         <div className="px-5 mb-6">
-          <h2 className="text-h3 text-foreground mb-2">About</h2>
-          <p className="text-body text-muted-foreground whitespace-pre-wrap leading-relaxed">
-            {event.description || 'No description available.'}
-          </p>
+          <div className="rounded-2xl border border-border/80 bg-card/70 p-4">
+            <h2 className="text-h3 text-foreground mb-2">About</h2>
+            <p className="text-body text-muted-foreground whitespace-pre-wrap leading-relaxed">
+              {event.description || 'No description available.'}
+            </p>
+          </div>
         </div>
       </div>
 
@@ -506,21 +523,20 @@ export default function EventDetailPage() {
           initial={{ y: 100 }}
           animate={{ y: 0 }}
           transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-          className="fixed bottom-0 left-0 right-0 z-modal px-4 py-3 glass-heavy border-t border-border/50 safe-bottom"
+          className="fixed bottom-0 left-0 right-0 z-modal px-4 pt-3 glass-heavy border-t border-border/50"
+          style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 0.75rem)' }}
         >
-          <div className="max-w-lg mx-auto flex items-center justify-between gap-4">
-            <div>
+          <div className="max-w-lg mx-auto rounded-2xl border border-border/60 bg-card/70 backdrop-blur-md px-3 py-2.5 flex items-center justify-between gap-3 shadow-xl">
+            <div className="min-w-0">
               <p className="text-caption text-muted-foreground">Price</p>
-              <p className="text-h2 text-foreground">
-                {isFree ? 'Free' : `Rs. ${event.ticket_price}`}
-              </p>
+              <p className="text-h2 text-foreground truncate">{formattedPrice}</p>
             </div>
 
             {/* Already registered - show status */}
             {hasExistingTicket ? (
               <Button
                 size="lg"
-                className="rounded-xl px-8"
+                className="rounded-xl px-6 min-w-[9.5rem]"
                 variant={isTicketApproved ? 'soft' : 'secondary'}
                 onClick={() => {
                   if (!isFree && (isTicketPendingVerification || isTicketNeedsReupload)) {
@@ -555,7 +571,7 @@ export default function EventDetailPage() {
             ) : isSoldOut ? (
               <Button
                 size="lg"
-                className="rounded-xl px-8"
+                className="rounded-xl px-6 min-w-[9.5rem]"
                 variant="secondary"
                 disabled
               >
@@ -564,7 +580,7 @@ export default function EventDetailPage() {
             ) : (
               <Button
                 size="lg"
-                className="rounded-xl px-8"
+                className="rounded-xl px-6 min-w-[9.5rem]"
                 disabled={registering}
                 onClick={handleCTA}
               >
