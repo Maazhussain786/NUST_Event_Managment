@@ -173,8 +173,8 @@ export function StatusBadge({ status, reason, className }: StatusBadgeProps) {
     CHECKED_IN: {
       bg: 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/40',
       text: 'text-emerald-700 dark:text-emerald-400',
-      label: 'Checked In',
-      description: 'You have checked in to the event',
+      label: 'You are checked in',
+      description: 'Your check-in has been recorded. Keep your ticket for reference.',
     },
   };
 

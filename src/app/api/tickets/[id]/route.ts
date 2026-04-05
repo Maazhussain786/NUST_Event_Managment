@@ -76,6 +76,7 @@ export async function GET(
           t.id,
           ${ticketNumberExpr} AS ticket_number,
           CASE
+            WHEN ea.checked_in_at IS NOT NULL THEN 'CHECKED_IN'
             WHEN t.status = 'PENDING' AND pp.status = 'REJECTED' THEN 'NEEDS_REUPLOAD'
             WHEN t.status = 'PENDING' AND pp.proof_url IS NULL THEN 'PENDING_VERIFICATION'
             ELSE t.status::TEXT
@@ -109,7 +110,7 @@ export async function GET(
           u.full_name AS attendee_name,
           u.email AS attendee_email,
           qr.qr_data,
-          qr.scanned_at,
+          COALESCE(ea.checked_in_at, qr.scanned_at) AS scanned_at,
           pp.proof_url AS payment_proof_url,
           pp.status AS payment_proof_status,
           ${hasProofMetaCols ? 'pp.transaction_reference' : `''::TEXT`} AS transaction_reference,
@@ -135,6 +136,7 @@ export async function GET(
           WHERE eco.event_id = e.id
         ) ch ON TRUE
         JOIN users u ON t.user_id = u.id
+        LEFT JOIN event_attendance ea ON ea.ticket_id = t.id
         LEFT JOIN ticket_qr_codes qr ON qr.ticket_id = t.id AND qr.is_active = TRUE
         LEFT JOIN LATERAL (
           SELECT
@@ -167,7 +169,10 @@ export async function GET(
           `SELECT
             er.id,
             'FREE-' || SUBSTRING(er.id::text, 1, 8) AS ticket_number,
-            'APPROVED' AS status,
+            CASE
+              WHEN ea.checked_in_at IS NOT NULL THEN 'CHECKED_IN'
+              ELSE 'APPROVED'
+            END AS status,
             'APPROVED' AS ticket_status,
             er.registered_at AS purchased_at,
             0::NUMERIC AS amount,
@@ -197,7 +202,7 @@ export async function GET(
             u.full_name AS attendee_name,
             u.email AS attendee_email,
             qr.qr_data,
-            NULL AS scanned_at,
+            COALESCE(ea.checked_in_at, qr.scanned_at) AS scanned_at,
             NULL::TEXT AS payment_proof_url,
             NULL::TEXT AS payment_proof_status,
             ''::TEXT AS transaction_reference,
@@ -223,6 +228,7 @@ export async function GET(
             WHERE eco.event_id = e.id
           ) ch ON TRUE
           JOIN users u ON er.user_id = u.id
+          LEFT JOIN event_attendance ea ON ea.registration_id = er.id
           LEFT JOIN ticket_qr_codes qr ON qr.registration_id = er.id AND qr.is_active = TRUE
           WHERE er.id = $1 AND er.user_id = $2 AND er.cancelled_at IS NULL`,
           [id, user.userId]
