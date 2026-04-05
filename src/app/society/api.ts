@@ -210,9 +210,32 @@ export function fetchEntryStats(
   societyId: string,
   eventId: string,
 ): Promise<EntryStats> {
-  return api<EntryStats>(
-    `${s(societyId)}/governance/entry-control?eventId=${eventId}`,
-  );
+  return api<any>(`${s(societyId)}/governance/entry-control?eventId=${eventId}`).then((raw) => {
+    const scans: AttendanceRecord[] = Array.isArray(raw?.recentScans)
+      ? raw.recentScans.map((item: any) => ({
+          id: String(item?.id ?? ''),
+          user_id: String(item?.user_id ?? item?.userId ?? ''),
+          user_name: String(item?.user_name ?? item?.full_name ?? item?.userName ?? 'Unknown Attendee'),
+          user_email: String(item?.user_email ?? item?.email ?? item?.userEmail ?? 'unknown@email'),
+          user_avatar: (item?.user_avatar ?? item?.avatar_url ?? item?.userAvatar ?? null) as string | null,
+          event_id: String(item?.event_id ?? item?.eventId ?? eventId),
+          event_title: String(item?.event_title ?? item?.eventTitle ?? ''),
+          check_in_time: String(item?.check_in_time ?? item?.checked_in_at ?? item?.checkInTime ?? new Date().toISOString()),
+          check_in_method:
+            (item?.check_in_method ?? item?.method ?? item?.checkInMethod) === 'MANUAL'
+              ? 'MANUAL'
+              : 'QR',
+          checked_in_by_name: (item?.checked_in_by_name ?? item?.checkedInByName ?? null) as string | null,
+        }))
+      : [];
+
+    return {
+      totalRegistered: Number(raw?.totalRegistered ?? raw?.registered ?? 0),
+      totalCheckedIn: Number(raw?.totalCheckedIn ?? raw?.checkedIn ?? 0),
+      totalTicketed: Number(raw?.totalTicketed ?? raw?.ticketed ?? 0),
+      recentScans: scans,
+    } as EntryStats;
+  });
 }
 
 export function manualCheckIn(

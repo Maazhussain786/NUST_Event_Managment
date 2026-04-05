@@ -79,10 +79,12 @@ export default function EventEntryControlPage() {
     }
   };
 
-  const filteredScans = stats?.recentScans.filter(r =>
-    !searchQuery || r.user_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    r.user_email.toLowerCase().includes(searchQuery.toLowerCase())
-  ) || [];
+  const filteredScans = stats?.recentScans.filter((r) => {
+    const name = String(r.user_name || '').toLowerCase();
+    const email = String(r.user_email || '').toLowerCase();
+    const q = searchQuery.toLowerCase();
+    return !q || name.includes(q) || email.includes(q);
+  }) || [];
 
   useEffect(() => {
     if (toast) { const t = setTimeout(() => setToast(null), 3000); return () => clearTimeout(t); }
@@ -208,12 +210,12 @@ export default function EventEntryControlPage() {
                       <SmartImage src={record.user_avatar} alt="" className="h-8 w-8 rounded-full object-cover" />
                     ) : (
                       <div className="h-8 w-8 rounded-full bg-brand-500/10 text-brand-500 flex items-center justify-center text-xs font-bold">
-                        {record.user_name[0]}
+                        {String(record.user_name || '?').charAt(0).toUpperCase()}
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-primary truncate">{record.user_name}</p>
-                      <p className="text-xs text-muted">{record.user_email}</p>
+                      <p className="text-sm font-medium text-primary truncate">{record.user_name || 'Unknown Attendee'}</p>
+                      <p className="text-xs text-muted">{record.user_email || 'No email available'}</p>
                     </div>
                     <div className="text-right flex-shrink-0">
                       <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium
