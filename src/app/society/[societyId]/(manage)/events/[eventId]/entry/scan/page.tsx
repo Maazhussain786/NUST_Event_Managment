@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import {
   Camera, CameraOff, CheckCircle2, XCircle,
   AlertTriangle, Zap, ArrowLeft,
-  UserCheck, RotateCcw, Calendar, ShieldAlert, RefreshCw,
+  UserCheck, RotateCcw, Calendar, ShieldAlert, RefreshCw, Loader2,
 } from 'lucide-react';
 
 type ScanState = 'idle' | 'scanning' | 'processing' | 'success' | 'error' | 'duplicate';
@@ -55,6 +55,8 @@ export default function EventQrScannerPage() {
   const [activeFacingMode, setActiveFacingMode] =
     useState<'environment' | 'user'>('environment');
   const [isSwitchingCamera, setIsSwitchingCamera] = useState(false);
+  const [scannerStarted, setScannerStarted] = useState(false);
+  const [isRequestingPermission, setIsRequestingPermission] = useState(false);
 
   // Haptic feedback
   const vibrate = useCallback((pattern: number[]) => {
@@ -170,8 +172,28 @@ export default function EventQrScannerPage() {
 
   const setScannerError = useCallback((err: any) => {
     console.error('[Scanner] Init error:', err);
+    if (typeof window !== 'undefined') {
+      const isLocalhost =
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1' ||
+        window.location.hostname === '::1';
+
+      if (!window.isSecureContext && !isLocalhost) {
+        setCameraError('Camera requires HTTPS on mobile browsers. Open this page on a secure https:// URL.');
+        return;
+      }
+    }
+
     if (err?.message?.includes('Permission')) {
       setCameraError('Camera access denied. Please allow camera access in your browser settings.');
+      return;
+    }
+    if (err?.name === 'NotAllowedError' || err?.message?.includes('NotAllowedError')) {
+      setCameraError('Camera permission was blocked. Allow camera access and try again.');
+      return;
+    }
+    if (err?.name === 'NotReadableError' || err?.message?.includes('NotReadableError')) {
+      setCameraError('Camera is already in use by another app/tab. Close other camera apps and retry.');
       return;
     }
     if (err?.message?.includes('NotFoundError') || err?.name === 'NotFoundError') {
@@ -180,6 +202,48 @@ export default function EventQrScannerPage() {
     }
     setCameraError(err?.message || 'Failed to start camera');
   }, []);
+
+  const requestCameraAccess = useCallback(async () => {
+    if (typeof window === 'undefined') return false;
+
+    const isLocalhost =
+      window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname === '::1';
+
+    if (!window.isSecureContext && !isLocalhost) {
+      setCameraError('Camera requires HTTPS on mobile browsers. Open this page on a secure https:// URL.');
+      return false;
+    }
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setCameraError('This browser does not support camera access. Use a modern mobile browser.');
+      return false;
+    }
+
+    setIsRequestingPermission(true);
+    setCameraError(null);
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      });
+
+      stream.getTracks().forEach((track) => track.stop());
+      setScannerStarted(true);
+      return true;
+    } catch (err) {
+      setScannerError(err);
+      return false;
+    } finally {
+      setIsRequestingPermission(false);
+    }
+  }, [setScannerError]);
 
   const startScanner = useCallback(
     async ({
@@ -224,7 +288,7 @@ export default function EventQrScannerPage() {
   }, []);
 
   const handleFlipCamera = useCallback(async () => {
-    if (isSwitchingCamera || isProcessing || !html5QrRef.current) return;
+    if (isSwitchingCamera || isProcessing || !html5QrRef.current || !scannerStarted) return;
 
     setIsSwitchingCamera(true);
     setResult({ state: 'idle', message: '' });
@@ -266,13 +330,14 @@ export default function EventQrScannerPage() {
     availableCameras,
     isProcessing,
     isSwitchingCamera,
+    scannerStarted,
     startScanner,
     stopScanner,
   ]);
 
   // Initialize scanner
   useEffect(() => {
-    if (permissionDenied) return;
+    if (permissionDenied || !scannerStarted) return;
 
     let cancelled = false;
 
@@ -322,7 +387,7 @@ export default function EventQrScannerPage() {
         html5QrRef.current = null;
       }
     };
-  }, [permissionDenied, setScannerError, startScanner]);
+  }, [permissionDenied, scannerStarted, setScannerError, startScanner]);
 
   // Auto-clear result
   useEffect(() => {
@@ -385,10 +450,21 @@ export default function EventQrScannerPage() {
             <CameraOff size={64} className="mx-auto mb-4 text-red-400" />
             <p className="text-sm text-gray-300 mb-4">{cameraError}</p>
             <button
-              onClick={() => window.location.reload()}
+              onClick={() => {
+                void requestCameraAccess();
+              }}
               className="bg-white/10 px-4 py-2 rounded-lg text-sm flex items-center gap-2 mx-auto"
+              disabled={isRequestingPermission}
             >
-              <RotateCcw size={16} /> Retry
+              {isRequestingPermission ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" /> Requesting Access...
+                </>
+              ) : (
+                <>
+                  <RotateCcw size={16} /> Retry
+                </>
+              )}
             </button>
           </div>
         ) : (
@@ -425,7 +501,25 @@ export default function EventQrScannerPage() {
               </div>
             )}
 
-            {!cameraReady && !cameraError && (
+            {!scannerStarted && !cameraError && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+                <div className="text-center">
+                  <Camera size={48} className="mx-auto mb-3 text-gray-300" />
+                  <p className="text-sm text-gray-300 mb-3">Enable camera to start scanning</p>
+                  <button
+                    onClick={() => {
+                      void requestCameraAccess();
+                    }}
+                    className="bg-brand-500 hover:bg-brand-600 px-4 py-2 rounded-lg text-sm font-medium"
+                    disabled={isRequestingPermission}
+                  >
+                    {isRequestingPermission ? 'Requesting...' : 'Enable Camera'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {scannerStarted && !cameraReady && !cameraError && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/60">
                 <div className="text-center">
                   <Camera size={48} className="mx-auto mb-3 text-gray-400 animate-pulse" />
