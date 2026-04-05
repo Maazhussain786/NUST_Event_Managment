@@ -156,7 +156,10 @@ async function buildSettingsResponse(societyId: string) {
   };
 
   const settings = result.rows[0] || defaults;
-  const activeWallet = wallets.find((wallet) => wallet.is_default && wallet.is_enabled) || null;
+  const activeWallet =
+    wallets.find((wallet) => wallet.is_default && wallet.is_enabled) ||
+    wallets.find((wallet) => wallet.is_enabled) ||
+    null;
 
   return {
     ...settings,
@@ -623,7 +626,43 @@ export async function PATCH(
   } catch (error) {
     await client.query("ROLLBACK");
     console.error("Update settings error:", error);
-    return NextResponse.json({ error: "Failed" }, { status: 500 });
+
+    const pgCode =
+      typeof error === "object" && error !== null && "code" in error
+        ? String((error as { code?: string }).code || "")
+        : "";
+
+    if (pgCode === "23514") {
+      return NextResponse.json(
+        {
+          error:
+            "Invalid wallet fields. Easypaisa/JazzCash require wallet number. Bank wallet requires IBAN and bank name.",
+        },
+        { status: 400 },
+      );
+    }
+
+    if (pgCode === "23505") {
+      return NextResponse.json(
+        {
+          error:
+            "Wallet save conflict. Ensure only one preferred default wallet is selected.",
+        },
+        { status: 409 },
+      );
+    }
+
+    if (pgCode === "23503") {
+      return NextResponse.json(
+        {
+          error:
+            "Wallet reference is invalid. Refresh settings and try again.",
+        },
+        { status: 400 },
+      );
+    }
+
+    return NextResponse.json({ error: "Failed to update settings" }, { status: 500 });
   } finally {
     client.release();
   }

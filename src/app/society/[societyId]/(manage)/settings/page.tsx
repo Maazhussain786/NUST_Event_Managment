@@ -55,6 +55,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [operationsSaveError, setOperationsSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -75,8 +76,42 @@ export default function SettingsPage() {
 
   const handleSaveOperations = useCallback(async () => {
     if (!settings) return;
+
+    const activeWallets = settings.payment_wallets.filter((wallet) => wallet.is_enabled);
+    if (settings.ticketing_enabled && activeWallets.length === 0) {
+      setOperationsSaveError('Enable at least one active wallet for paid event registrations.');
+      return;
+    }
+
+    for (let index = 0; index < settings.payment_wallets.length; index += 1) {
+      const wallet = settings.payment_wallets[index];
+      if (!wallet.is_enabled) continue;
+
+      if (!wallet.account_title?.trim()) {
+        setOperationsSaveError(`Wallet #${index + 1}: Account holder name is required.`);
+        return;
+      }
+
+      if ((wallet.wallet_type === 'EASYPAISA' || wallet.wallet_type === 'JAZZCASH') && !wallet.account_number?.trim()) {
+        setOperationsSaveError(`Wallet #${index + 1}: Wallet number is required for ${walletTypeLabel(wallet.wallet_type)}.`);
+        return;
+      }
+
+      if (wallet.wallet_type === 'BANK') {
+        if (!wallet.iban?.trim()) {
+          setOperationsSaveError(`Wallet #${index + 1}: IBAN is required for bank wallet.`);
+          return;
+        }
+        if (!wallet.bank_name?.trim()) {
+          setOperationsSaveError(`Wallet #${index + 1}: Bank name is required for bank wallet.`);
+          return;
+        }
+      }
+    }
+
     setSaving(true);
     setSaveSuccess(false);
+    setOperationsSaveError(null);
     try {
       const payment_wallets = settings.payment_wallets.map((wallet, index) => ({
         ...wallet,
@@ -101,7 +136,7 @@ export default function SettingsPage() {
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2000);
     } catch (err) {
-      alert(err instanceof SocietyApiError ? err.message : 'Failed to save');
+      setOperationsSaveError(err instanceof SocietyApiError ? err.message : 'Failed to save operations settings');
     } finally {
       setSaving(false);
     }
@@ -205,6 +240,43 @@ export default function SettingsPage() {
       ...settings,
       payment_wallets: nextWallets,
       active_wallet_id: targetWallet.id || null,
+    });
+  };
+
+  const toggleWalletActive = (targetIndex: number, enabled: boolean) => {
+    if (!settings) return;
+    const targetWallet = settings.payment_wallets[targetIndex];
+    if (!targetWallet) return;
+
+    const nextWallets = settings.payment_wallets.map((wallet, walletIndex) => {
+      if (walletIndex !== targetIndex) return wallet;
+      return {
+        ...wallet,
+        is_enabled: enabled,
+        is_default: enabled ? wallet.is_default : false,
+      };
+    });
+
+    const hasDefaultEnabled = nextWallets.some((wallet) => wallet.is_enabled && wallet.is_default);
+    if (!hasDefaultEnabled) {
+      const firstEnabledIndex = nextWallets.findIndex((wallet) => wallet.is_enabled);
+      if (firstEnabledIndex >= 0) {
+        nextWallets[firstEnabledIndex] = {
+          ...nextWallets[firstEnabledIndex],
+          is_default: true,
+        };
+      }
+    }
+
+    const nextActive =
+      nextWallets.find((wallet) => wallet.is_enabled && wallet.is_default)?.id ||
+      nextWallets.find((wallet) => wallet.is_enabled)?.id ||
+      null;
+
+    setSettings({
+      ...settings,
+      payment_wallets: nextWallets,
+      active_wallet_id: nextActive,
     });
   };
 
@@ -318,7 +390,7 @@ export default function SettingsPage() {
                 </button>
               </div>
               <p className="text-xs text-muted">
-                Configure multiple wallets for paid events. One enabled wallet should be marked active by default.
+                Configure multiple wallets for paid events. All active wallets are shown on event registration; one wallet is marked as preferred.
               </p>
 
               {settings.payment_wallets.length === 0 ? (
@@ -328,7 +400,8 @@ export default function SettingsPage() {
               ) : (
                 <div className="space-y-3">
                   {settings.payment_wallets.map((wallet, walletIndex) => {
-                    const isActive = Boolean(
+                    const isActive = Boolean(wallet.is_enabled);
+                    const isPreferred = Boolean(
                       wallet.is_enabled &&
                       (wallet.is_default || (wallet.id && wallet.id === settings.active_wallet_id))
                     );
@@ -341,7 +414,10 @@ export default function SettingsPage() {
                           </p>
                           <div className="flex items-center gap-2">
                             {isActive ? (
-                              <span className="text-[11px] px-2 py-1 rounded-md bg-brand-500/15 text-brand-600">Active</span>
+                              <span className="text-[11px] px-2 py-1 rounded-md bg-emerald-500/15 text-emerald-600">Active</span>
+                            ) : null}
+                            {isPreferred ? (
+                              <span className="text-[11px] px-2 py-1 rounded-md bg-brand-500/15 text-brand-600">Preferred</span>
                             ) : null}
                             <button
                               type="button"
@@ -448,10 +524,10 @@ export default function SettingsPage() {
                             <input
                               type="checkbox"
                               checked={wallet.is_enabled}
-                              onChange={(e) => updateWallet(walletIndex, { is_enabled: e.target.checked })}
+                              onChange={(e) => toggleWalletActive(walletIndex, e.target.checked)}
                               className="w-4 h-4 rounded accent-brand-500"
                             />
-                            Enabled
+                            Active (show on registration)
                           </label>
 
                           <button
@@ -460,7 +536,7 @@ export default function SettingsPage() {
                             disabled={!wallet.is_enabled}
                             className="px-2.5 py-1.5 rounded-md border border-themed text-xs font-medium hover:bg-secondary transition-colors disabled:opacity-50"
                           >
-                            Set As Active
+                            Set As Preferred
                           </button>
                         </div>
                       </div>
@@ -469,6 +545,12 @@ export default function SettingsPage() {
                 </div>
               )}
             </div>
+
+            {operationsSaveError && (
+              <div className="rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                {operationsSaveError}
+              </div>
+            )}
           </div>
 
           <TransferPresidencySection societyId={societyId} />
