@@ -119,15 +119,68 @@ function normalizeIncomingWallet(
   };
 }
 
-async function ensureWalletTableExists(client: Awaited<ReturnType<typeof getClient>>) {
-  const tableCheck = await client.query(
-    `SELECT 1
-     FROM information_schema.tables
-     WHERE table_schema = 'public'
-       AND table_name = 'society_payment_wallets'
-     LIMIT 1`,
-  );
-  return tableCheck.rows.length > 0;
+async function ensureWalletSchema(client: Awaited<ReturnType<typeof getClient>>) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS society_payment_wallets (
+      id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      society_id     UUID NOT NULL REFERENCES societies(id) ON DELETE CASCADE,
+      wallet_type    VARCHAR(20) NOT NULL
+                    CHECK (wallet_type IN ('EASYPAISA', 'JAZZCASH', 'BANK')),
+      account_title  VARCHAR(200) NOT NULL,
+      account_number VARCHAR(100),
+      iban           VARCHAR(50),
+      bank_name      VARCHAR(150),
+      branch_name    VARCHAR(150),
+      instructions   TEXT,
+      is_enabled     BOOLEAN NOT NULL DEFAULT TRUE,
+      is_default     BOOLEAN NOT NULL DEFAULT FALSE,
+      display_order  INTEGER NOT NULL DEFAULT 0,
+      created_by     UUID REFERENCES users(id),
+      created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT chk_wallet_fields_by_type CHECK (
+        (
+          wallet_type IN ('EASYPAISA', 'JAZZCASH')
+          AND account_number IS NOT NULL
+          AND LENGTH(BTRIM(account_number)) > 0
+        )
+        OR
+        (
+          wallet_type = 'BANK'
+          AND iban IS NOT NULL
+          AND LENGTH(BTRIM(iban)) > 0
+          AND bank_name IS NOT NULL
+          AND LENGTH(BTRIM(bank_name)) > 0
+        )
+      )
+    )
+  `);
+
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_society_payment_wallets_society
+      ON society_payment_wallets (society_id)
+  `);
+
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_society_payment_wallets_enabled
+      ON society_payment_wallets (society_id, is_enabled)
+  `);
+
+  await client.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_society_wallet_default_active
+      ON society_payment_wallets (society_id)
+      WHERE is_default = TRUE AND is_enabled = TRUE
+  `);
+
+  await client.query(`
+    ALTER TABLE tickets
+      ADD COLUMN IF NOT EXISTS selected_wallet_id UUID REFERENCES society_payment_wallets(id)
+  `);
+
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_tickets_selected_wallet
+      ON tickets (selected_wallet_id)
+  `);
 }
 
 async function buildSettingsResponse(societyId: string) {
@@ -326,18 +379,7 @@ export async function PATCH(
     );
 
     if (incomingWallets || incomingActiveWalletId) {
-      const hasWalletTable = await ensureWalletTableExists(client);
-      if (!hasWalletTable) {
-        await client.query("ROLLBACK");
-        return NextResponse.json(
-          {
-            error:
-              "Wallet table is not ready. Please run migration 018-society-multi-wallets.sql.",
-            code: "PAYMENT_WALLET_TABLE_MISSING",
-          },
-          { status: 409 },
-        );
-      }
+      await ensureWalletSchema(client);
     }
 
     if (incomingWallets) {
