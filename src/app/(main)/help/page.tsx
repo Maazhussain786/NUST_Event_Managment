@@ -7,6 +7,12 @@ import { useRouter } from 'next/navigation';
 export default function HelpPage() {
   const router = useRouter();
 
+  const developers = [
+    { name: 'Maaz Hussain', email: 'maazhussain972@gmail.com' },
+    { name: 'Muhammad Abdul Daym', email: 'abduldaym786@gmail.com' },
+    { name: 'Muhammad Bilal Atif', email: 'bilalatif23@gmail.com' },
+  ];
+
   const faqs = [
     { q: 'How do I join a society?', a: 'Visit the society page and tap "Join Society". Your request will be reviewed by the society admin.' },
     { q: 'How do I buy tickets?', a: 'Go to the event page and tap the "Buy Ticket" button at the bottom. Follow the payment flow.' },
@@ -67,6 +73,34 @@ export default function HelpPage() {
                 <p className="text-xs text-muted">{item.desc}</p>
               </div>
             </motion.div>
+          ))}
+        </div>
+
+        <h2 className="px-1 mt-8 mb-3 text-xs font-semibold tracking-wider uppercase text-muted">
+          Meet the Developers
+        </h2>
+        <div className="space-y-2">
+          <div className="p-4 card">
+            <p className="text-sm font-semibold text-primary">Facing an issue?</p>
+            <p className="text-xs text-muted mt-1">
+              If there are app issues, contact the development team via email.
+            </p>
+          </div>
+          {developers.map((dev, i) => (
+            <motion.a
+              key={dev.email}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: (i + 7) * 0.05 }}
+              href={`mailto:${dev.email}`}
+              className="flex items-center gap-3 p-4 card hover:border-brand-500/30 transition-colors"
+            >
+              <Mail className="w-5 h-5 text-brand-500" />
+              <div className="flex-1 min-w-0">
+                <h3 className="text-sm font-medium text-primary truncate">{dev.name}</h3>
+                <p className="text-xs text-muted truncate">{dev.email}</p>
+              </div>
+            </motion.a>
           ))}
         </div>
       </div>

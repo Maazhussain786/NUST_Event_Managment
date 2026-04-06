@@ -122,6 +122,12 @@ export default function SettingsPage() {
     { icon: Code, label: 'Framework', value: 'Next.js 14' },
   ];
 
+  const developers = [
+    { name: 'Maaz Hussain', email: 'maazhussain972@gmail.com' },
+    { name: 'Muhammad Abdul Daym', email: 'abduldaym786@gmail.com' },
+    { name: 'Muhammad Bilal Atif', email: 'bilalatif23@gmail.com' },
+  ];
+
   return (
     <div className="min-h-screen bg-background">
       <PageHeader title="Settings" backButton />
@@ -215,6 +221,37 @@ export default function SettingsPage() {
                 <span className="text-body-sm text-foreground flex-1 text-left">{item.label}</span>
                 <span className="text-caption text-muted-foreground">{item.value}</span>
               </motion.div>
+            ))}
+          </div>
+        </div>
+
+        {/* Developer Contacts */}
+        <div>
+          <h2 className="text-overline text-muted-foreground mb-3 px-1">Developer Contacts</h2>
+          <div className="space-y-2">
+            <div className="w-full rounded-xl border border-border bg-card p-4">
+              <p className="text-body-sm text-foreground font-medium">If there are issues, contact us via email</p>
+              <p className="text-caption text-muted-foreground mt-1">
+                Include your account email, screenshot, and steps to reproduce for faster support.
+              </p>
+            </div>
+
+            {developers.map((dev, i) => (
+              <motion.a
+                key={dev.email}
+                href={`mailto:${dev.email}`}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.04, ease: [0.25, 0.1, 0.25, 1] }}
+                className="w-full rounded-xl border border-border bg-card p-4 flex items-center gap-3 hover:bg-accent transition-colors"
+              >
+                <Mail className="w-5 h-5 text-brand-500" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-body-sm text-foreground font-medium truncate">{dev.name}</p>
+                  <p className="text-caption text-muted-foreground truncate">{dev.email}</p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-muted-foreground" />
+              </motion.a>
             ))}
           </div>
         </div>
