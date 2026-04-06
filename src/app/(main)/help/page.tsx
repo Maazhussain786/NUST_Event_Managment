@@ -82,7 +82,7 @@ export default function HelpPage() {
         <div className="space-y-2">
           <div className="p-4 card">
             <p className="text-sm font-semibold text-primary">Facing an issue?</p>
-            <p className="text-xs text-muted mt-1">
+            <p className="mt-1 text-xs text-muted">
               If there are app issues, contact the development team via email.
             </p>
           </div>
@@ -97,8 +97,8 @@ export default function HelpPage() {
               <div className="flex items-center gap-3">
                 <Mail className="w-5 h-5 text-brand-500" />
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-medium text-primary truncate">{dev.name}</h3>
-                  <a href={`mailto:${dev.email}`} className="text-xs text-muted truncate hover:text-brand-500 transition-colors">
+                  <h3 className="text-sm font-medium truncate text-primary">{dev.name}</h3>
+                  <a href={`mailto:${dev.email}`} className="text-xs truncate transition-colors text-muted hover:text-brand-500">
                     {dev.email}
                   </a>
                 </div>
@@ -125,7 +125,7 @@ export default function HelpPage() {
         <div className="space-y-2">
           <div className="p-4 card">
             <p className="text-sm font-semibold text-primary">Our Mission</p>
-            <p className="text-xs text-muted mt-1 leading-relaxed">
+            <p className="mt-1 text-xs leading-relaxed text-muted">
               We are building a reliable digital operations platform for NUST societies to manage governance,
               events, ticketing, and QR-based entry control from one place.
             </p>
@@ -133,7 +133,7 @@ export default function HelpPage() {
 
           <div className="p-4 card">
             <p className="text-sm font-semibold text-primary">What We Built</p>
-            <ul className="mt-2 space-y-1 text-xs text-muted list-disc pl-4">
+            <ul className="pl-4 mt-2 space-y-1 text-xs list-disc text-muted">
               <li>Society hierarchy and privilege-based governance</li>
               <li>Event lifecycle management and approval workflows</li>
               <li>Paid and free ticketing with proof verification</li>
@@ -162,7 +162,7 @@ export default function HelpPage() {
 
           <div className="p-4 card">
             <p className="text-sm font-semibold text-primary">How to Report an Issue</p>
-            <ul className="mt-2 space-y-1 text-xs text-muted list-disc pl-4">
+            <ul className="pl-4 mt-2 space-y-1 text-xs list-disc text-muted">
               <li>Your account email</li>
               <li>Screenshot/video of the issue</li>
               <li>Event ID or Ticket ID (if relevant)</li>
