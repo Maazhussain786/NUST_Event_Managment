@@ -13,10 +13,93 @@ import {
   Activity,
   Clock,
 } from 'lucide-react';
-import { PageLoader, ErrorState } from '../_components/Shared';
+import { ErrorState } from '../_components/Shared';
+import { Skeleton } from '@/components/ui/skeleton';
 import { StatCard } from '../_components/StatCard';
 import { fetchAnalytics } from '../api';
 import type { AnalyticsData } from '../types';
+
+function AnalyticsSkeleton() {
+  return (
+    <div className="space-y-8">
+      <div>
+        <Skeleton className="h-8 w-40 mb-2" />
+        <Skeleton className="h-4 w-64" />
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[1, 2, 3, 4].map(i => (
+          <div key={i} className="rounded-xl border border-border bg-card p-4 space-y-3">
+             <div className="flex justify-between">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="w-4 h-4" />
+             </div>
+             <Skeleton className="h-8 w-24" />
+          </div>
+        ))}
+      </div>
+
+      <div className="card p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <Skeleton className="w-5 h-5 rounded-md" />
+          <Skeleton className="h-5 w-48" />
+        </div>
+        <Skeleton className="w-full h-40" />
+      </div>
+
+      <div className="card p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <Skeleton className="w-5 h-5 rounded-md" />
+          <Skeleton className="h-5 w-60" />
+        </div>
+        <Skeleton className="w-full h-40" />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {[1, 2].map(i => (
+          <div key={i} className="card p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Skeleton className="w-5 h-5 rounded-md" />
+              <Skeleton className="h-5 w-40" />
+            </div>
+            <div className="space-y-3">
+              {[1, 2, 3, 4].map(j => (
+                <div key={j} className="space-y-1">
+                  <div className="flex justify-between">
+                    <Skeleton className="h-3 w-16" />
+                    <Skeleton className="h-3 w-12" />
+                  </div>
+                  <Skeleton className="h-2 w-full rounded-full" />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="card p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <Skeleton className="w-5 h-5 rounded-md" />
+          <Skeleton className="h-5 w-56" />
+        </div>
+        <div className="space-y-2">
+          {[1, 2, 3, 4, 5].map(i => (
+            <div key={i} className="flex gap-3">
+              <Skeleton className="h-4 w-6 shrink-0" />
+              <div className="flex-1 space-y-1">
+                <div className="flex justify-between">
+                  <Skeleton className="h-4 w-40" />
+                  <Skeleton className="h-3 w-16" />
+                </div>
+                <Skeleton className="h-1.5 w-full rounded-full" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function AnalyticsPage() {
   const [data, setData] = useState<AnalyticsData | null>(null);
@@ -38,7 +121,7 @@ export default function AnalyticsPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  if (loading) return <PageLoader />;
+  if (loading) return <AnalyticsSkeleton />;
   if (error || !data) return <ErrorState message={error || 'No data'} onRetry={load} />;
 
   const maxUserGrowth = Math.max(...data.userGrowth.map(d => Number(d.count)), 1);

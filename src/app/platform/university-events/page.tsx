@@ -20,11 +20,11 @@ import {
   Upload,
 } from "lucide-react";
 import {
-  PageLoader,
   ErrorState,
   EmptyState,
   StatusBadge,
 } from "../_components/Shared";
+import { Skeleton } from "@/components/ui/skeleton";
 import { StatCard } from "../_components/StatCard";
 import type { UniversityEvent, AdminSociety } from "../types";
 import {
@@ -36,6 +36,53 @@ import {
   fetchSocieties,
 } from "../api";
 import { SmartImage } from '@/components/SmartImage';
+
+function UniversityEventsSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <Skeleton className="h-8 w-64 mb-2" />
+          <Skeleton className="h-4 w-96" />
+        </div>
+        <Skeleton className="h-10 w-36 rounded-xl" />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {[1, 2, 3].map(i => (
+          <div key={i} className="rounded-xl border border-border bg-card p-4 space-y-3">
+             <div className="flex justify-between">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="w-4 h-4" />
+             </div>
+             <Skeleton className="h-8 w-20" />
+          </div>
+        ))}
+      </div>
+
+      <div className="space-y-3">
+        {[1, 2, 3, 4].map(i => (
+          <div key={i} className="card p-4">
+             <div className="flex gap-4">
+               <Skeleton className="w-24 h-24 rounded-lg shrink-0" />
+               <div className="flex-1 space-y-2">
+                 <div className="flex justify-between">
+                    <Skeleton className="h-6 w-1/3" />
+                    <Skeleton className="h-8 w-28 rounded-full" />
+                 </div>
+                 <Skeleton className="h-4 w-1/4" />
+                 <div className="flex gap-3">
+                    <Skeleton className="h-3 w-32" />
+                    <Skeleton className="h-3 w-24" />
+                 </div>
+               </div>
+             </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function UniversityEventsPage() {
   const [events, setEvents] = useState<UniversityEvent[]>([]);
@@ -323,7 +370,7 @@ export default function UniversityEventsPage() {
     });
   };
 
-  if (loading) return <PageLoader />;
+  if (loading) return <UniversityEventsSkeleton />;
   if (error) return <ErrorState message={error} onRetry={load} />;
 
   const pinnedCount = events.filter((e) => e.is_pinned).length;

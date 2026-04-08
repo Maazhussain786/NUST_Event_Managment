@@ -11,7 +11,8 @@ import {
   Building2,
   Clock,
 } from 'lucide-react';
-import { PageLoader, ErrorState, EmptyState } from '../_components/Shared';
+import { ErrorState, EmptyState } from '../_components/Shared';
+import { Skeleton } from '@/components/ui/skeleton';
 import { fetchAuditLogs, exportAuditLogsCsv } from '../api';
 import type { AuditLogResponse } from '../types';
 import { Download } from 'lucide-react';
@@ -43,6 +44,37 @@ const ACTION_OPTIONS: { label: string; value: string }[] = [
   { label: 'Storage Limit Updated', value: 'STORAGE_LIMIT_UPDATED' },
   { label: 'SuperAdmin Override', value: 'SUPERADMIN_OVERRIDE' },
 ];
+
+function AuditLogsSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <Skeleton className="h-8 w-40 mb-2" />
+          <Skeleton className="h-4 w-60" />
+        </div>
+        <div className="flex gap-2">
+          <Skeleton className="h-9 w-28 rounded-md" />
+          <Skeleton className="h-9 w-24 rounded-md" />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
+          <div key={i} className="card p-4 flex items-center gap-3">
+             <Skeleton className="w-4 h-4 shrink-0" />
+             <Skeleton className="h-6 w-28 rounded-full shrink-0" />
+             <div className="flex-1 flex gap-3">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-32" />
+             </div>
+             <Skeleton className="h-4 w-32 shrink-0" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function AuditLogsPage() {
   const [response, setResponse] = useState<AuditLogResponse | null>(null);
@@ -229,7 +261,7 @@ export default function AuditLogsPage() {
 
       {/* Content */}
       {loading ? (
-        <PageLoader />
+        <AuditLogsSkeleton />
       ) : error ? (
         <ErrorState message={error} onRetry={load} />
       ) : !response || response.logs.length === 0 ? (

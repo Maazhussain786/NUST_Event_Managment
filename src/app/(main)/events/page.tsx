@@ -106,17 +106,24 @@ function pickFeaturedEvent(events: Event[]): Event | null {
 
 function EventsSkeleton() {
   return (
-    <div className="space-y-3">
-      {[1, 2, 3, 4, 5].map((i) => (
-        <div key={i} className="flex gap-3.5 p-3 rounded-xl border border-border">
-          <Skeleton className="w-12 h-14 rounded-lg shrink-0" />
-          <div className="flex-1 space-y-2 py-0.5">
-            <Skeleton className="h-4 w-3/4" />
-            <Skeleton className="h-3 w-1/2" />
-            <Skeleton className="h-3 w-2/3" />
-          </div>
+    <div className="space-y-6">
+      <section className="lg:mb-2">
+        <Skeleton className="w-full h-[200px] sm:h-[240px] rounded-2xl bg-card border border-border" />
+      </section>
+      <section>
+        <Skeleton className="h-3 w-24 mb-2.5 ml-1" />
+        <div className="space-y-2.5 lg:grid lg:grid-cols-2 xl:grid-cols-3 lg:gap-3 lg:space-y-0">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="flex gap-3.5 p-3 rounded-xl border border-border bg-card">
+              <Skeleton className="w-12 h-14 rounded-lg shrink-0" />
+              <div className="flex-1 space-y-2 py-0.5 mt-1">
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-3 w-1/2" />
+              </div>
+            </div>
+          ))}
         </div>
-      ))}
+      </section>
     </div>
   );
 }

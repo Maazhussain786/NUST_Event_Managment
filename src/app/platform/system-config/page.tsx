@@ -6,9 +6,42 @@ import {
   Loader2,
   RotateCcw,
 } from 'lucide-react';
-import { PageLoader, ErrorState, EmptyState } from '../_components/Shared';
+import { ErrorState, EmptyState } from '../_components/Shared';
+import { Skeleton } from '@/components/ui/skeleton';
 import { fetchSystemConfig, updateSystemConfig } from '../api';
 import type { SystemConfigItem } from '../types';
+
+function SystemConfigSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <Skeleton className="h-8 w-56 mb-2" />
+          <Skeleton className="h-4 w-64" />
+        </div>
+      </div>
+
+      <div className="space-y-6">
+        {[1, 2].map(i => (
+          <div key={i}>
+             <Skeleton className="h-3 w-24 mb-3" />
+             <div className="space-y-2">
+                {[1, 2, 3].map(j => (
+                  <div key={j} className="card px-5 py-4 flex justify-between gap-4">
+                     <div className="flex-1 space-y-2">
+                        <Skeleton className="h-5 w-48" />
+                        <Skeleton className="h-3 w-72" />
+                     </div>
+                     <Skeleton className="h-9 w-24 rounded-md shrink-0" />
+                  </div>
+                ))}
+             </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function SystemConfigPage() {
   const [configs, setConfigs] = useState<SystemConfigItem[]>([]);
@@ -91,7 +124,7 @@ export default function SystemConfigPage() {
       </div>
 
       {loading ? (
-        <PageLoader />
+        <SystemConfigSkeleton />
       ) : error ? (
         <ErrorState message={error} onRetry={load} />
       ) : configs.length === 0 ? (

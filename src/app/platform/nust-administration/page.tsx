@@ -13,7 +13,8 @@ import {
   Upload,
 } from "lucide-react";
 import { SmartImage } from "@/components/SmartImage";
-import { ErrorState, PageLoader } from "../_components/Shared";
+import { ErrorState } from "../_components/Shared";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   createSocietyAlbumAdmin,
   deleteSocietyAlbumAdmin,
@@ -38,6 +39,75 @@ const ALBUM_CATEGORIES: AlbumCategory[] = [
   "TEAM",
   "OTHER",
 ];
+
+function NustAdministrationSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div>
+        <Skeleton className="h-8 w-64 mb-2" />
+        <Skeleton className="h-4 w-96" />
+      </div>
+
+      <div className="card p-5">
+        <div className="flex items-start gap-4 flex-wrap">
+          <Skeleton className="w-20 h-20 rounded-2xl shrink-0" />
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-6 w-1/3" />
+            <Skeleton className="h-4 w-24" />
+            <div className="mt-3 flex gap-2">
+              <Skeleton className="h-9 w-32 rounded-md" />
+              <Skeleton className="h-9 w-32 rounded-md" />
+            </div>
+          </div>
+        </div>
+        <div className="mt-4 rounded-xl overflow-hidden border border-border bg-card">
+          <Skeleton className="w-full h-44" />
+        </div>
+      </div>
+
+      <div className="card p-5 space-y-4">
+        <Skeleton className="h-5 w-48 mb-4" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+           {[1, 2, 3, 4, 5, 6].map(i => (
+             <div key={i} className={i >= 5 ? "md:col-span-2 space-y-1.5" : "space-y-1.5"}>
+                <Skeleton className="h-3 w-24" />
+                <Skeleton className={i === 6 ? "h-[100px] w-full" : "h-10 w-full"} />
+             </div>
+           ))}
+        </div>
+        <Skeleton className="h-14 w-full rounded-xl" />
+        <div className="flex justify-end">
+          <Skeleton className="h-9 w-32 rounded-md" />
+        </div>
+      </div>
+
+      <div className="card p-5 space-y-4">
+        <Skeleton className="h-5 w-32" />
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+          <Skeleton className="h-10 w-full md:col-span-2 rounded-md" />
+          <Skeleton className="h-10 w-full rounded-md" />
+          <Skeleton className="h-10 w-full rounded-md" />
+        </div>
+        <Skeleton className="h-[72px] w-full rounded-md" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+          {[1, 2].map(i => (
+            <div key={i} className="rounded-xl border border-border p-3 space-y-3">
+              <Skeleton className="w-full h-36 rounded-lg" />
+               <div className="space-y-2">
+                 <Skeleton className="h-4 w-32" />
+                 <Skeleton className="h-3 w-48" />
+               </div>
+               <div className="flex gap-2">
+                 <Skeleton className="h-8 w-28 rounded-lg" />
+                 <Skeleton className="h-8 w-24 rounded-lg" />
+               </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function NustAdministrationPage() {
   const [society, setSociety] = useState<AdminSociety | null>(null);
@@ -218,7 +288,7 @@ export default function NustAdministrationPage() {
   };
 
   if (loading) {
-    return <PageLoader />;
+    return <NustAdministrationSkeleton />;
   }
 
   if (error || cannotRender) {

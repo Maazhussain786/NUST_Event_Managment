@@ -98,37 +98,67 @@ function buildContextLine(stats: UserStats): string {
 function HomeSkeleton() {
   return (
     <div className="px-4 pt-4 pb-24 space-y-6 md:px-6 lg:px-8 lg:pb-8">
-      {/* Header skeleton */}
-      <div className="space-y-2">
-        <Skeleton className="h-7 w-48" />
-        <Skeleton className="h-4 w-64" />
+      {/* Action card skeleton (Next Ticket) */}
+      <div className="rounded-2xl border-2 border-border/50 bg-card p-4">
+        <div className="flex items-center gap-1.5 mb-2">
+          <Skeleton className="w-4 h-4 rounded-full" />
+          <Skeleton className="h-3 w-32" />
+        </div>
+        <div className="flex items-center justify-between">
+          <div className="flex-1 space-y-2 mt-1">
+            <Skeleton className="h-5 w-2/3" />
+            <Skeleton className="h-4 w-1/2" />
+          </div>
+          <Skeleton className="w-11 h-11 rounded-xl ml-3 shrink-0" />
+        </div>
       </div>
-      {/* Action card skeleton */}
-      <Skeleton className="h-24 w-full rounded-2xl" />
+
       {/* Stats skeleton */}
-      <div className="flex gap-3">
+      <div className="grid grid-cols-3 gap-2.5">
         {[1, 2, 3].map((i) => (
-          <Skeleton key={i} className="h-20 flex-1 rounded-xl" />
+          <div key={i} className="rounded-xl border border-border bg-card p-3 flex flex-col items-center">
+            <Skeleton className="w-5 h-5 rounded-md mb-2" />
+            <Skeleton className="h-6 w-10 mb-1" />
+            <Skeleton className="h-3 w-14" />
+          </div>
         ))}
       </div>
-      {/* Events skeleton */}
-      <div>
-        <Skeleton className="h-5 w-32 mb-4" />
-        <div className="space-y-3">
+
+      {/* Upcoming Events skeleton */}
+      <section className="mt-8">
+        <div className="flex items-center gap-2 mb-4">
+          <Skeleton className="w-7 h-7 rounded-lg" />
+          <Skeleton className="h-6 w-28" />
+        </div>
+        <div className="space-y-3 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0">
           {[1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="flex gap-3.5 p-3 rounded-xl border border-border"
-            >
+            <div key={i} className="flex gap-3.5 p-3 rounded-xl border border-border bg-card">
               <Skeleton className="w-12 h-14 rounded-lg shrink-0" />
               <div className="flex-1 space-y-2 py-0.5">
                 <Skeleton className="h-4 w-3/4" />
                 <Skeleton className="h-3 w-1/2" />
+                <Skeleton className="h-3 w-2/3" />
               </div>
             </div>
           ))}
         </div>
-      </div>
+      </section>
+
+      {/* Trending skeleton */}
+      <section className="mt-8">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Skeleton className="w-7 h-7 rounded-lg" />
+            <Skeleton className="h-6 w-24" />
+          </div>
+          <Skeleton className="h-4 w-16" />
+        </div>
+        <div className="flex gap-4 overflow-hidden -mx-1 px-1 lg:grid lg:grid-cols-3 lg:overflow-visible">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="min-w-[280px] h-[180px] rounded-2xl shrink-0 lg:min-w-0" />
+          ))}
+        </div>
+      </section>
     </div>
   );
 }
