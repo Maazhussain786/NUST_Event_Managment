@@ -12,7 +12,8 @@ import {
   AlertTriangle,
   Clock,
 } from 'lucide-react';
-import { PageLoader, ErrorState } from '../_components/Shared';
+import { ErrorState } from '../_components/Shared';
+import { Skeleton } from '@/components/ui/skeleton';
 import { fetchHealthStatus } from '../api';
 import type { HealthStatus, ServiceHealth } from '../types';
 
@@ -33,6 +34,77 @@ function formatUptime(hours: number): string {
   const h = hours % 24;
   if (d > 0) return `${d}d ${h}h`;
   return `${h}h`;
+}
+
+function HealthSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <Skeleton className="h-8 w-48 mb-2" />
+          <Skeleton className="h-4 w-64" />
+        </div>
+        <div className="flex items-center gap-3">
+          <Skeleton className="w-16 h-4" />
+          <Skeleton className="w-24 h-9 rounded-md" />
+        </div>
+      </div>
+
+      <div className="card p-6 border border-border">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Skeleton className="w-10 h-10 rounded-full" />
+            <div>
+              <Skeleton className="h-6 w-40 mb-1" />
+              <Skeleton className="h-4 w-48" />
+            </div>
+          </div>
+          <div className="text-right">
+             <Skeleton className="h-8 w-16 mb-1 ml-auto" />
+             <Skeleton className="h-3 w-24" />
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <Skeleton className="h-3 w-20 mb-3" />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="card p-5">
+              <div className="flex items-start justify-between">
+                 <div className="flex items-center gap-3">
+                    <Skeleton className="w-9 h-9 rounded-lg" />
+                    <div>
+                       <Skeleton className="h-4 w-24 mb-1" />
+                       <Skeleton className="h-3 w-16" />
+                    </div>
+                 </div>
+                 <Skeleton className="w-6 h-6 rounded-full" />
+              </div>
+              <div className="mt-3 pt-3 border-t flex items-center justify-between">
+                 <Skeleton className="h-3 w-16" />
+                 <Skeleton className="h-4 w-12" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div>
+         <Skeleton className="h-3 w-32 mb-3" />
+         <div className="card overflow-hidden">
+            <div className="divide-y divide-border">
+               {[1, 2, 3, 4].map(i => (
+                 <div key={i} className="flex items-center justify-between px-5 py-3">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-4 w-16" />
+                 </div>
+               ))}
+            </div>
+         </div>
+      </div>
+    </div>
+  );
 }
 
 export default function HealthPage() {
@@ -144,7 +216,7 @@ export default function HealthPage() {
       </div>
 
       {loading ? (
-        <PageLoader />
+        <HealthSkeleton />
       ) : error ? (
         <ErrorState message={error} onRetry={load} />
       ) : health ? (

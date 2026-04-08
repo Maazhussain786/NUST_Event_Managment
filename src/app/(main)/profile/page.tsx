@@ -50,6 +50,91 @@ interface MySociety {
 
 const ease = [0.25, 0.1, 0.25, 1] as const;
 
+function ProfileSkeleton() {
+  return (
+    <div className="min-h-screen bg-background pb-24 lg:pb-8">
+      {/* Header */}
+      <div
+        className="px-5 pt-6 pb-6"
+        style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 1.5rem)' }}
+      >
+        <Skeleton className="h-8 w-24 mb-5" />
+
+        {/* Profile card skeleton */}
+        <div className="rounded-2xl border border-border bg-card p-5">
+          <div className="flex items-center gap-4">
+            <Skeleton className="w-16 h-16 rounded-2xl flex-shrink-0" />
+            <div className="flex-1 min-w-0 space-y-2">
+              <Skeleton className="h-5 w-2/3" />
+              <Skeleton className="h-3.5 w-4/5" />
+              <Skeleton className="h-5 w-20 rounded-full" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="px-5 space-y-5">
+        {/* Theme toggle skeleton */}
+        <div className="rounded-xl border border-border bg-card p-4">
+          <div className="flex items-center gap-3">
+            <Skeleton className="w-9 h-9 rounded-xl flex-shrink-0" />
+            <Skeleton className="h-4 w-24 flex-1" />
+            <Skeleton className="w-11 h-6 rounded-full flex-shrink-0" />
+          </div>
+        </div>
+
+        {/* My Societies section */}
+        <div>
+          <div className="flex items-center justify-between mb-2.5 px-1">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-3 w-16" />
+          </div>
+          <div className="rounded-xl border border-border bg-card p-4">
+            <div className="flex items-center gap-3">
+              <Skeleton className="w-10 h-10 rounded-xl flex-shrink-0" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-3.5 w-3/5" />
+                <Skeleton className="h-5 w-16 rounded-full" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Menu group 1 */}
+        <div className="rounded-xl border border-border bg-card overflow-hidden divide-y divide-border">
+          {[1, 2].map((i) => (
+            <div key={i} className="px-4 py-3.5 flex items-center gap-3">
+              <Skeleton className="w-9 h-9 rounded-xl flex-shrink-0" />
+              <Skeleton className="h-4 w-28 flex-1" />
+              <Skeleton className="w-4 h-4 rounded flex-shrink-0" />
+            </div>
+          ))}
+        </div>
+
+        {/* Menu group 2 */}
+        <div className="rounded-xl border border-border bg-card overflow-hidden divide-y divide-border">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="px-4 py-3.5 flex items-center gap-3">
+              <Skeleton className="w-9 h-9 rounded-xl flex-shrink-0" />
+              <Skeleton className="h-4 w-32 flex-1" />
+              <Skeleton className="w-4 h-4 rounded flex-shrink-0" />
+            </div>
+          ))}
+        </div>
+
+        {/* Sign out skeleton */}
+        <div className="rounded-xl border border-border bg-card p-4">
+          <div className="flex items-center gap-3">
+            <Skeleton className="w-9 h-9 rounded-xl flex-shrink-0" />
+            <Skeleton className="h-4 w-20 flex-1" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ProfilePage() {
   const router = useRouter();
   const { theme, toggleTheme } = useTheme();
@@ -59,6 +144,7 @@ export default function ProfilePage() {
   const [mySocieties, setMySocieties] = useState<MySociety[]>([]);
   const [loadingSocieties, setLoadingSocieties] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -69,6 +155,8 @@ export default function ProfilePage() {
       if (cancelled) return;
 
       setUser(sessionUser);
+      setInitialLoading(false);
+      
       if (!sessionUser) {
         setMySocieties([]);
         return;
@@ -179,6 +267,8 @@ export default function ProfilePage() {
       ],
     },
   ];
+
+  if (initialLoading) return <ProfileSkeleton />;
 
   return (
     <div className="min-h-screen bg-background pb-24 lg:pb-8">

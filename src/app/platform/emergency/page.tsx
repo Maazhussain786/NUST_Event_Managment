@@ -9,9 +9,59 @@ import {
   AlertTriangle,
   CheckCircle,
 } from "lucide-react";
-import { PageLoader, ErrorState } from "../_components/Shared";
+import { ErrorState } from "../_components/Shared";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { EmergencyStatus } from "../types";
 import { fetchEmergencyStatus, toggleEmergencyFlag } from "../api";
+
+function EmergencySkeleton() {
+  return (
+    <div className="space-y-6">
+      <div>
+        <Skeleton className="h-8 w-64 mb-2" />
+        <Skeleton className="h-4 w-80" />
+      </div>
+
+      <div className="card p-5 border-2 border-border">
+        <div className="flex items-center gap-4">
+           <Skeleton className="w-14 h-14 rounded-2xl shrink-0" />
+           <div className="space-y-2">
+              <Skeleton className="h-6 w-64" />
+              <Skeleton className="h-4 w-48" />
+           </div>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+         {[1, 2, 3, 4].map(i => (
+           <div key={i} className="card p-4 border-l-4 border-border flex items-center gap-4">
+              <Skeleton className="w-10 h-10 rounded-xl shrink-0" />
+              <div className="flex-1 space-y-2">
+                 <div className="flex items-center gap-2">
+                    <Skeleton className="h-5 w-40" />
+                    <Skeleton className="h-4 w-16 rounded-full" />
+                    <Skeleton className="h-4 w-16 text-transparent" />
+                 </div>
+                 <Skeleton className="h-3 w-64" />
+              </div>
+              <Skeleton className="h-10 w-32 rounded-xl shrink-0" />
+           </div>
+         ))}
+      </div>
+
+      <div className="card p-4">
+         <div className="flex gap-3">
+            <Skeleton className="w-5 h-5 rounded-md shrink-0" />
+            <div className="space-y-2 flex-1">
+               <Skeleton className="h-5 w-72" />
+               <Skeleton className="h-4 w-full" />
+               <Skeleton className="h-4 w-2/3" />
+            </div>
+         </div>
+      </div>
+    </div>
+  );
+}
 
 export default function EmergencyPage() {
   const [status, setStatus] = useState<EmergencyStatus | null>(null);
@@ -55,7 +105,7 @@ export default function EmergencyPage() {
     }
   };
 
-  if (loading) return <PageLoader />;
+  if (loading) return <EmergencySkeleton />;
   if (error) return <ErrorState message={error} onRetry={load} />;
   if (!status) return <ErrorState message="No data" />;
 

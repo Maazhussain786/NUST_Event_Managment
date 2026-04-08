@@ -10,9 +10,62 @@ import {
   Calendar,
 } from 'lucide-react';
 import { StatCard } from '../_components/StatCard';
-import { PageLoader, ErrorState, EmptyState } from '../_components/Shared';
+import { ErrorState, EmptyState } from '../_components/Shared';
+import { Skeleton } from '@/components/ui/skeleton';
 import { fetchFinance } from '../api';
 import type { FinanceData } from '../types';
+
+function FinanceSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div>
+        <Skeleton className="h-8 w-64 mb-2" />
+        <Skeleton className="h-4 w-96" />
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[1, 2, 3, 4].map(i => (
+          <div key={i} className="rounded-xl border border-border bg-card p-4 space-y-3">
+             <div className="flex justify-between">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-4" />
+             </div>
+             <Skeleton className="h-8 w-24" />
+          </div>
+        ))}
+      </div>
+
+      <div className="card p-5">
+        <Skeleton className="h-5 w-48 mb-4" />
+        <Skeleton className="w-full h-40" />
+      </div>
+
+      <div className="flex items-center gap-2 overflow-x-auto">
+        {[1, 2, 3].map(i => <Skeleton key={i} className="h-9 w-32 rounded-full shrink-0" />)}
+      </div>
+
+      <div className="space-y-2">
+         <Skeleton className="h-8 w-full md:hidden" />
+         {[1, 2, 3, 4].map(i => (
+           <div key={i} className="card px-5 py-4">
+             <div className="hidden md:grid grid-cols-12 gap-4">
+                <Skeleton className="col-span-4 h-5" />
+                <Skeleton className="col-span-2 h-5" />
+                <Skeleton className="col-span-2 h-5" />
+                <Skeleton className="col-span-2 h-5" />
+                <Skeleton className="col-span-2 h-5" />
+             </div>
+             <div className="md:hidden space-y-2">
+                <Skeleton className="h-5 w-3/4" />
+                <Skeleton className="h-4 w-1/2" />
+                <Skeleton className="h-4 w-1/4" />
+             </div>
+           </div>
+         ))}
+      </div>
+    </div>
+  );
+}
 
 export default function FinancePage() {
   const [data, setData] = useState<FinanceData | null>(null);
@@ -35,7 +88,7 @@ export default function FinancePage() {
 
   useEffect(() => { load(); }, [load]);
 
-  if (loading) return <PageLoader />;
+  if (loading) return <FinanceSkeleton />;
   if (error) return <ErrorState message={error} onRetry={load} />;
   if (!data) return null;
 

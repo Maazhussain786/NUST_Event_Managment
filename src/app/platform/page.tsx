@@ -20,7 +20,8 @@ import {
 } from 'lucide-react';
 import { StatCard } from './_components/StatCard';
 import { StatusBadge } from './_components/StatusBadge';
-import { PageLoader, ErrorState } from './_components/Shared';
+import { ErrorState } from './_components/Shared';
+import { Skeleton } from '@/components/ui/skeleton';
 import { fetchStats, fetchSocieties, fetchEvents, patchSociety, patchEvent } from './api';
 import type { PlatformStats, AdminSociety, AdminEvent } from './types';
 
@@ -31,6 +32,89 @@ function formatBytes(bytes: string | number): string {
   const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(b) / Math.log(k));
   return parseFloat((b / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+function PlatformSkeleton() {
+  return (
+    <div className="space-y-8">
+      {/* Title bar skeleton */}
+      <div className="flex items-center justify-between">
+        <div>
+          <Skeleton className="h-8 w-48 mb-1" />
+          <Skeleton className="h-4 w-64" />
+        </div>
+        <Skeleton className="h-10 w-28 rounded-xl" />
+      </div>
+
+      {/* Primary stats grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[1, 2, 3, 4].map(i => (
+          <div key={i} className="rounded-xl border border-border bg-card p-4 space-y-3">
+            <div className="flex justify-between">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="w-5 h-5 rounded-lg" />
+            </div>
+            <Skeleton className="h-8 w-20" />
+            <Skeleton className="h-3 w-32" />
+          </div>
+        ))}
+      </div>
+
+      {/* Secondary stats grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[1, 2, 3, 4].map(i => (
+          <div key={i} className="rounded-xl border border-border bg-card p-4 space-y-3">
+            <div className="flex justify-between">
+              <Skeleton className="h-4 w-28" />
+              <Skeleton className="w-5 h-5 rounded-lg" />
+            </div>
+            <Skeleton className="h-8 w-24" />
+            <Skeleton className="h-3 w-36" />
+          </div>
+        ))}
+      </div>
+
+      {/* Pending sections */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        {[1, 2].map(section => (
+          <div key={section} className="card">
+            <div className="flex items-center justify-between p-5 pb-0">
+              <div className="flex items-center gap-2">
+                <Skeleton className="w-4 h-4 rounded-full" />
+                <Skeleton className="h-5 w-32" />
+                <Skeleton className="h-4 w-6 rounded-full" />
+              </div>
+              <Skeleton className="h-4 w-16" />
+            </div>
+            <div className="p-5 space-y-3">
+              {[1, 2].map(i => (
+                <div key={i} className="flex items-center justify-between py-2.5 px-3 rounded-xl border border-transparent">
+                  <div className="space-y-1">
+                    <Skeleton className="h-4 w-40" />
+                    <Skeleton className="h-3 w-56" />
+                  </div>
+                  <div className="flex items-center gap-1.5 ml-3">
+                    <Skeleton className="w-7 h-7 rounded-lg" />
+                    <Skeleton className="w-7 h-7 rounded-lg" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Quick navigation */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {[1, 2, 3, 4, 5, 6].map(i => (
+          <div key={i} className="card p-4 flex flex-col items-center gap-2">
+            <Skeleton className="w-10 h-10 rounded-xl" />
+            <Skeleton className="h-3 w-20" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export default function PlatformOverviewPage() {
@@ -86,7 +170,7 @@ export default function PlatformOverviewPage() {
     }
   };
 
-  if (loading) return <PageLoader />;
+  if (loading) return <PlatformSkeleton />;
   if (error) return <ErrorState message={error} onRetry={load} />;
   if (!stats) return null;
 

@@ -4,10 +4,55 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   CalendarOff, Plus, Trash2, X, Calendar, Shield, Filter,
 } from 'lucide-react';
-import { PageLoader, ErrorState, EmptyState } from '../_components/Shared';
+import { ErrorState, EmptyState } from '../_components/Shared';
+import { Skeleton } from '@/components/ui/skeleton';
 import { StatCard } from '../_components/StatCard';
 import type { BlackoutDate } from '../types';
 import { fetchBlackoutDates, createBlackoutDate, deleteBlackoutDate } from '../api';
+
+function BlackoutSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <Skeleton className="h-8 w-48 mb-2" />
+          <Skeleton className="h-4 w-80" />
+        </div>
+        <Skeleton className="h-10 w-36 rounded-xl" />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {[1, 2, 3].map(i => (
+          <div key={i} className="rounded-xl border border-border bg-card p-4 space-y-3">
+             <div className="flex justify-between">
+                <Skeleton className="h-4 w-28" />
+                <Skeleton className="w-4 h-4" />
+             </div>
+             <Skeleton className="h-8 w-16" />
+          </div>
+        ))}
+      </div>
+
+      <div className="space-y-2">
+         <Skeleton className="h-4 w-32 mb-2" />
+         {[1, 2].map(i => (
+           <div key={i} className="card p-4 flex gap-4">
+              <Skeleton className="w-10 h-10 rounded-xl shrink-0" />
+              <div className="flex-1 space-y-2">
+                 <div className="flex items-center gap-2">
+                    <Skeleton className="h-5 w-40" />
+                    <Skeleton className="h-4 w-24 rounded-full" />
+                 </div>
+                 <Skeleton className="h-4 w-64" />
+                 <Skeleton className="h-3 w-32" />
+              </div>
+              <Skeleton className="w-8 h-8 rounded-lg" />
+           </div>
+         ))}
+      </div>
+    </div>
+  );
+}
 
 export default function BlackoutCalendarPage() {
   const [dates, setDates] = useState<BlackoutDate[]>([]);
@@ -59,7 +104,7 @@ export default function BlackoutCalendarPage() {
     } catch { /* noop */ }
   };
 
-  if (loading) return <PageLoader />;
+  if (loading) return <BlackoutSkeleton />;
   if (error) return <ErrorState message={error} onRetry={load} />;
 
   const now = new Date();

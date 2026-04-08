@@ -10,12 +10,60 @@ import {
   X,
   Building2,
 } from 'lucide-react';
-import { PageLoader, ErrorState, EmptyState } from '../_components/Shared';
+import { ErrorState, EmptyState } from '../_components/Shared';
+import { Skeleton } from '@/components/ui/skeleton';
 import { StatCard } from '../_components/StatCard';
 import { fetchStorageOverview, updateStorageLimit } from '../api';
 import type { SocietyStorage, StorageAggregate, StorageResponse } from '../types';
 
 type SortBy = 'percent_used' | 'storage_used_bytes' | 'society_name' | 'storage_quota_bytes';
+
+function StorageSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div>
+        <Skeleton className="h-8 w-32 mb-2" />
+        <Skeleton className="h-4 w-72" />
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[1, 2, 3, 4].map(i => (
+          <div key={i} className="rounded-xl border border-border bg-card p-4 space-y-3">
+             <div className="flex justify-between">
+                <Skeleton className="h-4 w-28" />
+                <Skeleton className="w-4 h-4" />
+             </div>
+             <Skeleton className="h-8 w-20" />
+          </div>
+        ))}
+      </div>
+
+      <div className="flex flex-col gap-4">
+        <Skeleton className="h-9 w-40 rounded-lg" />
+      </div>
+
+      <div className="space-y-3">
+        {[1, 2, 3, 4].map(i => (
+          <div key={i} className="card p-5 flex items-center gap-4">
+             <Skeleton className="w-10 h-10 rounded-xl shrink-0" />
+             <div className="flex-1 space-y-2">
+                <div className="flex justify-between">
+                   <Skeleton className="h-5 w-40" />
+                   <Skeleton className="h-4 w-12" />
+                </div>
+                <Skeleton className="h-2.5 w-full rounded-full" />
+                <div className="flex justify-between">
+                   <Skeleton className="h-3 w-32" />
+                   <Skeleton className="h-3 w-20" />
+                </div>
+             </div>
+             <Skeleton className="h-8 w-24 rounded-lg shrink-0" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function StoragePage() {
   const [societies, setSocieties] = useState<SocietyStorage[]>([]);
@@ -135,7 +183,7 @@ export default function StoragePage() {
 
       {/* Content */}
       {loading ? (
-        <PageLoader />
+        <StorageSkeleton />
       ) : error ? (
         <ErrorState message={error} onRetry={load} />
       ) : societies.length === 0 ? (
