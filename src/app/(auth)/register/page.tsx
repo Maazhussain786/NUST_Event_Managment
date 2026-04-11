@@ -59,128 +59,122 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 relative overflow-hidden bg-background">
-      <div className="absolute top-[-20%] left-1/2 -translate-x-1/2 w-[500px] h-[500px] bg-brand-500/6 rounded-full blur-[120px] pointer-events-none" />
-
+    <div className="min-h-screen flex items-center justify-center p-6 bg-[#F0F2F5] dark:bg-[#0B0E14] overflow-hidden transition-colors duration-300">
       <motion.div
-        initial={{ opacity: 0, y: 24 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease }}
-        className="w-full max-w-sm relative z-10"
+        initial={{ y: '100vh', opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ type: 'spring', damping: 25, stiffness: 120, mass: 1 }}
+        className="w-full max-w-[420px] bg-white dark:bg-[#151921] rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] dark:shadow-[0_20px_50px_rgba(0,0,0,0.3)] p-10 md:p-12 relative z-10 border border-transparent dark:border-white/5"
       >
+        {/* Title */}
         <div className="text-center mb-10">
-          <div className="w-14 h-14 bg-brand-500 rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-lg shadow-brand-500/25">
-            <span className="text-xl font-extrabold text-white">N</span>
-          </div>
-          <h1 className="text-display text-foreground">Create account</h1>
-          <p className="text-body-sm text-muted-foreground mt-1">Join the NUST Events community</p>
+          <h1 className="text-4xl font-extrabold tracking-tight text-[#00AEEF]">
+            Sign Up
+          </h1>
         </div>
 
-        <form onSubmit={handleRegister} className="space-y-4" noValidate>
+        {/* Form */}
+        <form onSubmit={handleRegister} className="space-y-6" noValidate>
           {error && (
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="bg-destructive/8 border border-destructive/15 text-destructive px-4 py-3 rounded-xl text-[13px] font-medium"
+              className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-2xl text-[13px] font-medium text-center"
               role="alert"
-              aria-live="polite"
             >
               {error}
             </motion.div>
           )}
 
-          <GoogleSignInButton label="Continue with Google" />
+          <div className="space-y-4">
+            <Input
+              type="text"
+              placeholder="Full Name"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              required
+              autoComplete="name"
+            />
 
-          <div className="relative py-1">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-border" />
-            </div>
+            <Input
+              type="email"
+              placeholder="E-mail"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              autoComplete="email"
+            />
+
+            <Input
+              type={showPassword ? 'text' : 'password'}
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={8}
+              autoComplete="new-password"
+              endIcon={
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="text-muted-foreground hover:text-foreground transition-colors mr-2"
+                >
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              }
+            />
+
+            <Input
+              type={showPassword ? 'text' : 'password'}
+              placeholder="Confirm Password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+              autoComplete="new-password"
+              error={confirmPassword && password !== confirmPassword ? 'Passwords do not match' : undefined}
+            />
+          </div>
+
+          <Button 
+            type="submit" 
+            loading={loading} 
+            className="w-full h-14 rounded-full bg-gradient-to-r from-[#00AEEF] to-[#018ABE] hover:opacity-90 text-white text-lg font-bold shadow-lg shadow-[#00AEEF]/20 transition-all active:scale-[0.98] border-none"
+          >
+            Create Account
+          </Button>
+
+          <div className="relative py-2">
             <div className="relative flex justify-center">
-              <span className="bg-background px-2 text-[11px] uppercase tracking-wide text-muted-foreground">
-                Or register with email
+              <span className="bg-white dark:bg-[#151921] px-4 text-[13px] font-medium text-muted-foreground transition-colors">
+                Or Sign up with
               </span>
             </div>
           </div>
 
-          <Input
-            icon={User}
-            type="text"
-            label="Full Name"
-            placeholder="Your full name"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            required
-            autoComplete="name"
-          />
-
-          <Input
-            icon={Mail}
-            type="email"
-            label="Email"
-            placeholder="you@seecs.edu.pk"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            autoComplete="email"
-          />
-
-          <Input
-            icon={Lock}
-            type={showPassword ? 'text' : 'password'}
-            label="Password"
-            placeholder="Min 8 characters"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={8}
-            autoComplete="new-password"
-            endIcon={
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="text-muted-foreground hover:text-foreground transition-colors p-0.5"
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-              >
-                {showPassword ? <EyeOff className="w-[18px] h-[18px]" /> : <Eye className="w-[18px] h-[18px]" />}
-              </button>
-            }
-          />
-
-          <Input
-            icon={Lock}
-            type={showPassword ? 'text' : 'password'}
-            label="Confirm Password"
-            placeholder="Re-enter your password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            required
-            autoComplete="new-password"
-            error={confirmPassword && password !== confirmPassword ? 'Passwords do not match' : undefined}
-          />
-
-          <Button type="submit" loading={loading} className="w-full" size="lg">
-            Create Account
-            <ArrowRight className="w-4 h-4" />
-          </Button>
+          <div className="flex justify-center">
+            <GoogleSignInButton minimal />
+          </div>
         </form>
 
-        <p className="text-center text-muted-foreground mt-8 text-[13px]">
-          Already have an account?{' '}
-          <Link href="/login" className="text-brand-600 dark:text-brand-400 hover:text-brand-700 font-semibold transition-colors">
-            Sign in
-          </Link>
-        </p>
-
-        <button
-          type="button"
-          onClick={() => {
-            clearLocalAuth();
-            window.location.href = '/home';
-          }}
-          className="w-full mt-2 text-center text-[13px] text-muted-foreground hover:text-foreground transition-colors"
-        >
-          Join as Guest
-        </button>
+        <div className="mt-8 text-center space-y-2">
+          <p className="text-[13px] text-muted-foreground">
+            Already have an account?{' '}
+            <Link href="/login" className="text-[#00AEEF] font-bold hover:underline">
+              Sign in
+            </Link>
+          </p>
+          
+          <button
+            type="button"
+            onClick={() => {
+              clearLocalAuth();
+              window.location.href = '/home';
+            }}
+            className="text-[13px] text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Join as Guest
+          </button>
+        </div>
       </motion.div>
     </div>
   );

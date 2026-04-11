@@ -337,8 +337,8 @@ export default function AdminDashboard() {
                     }}
                     className="flex items-center w-full gap-3 p-4 card"
                   >
-                    <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-orange-500/10">
-                      <Building2 className="w-5 h-5 text-orange-500" />
+                    <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-brand-500/10">
+                      <Building2 className="w-5 h-5 text-brand-500" />
                     </div>
                     <div className="flex-1 text-left">
                       <p className="text-sm font-medium text-primary">

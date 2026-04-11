@@ -9,17 +9,17 @@ module.exports = {
       colors: {
         /* ── Brand orange ── */
         brand: {
-          50:  '#FFF8F0',
-          100: '#FFF0DB',
-          200: '#FFE0B8',
-          300: '#FFCB8A',
-          400: '#FFB462',
-          500: '#FF9F43',
-          600: '#F08C2D',
-          700: '#CC7420',
-          800: '#A35C1A',
-          900: '#7A4516',
-          950: '#3D200A',
+          50:  '#f0f9ff',
+          100: '#e0f2fe',
+          200: '#bae6fd',
+          300: '#7dd3fc',
+          400: '#38bdf8',
+          500: '#00AEEF', // Primary vibrant blue
+          600: '#0284c7',
+          700: '#0369a1',
+          800: '#075985',
+          900: '#0c4a6e',
+          950: '#082f49',
         },
         /* ── Neutral surface ── */
         surface: {
@@ -99,9 +99,9 @@ module.exports = {
         '5xl': '2.5rem',
       },
       boxShadow: {
-        'glow':        '0 0 40px rgba(255, 159, 67, 0.15)',
-        'glow-lg':     '0 0 60px rgba(255, 159, 67, 0.25)',
-        'glow-sm':     '0 0 20px rgba(255, 159, 67, 0.12)',
+        'glow':        '0 0 40px rgba(0, 174, 239, 0.15)',
+        'glow-lg':     '0 0 60px rgba(0, 174, 239, 0.25)',
+        'glow-sm':     '0 0 20px rgba(0, 174, 239, 0.12)',
         'elevation-1': '0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.06)',
         'elevation-2': '0 2px 8px rgba(0, 0, 0, 0.04), 0 4px 16px rgba(0, 0, 0, 0.06)',
         'elevation-3': '0 8px 24px rgba(0, 0, 0, 0.06), 0 16px 32px rgba(0, 0, 0, 0.08)',

@@ -17,7 +17,7 @@ import type { Incident } from '../types';
 
 const SEVERITY_COLORS: Record<string, string> = {
   CRITICAL: 'bg-red-500/20 text-red-500',
-  HIGH: 'bg-orange-500/20 text-orange-500',
+  HIGH: 'bg-brand-500/20 text-brand-500',
   MEDIUM: 'bg-amber-500/20 text-amber-500',
   LOW: 'bg-blue-500/20 text-blue-500',
 };

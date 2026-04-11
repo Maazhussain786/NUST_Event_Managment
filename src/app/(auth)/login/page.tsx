@@ -69,129 +69,163 @@ function LoginPageContent() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 relative overflow-hidden bg-background">
-      {/* Ambient gradient */}
-      <div className="absolute top-[-20%] left-1/2 -translate-x-1/2 w-[500px] h-[500px] bg-brand-500/6 rounded-full blur-[120px] pointer-events-none" />
-
+    <div className="min-h-screen flex items-center justify-center p-6 bg-[#F0F2F5] dark:bg-[#0B0E14] overflow-hidden transition-colors duration-300">
       <motion.div
-        initial={{ opacity: 0, y: 24 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease }}
-        className="w-full max-w-sm relative z-10"
+        initial={{ y: '100vh', opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ type: 'spring', damping: 25, stiffness: 120, mass: 1 }}
+        className="w-full max-w-[420px] bg-white dark:bg-[#151921] rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] dark:shadow-[0_20px_50px_rgba(0,0,0,0.3)] p-10 md:p-12 relative z-10 border border-transparent dark:border-white/5"
       >
-        {/* Branding */}
+        {/* Title */}
         <div className="text-center mb-10">
-          <div className="w-14 h-14 bg-brand-500 rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-lg shadow-brand-500/25">
-            <span className="text-xl font-extrabold text-white">N</span>
-          </div>
-          <h1 className="text-display text-foreground">Welcome back</h1>
-          <p className="text-body-sm text-muted-foreground mt-1">Sign in to NUST Events</p>
+          <h1 className="text-4xl font-extrabold tracking-tight text-[#00AEEF]">
+            Welcome back!
+          </h1>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleLogin} className="space-y-4" noValidate>
+        <form onSubmit={handleLogin} className="space-y-6" noValidate>
           {error && (
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="bg-destructive/8 border border-destructive/15 text-destructive px-4 py-3 rounded-xl text-[13px] font-medium"
+              className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-2xl text-[13px] font-medium text-center"
               role="alert"
-              aria-live="polite"
             >
               {error}
             </motion.div>
           )}
 
-          <GoogleSignInButton />
+          <div className="space-y-4">
+            <Input
+              type="email"
+              placeholder="E-mail"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              autoComplete="email"
+            />
 
-          <div className="relative py-1">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-border" />
+            <div className="space-y-2">
+              <Input
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                autoComplete="current-password"
+                endIcon={
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="text-muted-foreground hover:text-foreground transition-colors mr-2"
+                  >
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                }
+              />
+              <div className="px-2">
+                <button
+                  type="button"
+                  onClick={() => {}} 
+                  className="text-[13px] font-medium text-[#00AEEF] hover:underline"
+                >
+                  Forgot Password ?
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <Button 
+            type="submit" 
+            loading={loading} 
+            className="w-full h-14 rounded-full bg-gradient-to-r from-[#00AEEF] to-[#018ABE] hover:opacity-90 text-white text-lg font-bold shadow-lg shadow-[#00AEEF]/20 transition-all active:scale-[0.98] border-none"
+          >
+            Sign In
+          </Button>
+
+          <div className="relative py-2">
+            <div className="absolute inset-0 flex items-center" aria-hidden="true">
+              <div className="w-full border-t border-border/50"></div>
             </div>
             <div className="relative flex justify-center">
-              <span className="bg-background px-2 text-[11px] uppercase tracking-wide text-muted-foreground">
-                Or continue with email
+              <span className="bg-white dark:bg-[#151921] px-4 text-[13px] font-medium text-muted-foreground transition-colors">
+                Or Sign in with
               </span>
             </div>
           </div>
 
-          <Input
-            icon={Mail}
-            type="email"
-            label="Email"
-            placeholder="you@seecs.edu.pk"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            autoComplete="email"
-          />
-
-          <Input
-            icon={Lock}
-            type={showPassword ? 'text' : 'password'}
-            label="Password"
-            placeholder="Enter your password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            autoComplete="current-password"
-            endIcon={
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="text-muted-foreground hover:text-foreground transition-colors p-0.5"
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-              >
-                {showPassword ? <EyeOff className="w-[18px] h-[18px]" /> : <Eye className="w-[18px] h-[18px]" />}
-              </button>
-            }
-          />
-
-          <Button type="submit" loading={loading} className="w-full" size="lg">
-            Sign In
-            <ArrowRight className="w-4 h-4" />
-          </Button>
+          <div className="flex justify-center">
+            <GoogleSignInButton minimal />
+          </div>
         </form>
 
-        <p className="text-center text-muted-foreground mt-8 text-[13px]">
-          Don&apos;t have an account?{' '}
-          <Link href="/register" className="text-brand-600 dark:text-brand-400 hover:text-brand-700 font-semibold transition-colors">
-            Create account
-          </Link>
-        </p>
+        <div className="mt-8 text-center space-y-2">
+          {process.env.NODE_ENV === 'development' && (
+            <details className="text-[11px] text-muted-foreground/60 cursor-pointer group">
+              <summary className="hover:text-[#00AEEF] transition-colors py-1 font-medium list-none">
+                Development Logins 
+                <span className="ml-1 inline-block group-open:rotate-180 transition-transform">▾</span>
+              </summary>
+              <div className="p-3 bg-muted/30 dark:bg-white/5 rounded-2xl grid grid-cols-1 gap-2 mt-2 border border-border/50">
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={() => { setEmail('superadmin@test.com'); setPassword('password'); }} className="px-2 py-1.5 bg-background dark:bg-white/5 hover:bg-white dark:hover:bg-white/10 rounded-lg border border-border/50 transition-all hover:border-[#00AEEF] text-foreground font-medium">Super Admin</button>
+                  <button onClick={() => { setEmail('admin@test.com'); setPassword('password'); }} className="px-2 py-1.5 bg-background dark:bg-white/5 hover:bg-white dark:hover:bg-white/10 rounded-lg border border-border/50 transition-all hover:border-[#00AEEF] text-foreground font-medium">Admin</button>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={() => { setEmail('society@test.com'); setPassword('password'); }} className="px-2 py-1.5 bg-background dark:bg-white/5 hover:bg-white dark:hover:bg-white/10 rounded-lg border border-border/50 transition-all hover:border-[#00AEEF] text-foreground font-medium">Society</button>
+                  <button onClick={() => { setEmail('user@test.com'); setPassword('password'); }} className="px-2 py-1.5 bg-background dark:bg-white/5 hover:bg-white dark:hover:bg-white/10 rounded-lg border border-border/50 transition-all hover:border-[#00AEEF] text-foreground font-medium">Student</button>
+                </div>
+                <button onClick={() => { setEmail('maaz.hussain@student.nust.edu.pk'); setPassword('password123'); }} className="px-2 py-1.5 bg-background dark:bg-white/5 hover:bg-white dark:hover:bg-white/10 rounded-lg border border-border/50 transition-all hover:border-[#00AEEF] text-foreground font-medium">President (Maaz)</button>
+              </div>
+            </details>
+          )}
+          <p className="text-[13px] text-muted-foreground">
+            Don&apos;t have an account?{' '}
+            <Link href="/register" className="text-[#00AEEF] font-bold hover:underline">
+              Create account
+            </Link>
+          </p>
+          
+          <button
+            type="button"
+            onClick={() => {
+              clearLocalAuth();
+              router.push('/home');
+            }}
+            className="text-[13px] text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Join as Guest
+          </button>
+        </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            clearLocalAuth();
-            router.push('/home');
-          }}
-          className="w-full mt-2 text-center text-[13px] text-muted-foreground hover:text-foreground transition-colors"
-        >
-          Join as Guest
-        </button>
-
-        {/* Dev credentials */}
+        {/* Dev credentials (restored full list) */}
         {process.env.NODE_ENV === 'development' && (
-          <div className="mt-6 rounded-xl p-3.5 bg-muted/60 border border-border">
-            <p className="text-overline text-muted-foreground mb-2">Dev Logins</p>
-            {[
-              { label: 'Super Admin 1', email: 'maazhussain972@gmail.com', pw: 'maaz@123' },
-              { label: 'Super Admin 2', email: 'abduldaym786@gmail.com', pw: 'daym@123' },
-              { label: 'Super Admin 3', email: 'bilalatif23@gmail.com', pw: 'bilal@123' },
-              { label: 'Student', email: 'student1@seecs.edu.pk', pw: 'test1234' },
-              { label: 'President', email: 'president.devs@seecs.edu.pk', pw: 'president123' },
-            ].map((cred) => (
-              <button
-                key={cred.email}
-                type="button"
-                onClick={() => { setEmail(cred.email); setPassword(cred.pw); }}
-                className="w-full text-left p-2 rounded-lg hover:bg-accent transition-colors mb-0.5"
-              >
-                <p className="text-[11px] font-semibold text-brand-600 dark:text-brand-400">{cred.label}</p>
-                <p className="text-caption text-muted-foreground">{cred.email}</p>
-              </button>
-            ))}
+          <div className="mt-10 pt-6 border-t border-dashed border-border">
+            <details className="cursor-pointer group">
+              <summary className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest list-none text-center hover:text-brand-500 transition-colors">
+                Dev Logins
+              </summary>
+              <div className="mt-4 grid grid-cols-1 gap-2">
+                {[
+                  { label: 'Super Admin 1', email: 'maazhussain972@gmail.com', pw: 'maaz@123' },
+                  { label: 'Super Admin 2', email: 'abduldaym786@gmail.com', pw: 'daym@123' },
+                  { label: 'Super Admin 3', email: 'bilalatif23@gmail.com', pw: 'bilal@123' },
+                  { label: 'Student', email: 'student1@seecs.edu.pk', pw: 'test1234' },
+                  { label: 'President', email: 'president.devs@seecs.edu.pk', pw: 'president123' },
+                ].map((cred) => (
+                  <button
+                    key={cred.email}
+                    type="button"
+                    onClick={() => { setEmail(cred.email); setPassword(cred.pw); }}
+                    className="text-left p-3 rounded-2xl bg-[#F8FAFC] hover:bg-slate-100 transition-colors"
+                  >
+                    <p className="text-[11px] font-bold text-[#00AEEF]">{cred.label}</p>
+                    <p className="text-[10px] text-muted-foreground">{cred.email}</p>
+                  </button>
+                ))}
+              </div>
+            </details>
           </div>
         )}
       </motion.div>

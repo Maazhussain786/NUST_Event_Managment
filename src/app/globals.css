@@ -30,7 +30,7 @@
     --card-foreground: 30 6% 10%;
     --popover: 0 0% 100%;
     --popover-foreground: 30 6% 10%;
-    --primary: 28 100% 63%;
+    --primary: 196 100% 47%;
     --primary-foreground: 0 0% 100%;
     --secondary: 30 8% 95%;
     --secondary-foreground: 30 6% 34%;
@@ -42,7 +42,7 @@
     --destructive-foreground: 0 0% 100%;
     --border: 30 8% 91%;
     --input: 30 8% 91%;
-    --ring: 28 100% 63%;
+    --ring: 196 100% 47%;
     --radius: 0.875rem;
 
     /* ── Status Colors ── */
@@ -69,9 +69,9 @@
     --text-primary: #1A1A18;
     --text-secondary: #52524F;
     --text-muted: #A8A8A3;
-    --brand: #FF9F43;
-    --brand-light: #FFB462;
-    --brand-dark: #F08C2D;
+    --brand: #00AEEF;
+    --brand-light: #38BDF8;
+    --brand-dark: #0284C7;
     --shadow-card: 0 1px 2px rgba(0,0,0,0.04), 0 2px 12px rgba(0,0,0,0.04);
     --shadow-nav: 0 -2px 24px rgba(0,0,0,0.06);
   }
@@ -83,7 +83,7 @@
     --card-foreground: 30 4% 96%;
     --popover: 30 4% 8%;
     --popover-foreground: 30 4% 96%;
-    --primary: 28 100% 63%;
+    --primary: 196 100% 47%;
     --primary-foreground: 0 0% 100%;
     --secondary: 30 4% 13%;
     --secondary-foreground: 30 4% 68%;
@@ -95,7 +95,7 @@
     --destructive-foreground: 0 0% 98%;
     --border: 30 4% 15%;
     --input: 30 4% 15%;
-    --ring: 28 100% 55%;
+    --ring: 196 100% 47%;
 
     /* ── Status Colors (dark) ── */
     --status-success: 142 71% 40%;
