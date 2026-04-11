@@ -72,8 +72,8 @@ function getStatusConfig(ticket: TicketData) {
         variant: 'warning' as const,
         label: 'Reupload Required',
         icon: AlertCircle,
-        borderClass: 'border-l-3 border-l-orange-500',
-        bgClass: 'bg-orange-50/50 dark:bg-orange-950/10',
+        borderClass: 'border-l-3 border-l-brand-500',
+        bgClass: 'bg-brand-50/50 dark:bg-brand-950/10',
       };
     case 'REJECTED':
       return {

@@ -96,7 +96,7 @@ const statusColors: Record<string, string> = {
   ACTIVE: "bg-green-500/10 text-green-600 dark:text-green-400",
   PENDING: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
   PENDING_VERIFICATION: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  NEEDS_REUPLOAD: "bg-orange-500/10 text-orange-600 dark:text-orange-400",
+  NEEDS_REUPLOAD: "bg-brand-500/10 text-brand-600 dark:text-brand-400",
   REJECTED: "bg-red-500/10 text-red-600 dark:text-red-400",
   CANCELLED: "bg-red-500/10 text-red-600 dark:text-red-400",
   SUSPENDED: "bg-red-500/10 text-red-600 dark:text-red-400",

@@ -153,8 +153,8 @@ export function StatusBadge({ status, reason, className }: StatusBadgeProps) {
       description: 'Submit your payment screenshot from the event page',
     },
     NEEDS_REUPLOAD: {
-      bg: 'bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-900/40',
-      text: 'text-orange-700 dark:text-orange-400',
+      bg: 'bg-brand-50 dark:bg-brand-950/30 border-brand-200 dark:border-brand-900/40',
+      text: 'text-brand-700 dark:text-brand-400',
       label: 'Reupload Required',
       description: 'Upload an updated payment screenshot to continue',
     },
