@@ -1,5 +1,5 @@
-import { redirect } from 'next/navigation';
+import FUIHeroWithBorders from "@/components/ui/herowith-logos";
 
-export default function Page() {
-  redirect('/login');
+export default function FUIHeroWithBordersDemo() {
+  return <FUIHeroWithBorders />;
 }
