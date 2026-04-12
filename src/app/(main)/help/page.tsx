@@ -12,7 +12,6 @@ export default function HelpPage() {
     { name: 'Muhammad Abdul Daym', email: 'abduldaym786@gmail.com' },
     { name: 'Muhammad Bilal Atif', email: 'bilalatif23@gmail.com' },
   ];
-
   const faqs = [
     { q: 'How do I join a society?', a: 'Visit the society page and tap "Join Society". Your request will be reviewed by the society admin.' },
     { q: 'How do I buy tickets?', a: 'Go to the event page and tap the "Buy Ticket" button at the bottom. Follow the payment flow.' },
