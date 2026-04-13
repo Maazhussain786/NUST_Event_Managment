@@ -54,6 +54,7 @@ export function middleware(request: NextRequest) {
 
   const payload = token ? decodeToken(token) : null;
   const isExpired = payload ? payload.exp * 1000 <= Date.now() : true;
+  // Treat missing or expired payloads as unauthenticated in one place.
   const validToken = !!(payload && !isExpired);
 
   // If token is stale / invalid, clear it so the user isn't stuck
