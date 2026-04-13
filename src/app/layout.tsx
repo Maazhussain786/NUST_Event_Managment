@@ -65,6 +65,7 @@ export default function RootLayout({
                 },
               }}
             />
+            {/* Register app-level background helpers after the UI tree mounts. */}
             <ServiceWorkerRegistrar />
             <PushTokenSync />
           </AuthProvider>
