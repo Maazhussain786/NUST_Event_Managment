@@ -9,6 +9,7 @@ try {
   cdnHostname = "";
 }
 
+// Keep direct blob storage enabled even when a CDN URL is configured.
 const blobHostname = accountName ? `${accountName}.blob.core.windows.net` : "";
 
 const nextConfig = {
