@@ -31,6 +31,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
+  // Match the brand accent on supported mobile browser chrome.
   themeColor: '#00AEEF',
   width: 'device-width',
   initialScale: 1,
