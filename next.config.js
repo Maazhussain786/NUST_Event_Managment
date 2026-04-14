@@ -23,6 +23,7 @@ const nextConfig = {
   },
   // Required for file uploads > 4MB through API routes
   experimental: {
+    // Match the larger media payloads used by event banners and gallery uploads.
     serverActions: {
       bodySizeLimit: '20mb',
     },
