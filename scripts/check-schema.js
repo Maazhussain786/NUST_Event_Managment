@@ -1,10 +1,11 @@
+require('dotenv').config({ path: '.env.local' });
 const { Pool } = require('pg');
 const pool = new Pool({
-  host: 'eventmgmt-pg-server.postgres.database.azure.com',
-  database: 'event_management',
-  user: 'pgadmin',
-  password: 'EventMgmt@2026!',
-  port: 5432,
+  host: process.env.AZURE_DB_HOST,
+  port: parseInt(process.env.AZURE_DB_PORT || '5432', 10),
+  database: process.env.AZURE_DB_NAME,
+  user: process.env.AZURE_DB_USER,
+  password: process.env.AZURE_DB_PASSWORD,
   ssl: { rejectUnauthorized: false },
 });
 
