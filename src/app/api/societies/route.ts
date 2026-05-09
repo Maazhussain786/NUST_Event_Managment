@@ -3,6 +3,9 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { CONTAINERS, resolveMediaFields } from "@/lib/blob";
+import { getJsonCache, setJsonCache } from "@/lib/redis-cache";
+
+const SOCIETIES_LIST_CACHE_TTL_SECONDS = 180;
 
 export async function GET(req: Request) {
   try {
@@ -14,6 +17,11 @@ export async function GET(req: Request) {
     const limit =
       Number.isNaN(rawLimit) || rawLimit < 1 ? 20 : Math.min(rawLimit, 100);
     const offset = Number.isNaN(rawOffset) || rawOffset < 0 ? 0 : rawOffset;
+    const cacheKey = `cache:societies:list:${schoolId ?? ""}:${search ?? ""}:${limit}:${offset}`;
+    const cached = await getJsonCache<{ societies: unknown[]; total: number }>(cacheKey);
+    if (cached) {
+      return NextResponse.json(cached);
+    }
 
     // Build WHERE clause for both the count and data queries
     let whereClause = `WHERE s.status = 'APPROVED'`;
@@ -69,7 +77,10 @@ export async function GET(req: Request) {
       ),
     );
 
-    return NextResponse.json({ societies, total });
+    const payload = { societies, total };
+    await setJsonCache(cacheKey, payload, SOCIETIES_LIST_CACHE_TTL_SECONDS);
+
+    return NextResponse.json(payload);
   } catch (error: unknown) {
     const message =
       error instanceof Error ? error.message : "Failed to fetch societies";

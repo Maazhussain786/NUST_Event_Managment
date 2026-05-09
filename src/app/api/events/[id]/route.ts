@@ -6,6 +6,9 @@ import { getCurrentUser } from "@/lib/auth";
 import { CONTAINERS, resolveMediaFields } from "@/lib/blob";
 import { getSocietyPaymentDetails } from "@/lib/payment-wallets";
 import { ensureEventCohostsTable } from "@/lib/event-cohosts-schema";
+import { getJsonCache, setJsonCache } from "@/lib/redis-cache";
+
+const EVENT_CORE_CACHE_TTL_SECONDS = 120;
 
 export async function GET(
   req: Request,
@@ -16,8 +19,12 @@ export async function GET(
 
     const { id } = await params;
     const user = await getCurrentUser();
+    const eventCoreCacheKey = `cache:events:detail:core:${id}`;
+    const cachedEvent = await getJsonCache<Record<string, unknown>>(eventCoreCacheKey);
 
-    const result = await query(
+    const result = cachedEvent
+      ? { rows: [cachedEvent] }
+      : await query(
       `SELECT e.id, e.title, e.description, e.banner_url, e.location, e.venue_details,
               e.event_start, e.event_end, e.ticket_price, e.max_tickets, e.is_paid,
               e.registration_start, e.registration_end, e.category_id, e.is_cancelled,
@@ -73,7 +80,7 @@ export async function GET(
          LEFT JOIN societies sc ON sc.id = eco.society_id
          WHERE eco.event_id = e.id
        ) ch ON TRUE
-       WHERE e.id = $1 AND e.deleted_at IS NULL
+      WHERE e.id = $1 AND e.deleted_at IS NULL
       `,
       [id],
     );
@@ -90,6 +97,10 @@ export async function GET(
       },
       24 * 60,
     );
+
+    if (!cachedEvent) {
+      await setJsonCache(eventCoreCacheKey, result.rows[0], EVENT_CORE_CACHE_TTL_SECONDS);
+    }
 
     // Check if current user already has a ticket/registration
     let userRegistrationStatus: {

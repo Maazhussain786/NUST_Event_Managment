@@ -4,6 +4,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getMongoDb } from "@/lib/mongo";
 import { CONTAINERS, resolveMediaUrl } from "@/lib/blob";
+import { getJsonCache, setJsonCache } from "@/lib/redis-cache";
+
+const SOCIETY_PUBLIC_CACHE_TTL_SECONDS = 300;
 
 function signMediaUrl(
   url: string | null | undefined,
@@ -184,6 +187,22 @@ export async function GET(
 ) {
   try {
     const { id } = params;
+    const redisKey = `cache:society:public:${id}`;
+    const redisCached = await getJsonCache<SocietyPublicData>(redisKey);
+    if (redisCached) {
+      if (redisCached.society?.status && redisCached.society.status !== "APPROVED") {
+        return NextResponse.json({ error: "Society not found" }, { status: 404 });
+      }
+      if (redisCached.profile && redisCached.profile.is_public === false) {
+        return NextResponse.json(
+          { error: "This society page is private" },
+          { status: 403 },
+        );
+      }
+
+      return NextResponse.json(hydrateSocietyPublic(redisCached));
+    }
+
     const db = await getMongoDb();
 
     if (db) {
@@ -203,6 +222,7 @@ export async function GET(
             );
           }
 
+          await setJsonCache(redisKey, cached, SOCIETY_PUBLIC_CACHE_TTL_SECONDS);
           return NextResponse.json(hydrateSocietyPublic(cached));
         }
       } catch (error) {
@@ -232,6 +252,8 @@ export async function GET(
         console.error('Mongo write failed:', error);
       }
     }
+
+    await setJsonCache(redisKey, data, SOCIETY_PUBLIC_CACHE_TTL_SECONDS);
 
     return NextResponse.json(hydrateSocietyPublic(data));
   } catch (error: unknown) {
