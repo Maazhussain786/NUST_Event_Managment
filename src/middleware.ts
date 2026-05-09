@@ -42,7 +42,7 @@ export function middleware(request: NextRequest) {
   const token = request.cookies.get('auth_token')?.value;
   const { pathname } = request.nextUrl;
 
-  // Skip API routes and static files
+  // Skip middleware work for API routes and static assets.
   if (
     pathname.startsWith('/api') ||
     pathname.startsWith('/_next') ||

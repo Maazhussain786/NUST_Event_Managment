@@ -18,7 +18,7 @@ A comprehensive Progressive Web App (PWA) for managing university societies, eve
 - **Frontend**: Next.js 14 (App Router), React 18, TypeScript
 - **Styling**: Tailwind CSS, Framer Motion
 - **Backend**: Next.js API Routes (serverless)
-- **Database**: Azure PostgreSQL 14
+- **Database**: Azure PostgreSQL 14 (primary), MongoDB Atlas (optional read models)
 - **Authentication**: JWT with httpOnly cookies
 - **PWA**: next-pwa with offline support
 
@@ -26,6 +26,7 @@ A comprehensive Progressive Web App (PWA) for managing university societies, eve
 
 - Node.js 18+ and npm
 - PostgreSQL 14+ (local or Azure)
+- MongoDB Atlas (optional for read models)
 - Git
 
 ## 🏁 Quick Start
@@ -63,6 +64,8 @@ GOOGLE_CLIENT_SECRET=[Google OAuth Web Client Secret]
 GOOGLE_REDIRECT_URI=http://localhost:4000/api/auth/google/callback
 CRON_SECRET=[Generate a long random secret]
 FCM_SERVER_KEY=[Optional: only needed for native FCM tokens]
+MONGODB_URI=[MongoDB connection string]
+MONGODB_DB=event_management
 NODE_ENV=development
 ```
 
@@ -99,6 +102,22 @@ npm run dev
 ```
 
 Open [http://localhost:4000](http://localhost:4000)
+
+## 🧭 Hybrid MongoDB Read Model (Optional)
+
+This project supports a hybrid read model for the public society profile endpoint to reduce
+round trips and speed up fetches. Postgres remains the source of truth.
+
+1) Set Mongo env vars in `.env.local`:
+```env
+MONGODB_URI=[MongoDB connection string]
+MONGODB_DB=event_management
+```
+
+2) Backfill existing data into Mongo:
+```bash
+npm run mongo:backfill:society-public
+```
 
 ## 🔑 Default Login Credentials
 
@@ -190,6 +209,9 @@ npm run build        # Build for production
 npm start            # Start production server
 npm run lint         # Run ESLint
 npm run test:auth:smoke # Smoke-test login/session/logout
+npm run db:test       # Test PostgreSQL connection
+npm run db:benchmark  # Benchmark read-heavy SQL queries
+npm run mongo:backfill:society-public # Backfill Mongo read model
 node scripts/seed.js # Seed database
 ```
 

@@ -9,6 +9,7 @@ Complete guide for setting up the PostgreSQL database for the NUST Event Managem
 - **PostgreSQL 14+** (Azure PostgreSQL or local instance)
 - **Node.js 18+** with npm
 - **Git** for cloning the repository
+- **MongoDB Atlas** (optional, for read models)
 
 ---
 
@@ -49,6 +50,10 @@ Contact the project admin (Maaz Hussain) to get access credentials for the share
 
    # Authentication
    JWT_SECRET=nust-event-mgmt-secret-2026
+
+   # Optional: MongoDB Atlas for read models
+   MONGODB_URI=[MongoDB connection string]
+   MONGODB_DB=event_management
 
    # Next.js
    NODE_ENV=development
@@ -108,6 +113,10 @@ AZURE_DB_PASSWORD=your_password
 
 # Authentication
 JWT_SECRET=nust-event-mgmt-secret-2026
+
+# Optional: MongoDB Atlas for read models
+MONGODB_URI=[MongoDB connection string]
+MONGODB_DB=event_management
 
 # Next.js
 NODE_ENV=development
@@ -178,6 +187,19 @@ node -e "const {Pool}=require('pg');require('dotenv').config({path:'.env.local'}
 ```
 
 Expected output: ~30 tables including users, societies, events, roles, memberships, etc.
+
+---
+
+## Optional: MongoDB Read Model (Hybrid)
+
+If you want faster public society profile fetches, enable the hybrid read model:
+
+1) Ensure `MONGODB_URI` and `MONGODB_DB` are set in `.env.local`.
+
+2) Backfill existing data into Mongo:
+```bash
+npm run mongo:backfill:society-public
+```
 
 ---
 
