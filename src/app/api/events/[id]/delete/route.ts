@@ -21,7 +21,7 @@ import {
  *   - Cannot delete if attendees have checked in
  *   - Cannot delete already-deleted events
  *   - Society must be operational
- *   - Requires MANAGE_EVENTS privilege
+ *   - Requires DELETE_CONTENT privilege
  */
 export async function POST(
   req: NextRequest,
@@ -67,12 +67,12 @@ export async function POST(
 
     // Auth
     const privCheck = await client.query(
-      `SELECT fn_has_privilege($1, $2, 'MANAGE_EVENTS') AS allowed`,
+      `SELECT fn_has_privilege($1, $2, 'DELETE_CONTENT') AS allowed`,
       [user.userId, event.society_id]
     );
     if (!privCheck.rows[0].allowed && user.userType !== 'SUPER_ADMIN') {
       await client.query('ROLLBACK');
-      return ApiErrors.forbidden('You do not have MANAGE_EVENTS privilege');
+      return ApiErrors.forbidden('You do not have DELETE_CONTENT privilege');
     }
 
     // Check for approved tickets

@@ -979,7 +979,7 @@ export function deleteEvent(
   societyId: string,
   eventId: string,
 ): Promise<{ success: boolean }> {
-  return api(`${s(societyId)}/events/${eventId}`, { method: "DELETE" });
+  return api(`/api/events/${eventId}/delete`, { method: "POST" });
 }
 
 export function fetchEventDetail(

@@ -28,3 +28,28 @@ export async function setJsonCache(
     console.error(`Redis set failed for key ${key}:`, error);
   }
 }
+
+export async function deleteJsonCache(key: string) {
+  const redis = await getRedisClient();
+  if (!redis) return;
+
+  try {
+    await redis.del(key);
+  } catch (error) {
+    console.error(`Redis delete failed for key ${key}:`, error);
+  }
+}
+
+export async function deleteCacheByPrefix(prefix: string) {
+  const redis = await getRedisClient();
+  if (!redis) return;
+  if (!prefix) return;
+
+  try {
+    for await (const key of redis.scanIterator({ MATCH: `${prefix}*`, COUNT: 100 })) {
+      await redis.del(key as string);
+    }
+  } catch (error) {
+    console.error(`Redis delete failed for prefix ${prefix}:`, error);
+  }
+}

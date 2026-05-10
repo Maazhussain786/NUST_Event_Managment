@@ -60,6 +60,7 @@ export async function GET(
       LEFT JOIN tickets t ON e.id = t.event_id
       LEFT JOIN event_registrations er ON e.id = er.event_id
       WHERE e.society_id = $1
+        AND e.deleted_at IS NULL
     `;
     const qParams: unknown[] = [societyId];
 
