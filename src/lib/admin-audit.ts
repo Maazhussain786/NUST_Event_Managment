@@ -18,17 +18,17 @@ type SuperAdminAuditInput = {
   metadata?: Record<string, unknown> | null;
 };
 
-function extractIpAddress(req: NextRequest): string | null {
+function extractIpAddress(req: NextRequest): string | undefined {
   return (
     req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
     req.headers.get("x-real-ip") ||
     req.ip ||
-    null
+    undefined
   );
 }
 
-function extractUserAgent(req: NextRequest): string | null {
-  return req.headers.get("user-agent") || null;
+function extractUserAgent(req: NextRequest): string | undefined {
+  return req.headers.get("user-agent") || undefined;
 }
 
 export async function logSuperAdminAudit(
@@ -38,8 +38,8 @@ export async function logSuperAdminAudit(
   client?: PoolClient,
 ): Promise<void> {
   const metadata = {
-    actorEmail: actor.email || null,
-    actorRole: actor.userType || "SUPER_ADMIN",
+    actorEmail: actor.email ?? undefined,
+    actorRole: actor.userType ?? "SUPER_ADMIN",
     userAgent: extractUserAgent(req),
     ...(input.metadata || {}),
   };
@@ -48,11 +48,11 @@ export async function logSuperAdminAudit(
     {
       action: input.action || "SUPERADMIN_OVERRIDE",
       performedBy: actor.userId,
-      societyId: input.societyId || null,
+      societyId: input.societyId ?? undefined,
       targetType: input.targetType,
-      targetId: input.targetId || null,
-      oldValue: input.oldValue || null,
-      newValue: input.newValue || null,
+      targetId: input.targetId ?? undefined,
+      oldValue: (input.oldValue as any) ?? undefined,
+      newValue: (input.newValue as any) ?? undefined,
       metadata,
       ipAddress: extractIpAddress(req),
     },
