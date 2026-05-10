@@ -1,4 +1,5 @@
 /** @type {import('next').NextConfig} */
+
 const accountName = process.env.AZURE_BLOB_ACCOUNT_NAME || "";
 const cdnUrl = process.env.AZURE_BLOB_CDN_URL || "";
 
@@ -9,10 +10,17 @@ try {
   cdnHostname = "";
 }
 
-// Keep direct blob storage enabled even when a CDN URL is configured.
 const blobHostname = accountName ? `${accountName}.blob.core.windows.net` : "";
 
 const nextConfig = {
+  // --- ADDED YOUR IGNORE FLAGS HERE ---
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  // --- YOUR EXISTING CONFIG ---
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: 'images.unsplash.com' },
@@ -21,9 +29,7 @@ const nextConfig = {
       ...(cdnHostname ? [{ protocol: 'https', hostname: cdnHostname }] : []),
     ],
   },
-  // Required for file uploads > 4MB through API routes
   experimental: {
-    // Match the larger media payloads used by event banners and gallery uploads.
     serverActions: {
       bodySizeLimit: '20mb',
     },
