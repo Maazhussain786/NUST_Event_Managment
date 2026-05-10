@@ -72,7 +72,7 @@ export async function GET(
            COUNT(CASE WHEN status = 'ONGOING' THEN 1 END) AS ongoing,
            COUNT(CASE WHEN status = 'COMPLETED' THEN 1 END) AS completed,
            COUNT(CASE WHEN status = 'CANCELLED' THEN 1 END) AS cancelled
-         FROM events WHERE society_id = $1`,
+         FROM events WHERE society_id = $1 AND deleted_at IS NULL`,
         [societyId]
       ),
       // Ticket stats
@@ -84,7 +84,8 @@ export async function GET(
            COALESCE(SUM(CASE WHEN t.status = 'APPROVED' THEN e.ticket_price ELSE 0 END), 0) AS revenue
          FROM tickets t
          JOIN events e ON t.event_id = e.id
-         WHERE e.society_id = $1`,
+         WHERE e.society_id = $1
+           AND e.deleted_at IS NULL`,
         [societyId]
       ),
       // Storage info
@@ -103,7 +104,9 @@ export async function GET(
                 COALESCE(participants_count, 0)::TEXT AS participants_count,
                 banner_url, thumbnail_url
          FROM events
-         WHERE society_id = $1 AND status IN ('UPCOMING', 'ONGOING')
+         WHERE society_id = $1
+           AND deleted_at IS NULL
+           AND status IN ('UPCOMING', 'ONGOING')
          ORDER BY event_start ASC LIMIT 5`,
         [societyId]
       ),
@@ -122,7 +125,8 @@ export async function GET(
       query(
         `SELECT COUNT(*) AS count FROM event_attendance ea
          JOIN events e ON ea.event_id = e.id
-         WHERE e.society_id = $1`,
+         WHERE e.society_id = $1
+           AND e.deleted_at IS NULL`,
         [societyId]
       ),
       // My role
