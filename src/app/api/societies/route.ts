@@ -49,15 +49,18 @@ export async function GET(req: Request) {
 
     // Get paginated data
     const sql = `
-      SELECT s.id, s.name, s.description, s.logo_url, s.status,
-             s.is_nust_wide, s.school_id,
-             ns.full_name AS school_name, ns.abbreviation AS school_abbr,
-             COUNT(DISTINCT sm.user_id) FILTER (WHERE sm.is_active = TRUE) AS member_count,
-             COALESCE(AVG(r.score), 0)::numeric(3,2) AS avg_rating
-      FROM societies s
-      LEFT JOIN nust_schools ns ON s.school_id = ns.id
-      LEFT JOIN society_memberships sm ON s.id = sm.society_id
-      LEFT JOIN ratings r ON r.target_type = 'SOCIETY' AND r.target_id = s.id
+            SELECT s.id, s.name, s.description, s.logo_url, s.status,
+              s.is_nust_wide, s.school_id,
+              ns.full_name AS school_name, ns.abbreviation AS school_abbr,
+              COUNT(DISTINCT sm.user_id) FILTER (
+           WHERE sm.is_active = TRUE AND u_members.status IS DISTINCT FROM 'SUSPENDED'
+              ) AS member_count,
+              COALESCE(AVG(r.score), 0)::numeric(3,2) AS avg_rating
+            FROM societies s
+            LEFT JOIN nust_schools ns ON s.school_id = ns.id
+            LEFT JOIN society_memberships sm ON s.id = sm.society_id
+            LEFT JOIN users u_members ON u_members.id = sm.user_id
+            LEFT JOIN ratings r ON r.target_type = 'SOCIETY' AND r.target_id = s.id
       ${whereClause}
       GROUP BY s.id, ns.full_name, ns.abbreviation
       ORDER BY member_count DESC

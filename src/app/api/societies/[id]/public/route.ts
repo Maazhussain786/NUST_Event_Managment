@@ -96,12 +96,15 @@ async function fetchSocietyPublicFromPostgres(
     `SELECT s.id, s.name, s.description, s.logo_url, s.status,
             s.is_nust_wide, s.created_at,
             ns.full_name AS school_name, ns.abbreviation AS school_abbr,
-            COUNT(DISTINCT sm.user_id) FILTER (WHERE sm.is_active = TRUE) AS member_count,
+            COUNT(DISTINCT sm.user_id) FILTER (
+              WHERE sm.is_active = TRUE AND u_members.status IS DISTINCT FROM 'SUSPENDED'
+            ) AS member_count,
             COALESCE(AVG(r.score), 0)::numeric(3,2) AS avg_rating,
             COUNT(DISTINCT r.id) AS rating_count
      FROM societies s
      LEFT JOIN nust_schools ns ON s.school_id = ns.id
      LEFT JOIN society_memberships sm ON s.id = sm.society_id AND sm.is_active = TRUE
+     LEFT JOIN users u_members ON u_members.id = sm.user_id
      LEFT JOIN ratings r ON r.target_type = 'SOCIETY' AND r.target_id = s.id
      WHERE s.id = $1 AND s.status = 'APPROVED'
      GROUP BY s.id, ns.full_name, ns.abbreviation`,
@@ -135,16 +138,29 @@ async function fetchSocietyPublicFromPostgres(
   );
 
   const teamResult = await query(
-    `SELECT sm.id AS membership_id, u.id AS user_id, u.full_name, u.avatar_url,
-            r.name AS role_name, r.hierarchy_level,
-            w.name AS wing_name, p.name AS portfolio_name
-     FROM society_memberships sm
-     JOIN users u ON sm.user_id = u.id
-     JOIN roles r ON sm.role_id = r.id
-     LEFT JOIN wings w ON sm.wing_id = w.id
-     LEFT JOIN portfolios p ON sm.portfolio_id = p.id
-     WHERE sm.society_id = $1 AND sm.is_active = TRUE AND r.hierarchy_level >= 3
-     ORDER BY r.hierarchy_level DESC, u.full_name ASC`,
+    `WITH ranked_team AS (
+       SELECT sm.id AS membership_id, u.id AS user_id, u.full_name, u.avatar_url,
+              r.name AS role_name, r.hierarchy_level,
+              w.name AS wing_name, p.name AS portfolio_name,
+              ROW_NUMBER() OVER (
+                PARTITION BY sm.user_id
+                ORDER BY r.hierarchy_level DESC, sm.assigned_at DESC
+              ) AS rn
+       FROM society_memberships sm
+       JOIN users u ON sm.user_id = u.id
+       JOIN roles r ON sm.role_id = r.id
+       LEFT JOIN wings w ON sm.wing_id = w.id
+       LEFT JOIN portfolios p ON sm.portfolio_id = p.id
+       WHERE sm.society_id = $1
+         AND sm.is_active = TRUE
+         AND r.hierarchy_level >= 3
+         AND u.status IS DISTINCT FROM 'SUSPENDED'
+     )
+     SELECT membership_id, user_id, full_name, avatar_url,
+            role_name, hierarchy_level, wing_name, portfolio_name
+     FROM ranked_team
+     WHERE rn = 1
+     ORDER BY hierarchy_level DESC, full_name ASC`,
     [id],
   );
 
@@ -161,9 +177,12 @@ async function fetchSocietyPublicFromPostgres(
 
   const wingsResult = await query(
     `SELECT w.id, w.name, w.description,
-            COUNT(DISTINCT sm.user_id) FILTER (WHERE sm.is_active = TRUE) AS member_count
+            COUNT(DISTINCT sm.user_id) FILTER (
+              WHERE sm.is_active = TRUE AND u_members.status IS DISTINCT FROM 'SUSPENDED'
+            ) AS member_count
      FROM wings w
      LEFT JOIN society_memberships sm ON sm.wing_id = w.id AND sm.is_active = TRUE
+     LEFT JOIN users u_members ON u_members.id = sm.user_id
      WHERE w.society_id = $1
      GROUP BY w.id
      ORDER BY w.name`,

@@ -1,0 +1,48 @@
+DATABASE USAGE OVERVIEW
+=======================
+
+1) PostgreSQL (primary database)
+- Purpose: source of truth for all core data (users, societies, events, tickets, roles, notifications, etc.).
+- Connection: src/lib/db.ts (Pool config, Azure vs local).
+- Used by: most API routes under src/app/api via the shared query() helper.
+- Examples:
+  - src/app/api/auth/login/route.ts reads users and validates passwords.
+  - src/app/api/events/route.ts fetches event listings.
+  - src/app/api/events/[id]/route.ts loads event detail + ticket status.
+  - src/app/api/societies/[id]/public/route.ts falls back to Postgres if cache/read model misses.
+- Env vars:
+  - AZURE_DB_HOST, AZURE_DB_PORT, AZURE_DB_NAME, AZURE_DB_USER, AZURE_DB_PASSWORD
+  - LOCAL_DB_HOST, LOCAL_DB_PORT, LOCAL_DB_NAME, LOCAL_DB_USER, LOCAL_DB_PASSWORD
+  - ACTIVE_DB=local to force local config
+
+2) MongoDB (optional read model)
+- Purpose: fast, denormalized read model for the public society profile page.
+- Connection: src/lib/mongo.ts (getMongoDb).
+- Used by: src/app/api/societies/[id]/public/route.ts
+  - Flow: Redis cache -> Mongo read model -> Postgres fallback
+  - If Postgres is used, the result is written back to Mongo for future reads.
+- Collection: society_public_read (stores the prebuilt public profile payload).
+- Env vars:
+  - MONGODB_URI
+  - MONGODB_DB
+- Backfill script:
+  - scripts/backfill-society-public-read.js (npm run mongo:backfill:society-public)
+
+3) Redis (optional cache)
+- Purpose: short-lived JSON caching for expensive API reads.
+- Connection: src/lib/redis.ts, helpers in src/lib/redis-cache.ts
+- Used by:
+  - src/app/api/societies/[id]/public/route.ts (cache:society:public:${id})
+  - src/app/api/events/[id]/route.ts (cache:events:detail:core:${id})
+- Env var:
+  - REDIS_URL
+
+4) IndexedDB (browser-only offline cache)
+- Purpose: local offline storage for tickets and QR data on the client.
+- Location: src/lib/ticket-cache.ts
+- Used by: client pages that show tickets offline (not a server database).
+
+NOT A DATABASE (but related storage)
+- Azure Blob Storage: media files (profile photos, event banners, attachments).
+  - Library: src/lib/blob.ts
+  - Env: AZURE_BLOB_CONNECTION_STRING (and optional AZURE_BLOB_CDN_URL)

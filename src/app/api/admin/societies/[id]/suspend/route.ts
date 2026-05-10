@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getClient } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { deleteCacheByPrefix, deleteJsonCache } from '@/lib/redis-cache';
 
 /**
  * POST /api/admin/societies/[id]/suspend
@@ -103,6 +104,13 @@ export async function POST(
     }
 
     await client.query('COMMIT');
+
+    try {
+      await deleteJsonCache(`cache:society:public:${societyId}`);
+      await deleteCacheByPrefix('cache:societies:list:');
+    } catch (error) {
+      console.warn('Society cache invalidation failed:', error);
+    }
 
     return NextResponse.json({
       success: true,
