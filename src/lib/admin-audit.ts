@@ -44,7 +44,7 @@ export async function logSuperAdminAudit(
     ...(input.metadata || {}),
   };
 
-  await writeAuditLog(
+await writeAuditLog(
     {
       action: input.action || "SUPERADMIN_OVERRIDE",
       performedBy: actor.userId,
@@ -54,7 +54,7 @@ export async function logSuperAdminAudit(
       oldValue: (input.oldValue as any) ?? undefined,
       newValue: (input.newValue as any) ?? undefined,
       metadata,
-      ipAddress: extractIpAddress(req),
+      ipAddress: extractIpAddress(req) ?? undefined,
     },
     client,
   );

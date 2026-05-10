@@ -13,14 +13,14 @@ try {
 const blobHostname = accountName ? `${accountName}.blob.core.windows.net` : "";
 
 const nextConfig = {
-  // --- ADDED YOUR IGNORE FLAGS HERE ---
+  // 1. This tells Vercel to ignore the red errors and keep building
   typescript: {
     ignoreBuildErrors: true,
   },
   eslint: {
     ignoreDuringBuilds: true,
   },
-  // --- YOUR EXISTING CONFIG ---
+  // 2. Your existing image and upload settings
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: 'images.unsplash.com' },
