@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getClient } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { generateQrPayload } from '@/lib/qr';
+import { sendEmail, emailTemplates } from '@/lib/email';
 
 function requireReturnedId(
   row: { id?: unknown } | undefined,
@@ -282,6 +283,17 @@ export async function POST(
     );
 
     await client.query('COMMIT');
+
+    // Registration confirmation email (FR-AUD-07). Best-effort; never fails the request.
+    await sendEmail({
+      to: user.email,
+      ...emailTemplates.notification(
+        user.fullName,
+        `Registered: ${event.title}`,
+        `You are registered for "${event.title}" by ${event.society_name}. Your QR ticket is in the app under Tickets; show it at the entrance.`,
+        '/tickets',
+      ),
+    });
 
     return NextResponse.json({
       success: true,
