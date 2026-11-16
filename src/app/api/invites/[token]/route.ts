@@ -4,6 +4,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query, getClient } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
+class InviteError extends Error {}
+
 // GET /api/invites/[token] — get invite details (public, for accept page)
 export async function GET(
   req: NextRequest,
@@ -91,56 +93,52 @@ export async function POST(
     try {
       await client.query('BEGIN');
 
-      // Get the role id
+      // Get the role (by name, as stored on the invite)
       const roleResult = await client.query(
-        `SELECT id, name FROM roles WHERE society_id = $1 AND name = $2`,
+        `SELECT id, name, tier, max_holders FROM roles WHERE society_id = $1 AND name = $2`,
         [invite.society_id, invite.role_name]
       );
       if (roleResult.rows.length === 0) {
-        throw new Error(`Role "${invite.role_name}" not found for this society`);
+        throw new InviteError(`The role "${invite.role_name}" no longer exists in this society. Ask for a new invite.`);
       }
-
-      const roleName = roleResult.rows[0].name as string;
-
-      if (roleName === 'Vice President' && !invite.wing_id) {
-        throw new Error('Invalid invite scope: Vice President requires a wing');
+      const role = roleResult.rows[0];
+      const roleName = role.name as string;
+      if (roleName === 'President' || role.tier === 'FACULTY_SPONSOR') {
+        throw new InviteError('This role cannot be accepted through an invite.');
       }
-
-      if ((roleName === 'Director' || roleName === 'Deputy Director') && (!invite.wing_id || !invite.portfolio_id)) {
-        throw new Error('Invalid invite scope: Director/Deputy Director requires wing and portfolio');
+      if (invite.portfolio_id) {
+        throw new InviteError('This is an old portfolio invite. Team places are now given per event; ask for a new invite.');
       }
-
-      if ((roleName === 'Member' || roleName === 'Vice President') && invite.portfolio_id) {
-        throw new Error(`Invalid invite scope: ${roleName} cannot include portfolio`);
-      }
-
       if (invite.wing_id) {
         const wingCheck = await client.query(
           `SELECT id FROM wings WHERE id = $1 AND society_id = $2 AND deleted_at IS NULL`,
           [invite.wing_id, invite.society_id]
         );
-        if (wingCheck.rows.length === 0) {
-          throw new Error('Invalid invite scope: wing is missing or deleted');
-        }
+        if (wingCheck.rows.length === 0) throw new InviteError('The wing for this invite no longer exists.');
       }
-
-      if (invite.portfolio_id) {
-        const portfolioCheck = await client.query(
-          `SELECT id FROM portfolios WHERE id = $1 AND wing_id = $2 AND deleted_at IS NULL`,
-          [invite.portfolio_id, invite.wing_id]
+      if (role.max_holders) {
+        const holders = await client.query(
+          `SELECT COUNT(*)::int AS c FROM society_memberships WHERE society_id = $1 AND role_id = $2 AND is_active AND user_id <> $3`,
+          [invite.society_id, role.id, user.userId]
         );
-        if (portfolioCheck.rows.length === 0) {
-          throw new Error('Invalid invite scope: portfolio does not belong to selected wing');
-        }
+        if (holders.rows[0].c >= role.max_holders) throw new InviteError(`${roleName} is already filled.`);
       }
+      const suspended = await client.query(
+        `SELECT 1 FROM society_memberships WHERE user_id = $1 AND society_id = $2 AND suspended_at IS NOT NULL AND NOT is_active`,
+        [user.userId, invite.society_id]
+      );
+      if (suspended.rows.length > 0) throw new InviteError('You are suspended from this society.');
 
-      // Deactivate any existing membership for this user in this society with same scope
+      await client.query(
+        "SELECT set_config('app.actor_id', $1, true), set_config('app.change_reason', 'Accepted invitation', true), set_config('app.change_source', 'DIRECT', true)",
+        [invite.invited_by]
+      );
+
+      // Replace any existing society-wide membership
       await client.query(
         `UPDATE society_memberships SET is_active = FALSE, updated_at = NOW()
-         WHERE user_id = $1 AND society_id = $2
-           AND COALESCE(wing_id::text, '') = COALESCE($3::text, '')
-           AND COALESCE(portfolio_id::text, '') = COALESCE($4::text, '')`,
-        [user.userId, invite.society_id, invite.wing_id, invite.portfolio_id]
+         WHERE user_id = $1 AND society_id = $2 AND is_active AND portfolio_id IS NULL`,
+        [user.userId, invite.society_id]
       );
 
       // Create new membership
@@ -148,7 +146,7 @@ export async function POST(
         `INSERT INTO society_memberships (user_id, society_id, role_id, wing_id, portfolio_id, is_active, assigned_by)
          VALUES ($1, $2, $3, $4, $5, TRUE, $6)
          RETURNING id`,
-        [user.userId, invite.society_id, roleResult.rows[0].id, invite.wing_id, invite.portfolio_id, invite.invited_by]
+        [user.userId, invite.society_id, role.id, invite.wing_id, null, invite.invited_by]
       );
 
       await client.query(
@@ -206,8 +204,8 @@ export async function POST(
       roleName: invite.role_name,
     });
   } catch (error) {
+    if (error instanceof InviteError) return NextResponse.json({ error: error.message }, { status: 409 });
     console.error('Invite accept error:', error);
-    const msg = error instanceof Error ? error.message : 'Failed to accept invite';
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to accept invite' }, { status: 500 });
   }
 }

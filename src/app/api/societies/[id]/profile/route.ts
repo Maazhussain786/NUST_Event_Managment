@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { getSocietyAccess, isSocietyAdmin } from '@/lib/rbac';
 import { CONTAINERS, resolveMediaFields } from '@/lib/blob';
 
 // GET /api/societies/[id]/profile — get society profile (branding)
@@ -78,16 +79,10 @@ export async function PATCH(
 
     const { id } = params;
 
-    // Check user is President or Super Admin
-    const membership = await query(
-      `SELECT r.name, r.hierarchy_level FROM society_memberships sm
-       JOIN roles r ON sm.role_id = r.id
-       WHERE sm.user_id = $1 AND sm.society_id = $2 AND sm.is_active = TRUE`,
-      [user.userId, id]
-    );
-    const isPresident = membership.rows.some((m: any) => m.name === 'President');
-    if (!isPresident && user.userType !== 'SUPER_ADMIN') {
-      return NextResponse.json({ error: 'Only the President can update profile' }, { status: 403 });
+    // Only the Faculty Sponsor or an Admin may edit the public profile
+    const access = await getSocietyAccess(user, id);
+    if (!isSocietyAdmin(access)) {
+      return NextResponse.json({ error: 'Only the Faculty Sponsor or an Admin can update the profile' }, { status: 403 });
     }
 
     const body = await req.json();

@@ -153,7 +153,8 @@ async function fetchSocietyPublicFromPostgres(
        LEFT JOIN portfolios p ON sm.portfolio_id = p.id
        WHERE sm.society_id = $1
          AND sm.is_active = TRUE
-         AND r.hierarchy_level >= 3
+         AND sm.suspended_at IS NULL
+         AND r.tier IN ('FACULTY_SPONSOR', 'ADMIN', 'OFFICER')
          AND u.status IS DISTINCT FROM 'SUSPENDED'
      )
      SELECT membership_id, user_id, full_name, avatar_url,

@@ -637,8 +637,7 @@ export async function resolveEffectiveSocietyPrivilege(
 ): Promise<EffectivePrivilegeResult> {
   const q = client ? client.query.bind(client) : query;
 
-  await ensureMemberPrivilegeOverridesTable(client);
-
+  // The override table is part of the schema (db/migrations); no runtime DDL here.
   const overrideResult = await q(
     `SELECT mpo.is_granted
      FROM society_member_privilege_overrides mpo

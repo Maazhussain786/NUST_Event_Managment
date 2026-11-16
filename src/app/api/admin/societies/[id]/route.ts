@@ -24,7 +24,7 @@ export async function PATCH(
 
     // Get current status + creator for logging
     const current = await query(
-      'SELECT status, created_by, president_name FROM societies WHERE id = $1',
+      'SELECT status, created_by, president_name, faculty_sponsor_email FROM societies WHERE id = $1',
       [id]
     );
     if (current.rows.length === 0) {
@@ -33,6 +33,7 @@ export async function PATCH(
 
     const fromStatus = current.rows[0].status;
     const creatorId = current.rows[0].created_by;
+    const facultySponsorEmail: string | null = current.rows[0].faculty_sponsor_email || null;
 
     // Use a transaction for APPROVED since we create roles + membership
     const client = await getClient();
@@ -58,59 +59,44 @@ export async function PATCH(
 
       // When APPROVING a PENDING society → create system roles + assign creator as President
       if (action === 'APPROVED' && fromStatus === 'PENDING') {
-        // Create all 5 system roles
-        const roleNames = [
-          { name: 'President', desc: 'Society President — full control', level: 10 },
-          { name: 'Vice President', desc: 'Wing VP', level: 8 },
-          { name: 'Director', desc: 'Portfolio Director', level: 5 },
-          { name: 'Deputy Director', desc: 'Deputy Portfolio Director', level: 3 },
-          { name: 'Member', desc: 'General member', level: 1 },
-        ];
+        // Default roles (role_templates) and the SRS portfolio catalog
+        await client.query("SELECT fn_seed_society_roles($1)", [id]);
+        await client.query("SELECT fn_seed_society_portfolios($1, $2)", [id, creatorId]);
+        await client.query(
+          "SELECT set_config('app.actor_id', $1, true), set_config('app.change_reason', 'Society approved', true), set_config('app.change_source', 'SYSTEM', true)",
+          [user.userId]
+        );
 
-        for (const r of roleNames) {
+        // Founder becomes President
+        if (creatorId) {
           await client.query(
-            `INSERT INTO roles (society_id, name, description, hierarchy_level, is_system_role)
-             VALUES ($1, $2, $3, $4, TRUE)
-             ON CONFLICT (society_id, name) DO NOTHING`,
-            [id, r.name, r.desc, r.level]
+            `INSERT INTO society_memberships (user_id, society_id, role_id, is_active, assigned_by)
+             SELECT $1, $2, r.id, TRUE, $3 FROM roles r WHERE r.society_id = $2 AND r.name = 'President'
+             ON CONFLICT DO NOTHING`,
+            [creatorId, id, user.userId]
           );
         }
 
-        // Assign all privileges to President role
-        await client.query(
-          `INSERT INTO role_privileges (role_id, privilege_id)
-           SELECT r.id, p.id FROM roles r CROSS JOIN privileges p
-           WHERE r.society_id = $1 AND r.name = 'President'
-           ON CONFLICT DO NOTHING`,
-          [id]
-        );
-
-        // Assign VP privileges
-        await client.query(
-          `INSERT INTO role_privileges (role_id, privilege_id)
-           SELECT r.id, p.id FROM roles r CROSS JOIN privileges p
-           WHERE r.society_id = $1 AND r.name = 'Vice President'
-             AND p.name IN ('CREATE_EVENT','EDIT_EVENT','CANCEL_EVENT','UPLOAD_CONTENT',
-               'DELETE_CONTENT','SEND_MESSAGE','VIEW_CHAT','MANAGE_CHAT',
-               'MANAGE_MEMBERS','MANAGE_PORTFOLIOS','SCAN_QR','VIEW_ANALYTICS')
-           ON CONFLICT DO NOTHING`,
-          [id]
-        );
-
-        // Get President role id for this society
-        const presRole = await client.query(
-          `SELECT id FROM roles WHERE society_id = $1 AND name = 'President'`,
-          [id]
-        );
-
-        if (presRole.rows.length > 0 && creatorId) {
-          // Assign creator as President
-          await client.query(
-            `INSERT INTO society_memberships (user_id, society_id, role_id, is_active, assigned_by)
-             VALUES ($1, $2, $3, TRUE, $4)
-             ON CONFLICT DO NOTHING`,
-            [creatorId, id, presRole.rows[0].id, user.userId]
+        // Nominated Faculty Sponsor: assign now if they have an active account,
+        // otherwise it happens automatically when they verify their email.
+        if (facultySponsorEmail) {
+          const sponsor = await client.query(
+            "SELECT id FROM users WHERE email = $1 AND status = 'ACTIVE'",
+            [facultySponsorEmail]
           );
+          if (sponsor.rows.length > 0 && sponsor.rows[0].id !== creatorId) {
+            await client.query(
+              `INSERT INTO society_memberships (user_id, society_id, role_id, is_active, assigned_by)
+               SELECT $1, $2, r.id, TRUE, $3 FROM roles r WHERE r.society_id = $2 AND r.tier = 'FACULTY_SPONSOR'
+               ON CONFLICT DO NOTHING`,
+              [sponsor.rows[0].id, id, user.userId]
+            );
+            await client.query("UPDATE users SET designation = 'FACULTY' WHERE id = $1 AND designation = 'STUDENT'", [sponsor.rows[0].id]);
+            await client.query(
+              "INSERT INTO notifications (user_id, title, body, link) VALUES ($1, $2, $3, $4)",
+              [sponsor.rows[0].id, "You are a Faculty Sponsor", "You have been assigned as Faculty Sponsor of a newly approved society.", `/society/${id}/dashboard`]
+            );
+          }
         }
 
         // Create default society_settings

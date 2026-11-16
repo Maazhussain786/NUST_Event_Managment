@@ -131,9 +131,9 @@ export async function GET(
       ),
       // My role
       user.userType === 'SUPER_ADMIN'
-        ? Promise.resolve({ rows: [{ role_name: 'President', hierarchy_level: 10, membership_id: 'super-admin', wing_id: null, portfolio_id: null }] })
+        ? Promise.resolve({ rows: [{ role_name: 'Super Admin', hierarchy_level: 1000, tier: 'ADMIN', membership_id: 'super-admin', wing_id: null, portfolio_id: null }] })
         : query(
-            `SELECT sm.id AS membership_id, r.name AS role_name, r.hierarchy_level,
+            `SELECT sm.id AS membership_id, r.name AS role_name, r.hierarchy_level, r.tier,
                     sm.wing_id, sm.portfolio_id
              FROM society_memberships sm
              JOIN roles r ON sm.role_id = r.id
@@ -150,7 +150,7 @@ export async function GET(
     const storagePercentUsed = Number(storage.quota) > 0
       ? (Number(storage.used) / Number(storage.quota)) * 100
       : 0;
-    const role = myRoleData.rows[0] || { role_name: 'Member', hierarchy_level: 1 };
+    const role = myRoleData.rows[0] || { role_name: 'Member', hierarchy_level: 0, tier: 'MEMBER' };
     const resolvedSociety = resolveMediaFields(soc, {
       logo_url: CONTAINERS.SOCIETY_MEDIA,
     });

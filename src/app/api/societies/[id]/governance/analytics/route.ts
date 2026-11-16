@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { requireSocietyPrivilege } from "@/lib/rbac";
 
 async function safeQuery(sql: string, params: unknown[]) {
   try {
@@ -24,20 +25,8 @@ export async function GET(
 
     const { id: societyId } = params;
 
-    // Verify membership with hierarchy >= 5 (Director+) or super admin
-    const membership = await query(
-      `SELECT r.hierarchy_level FROM society_memberships sm
-       JOIN roles r ON sm.role_id = r.id
-       WHERE sm.user_id = $1 AND sm.society_id = $2 AND sm.is_active = TRUE`,
-      [user.userId, societyId]
-    );
-    if (membership.rows.length === 0 && user.userType !== 'SUPER_ADMIN') {
-      return NextResponse.json({ error: 'Not a member' }, { status: 403 });
-    }
-    const level = membership.rows[0]?.hierarchy_level || (user.userType === 'SUPER_ADMIN' ? 10 : 0);
-    if (level < 5) {
-      return NextResponse.json({ error: 'Insufficient privileges' }, { status: 403 });
-    }
+    const access = await requireSocietyPrivilege(user, societyId, "VIEW_ANALYTICS");
+    if (access instanceof NextResponse) return access;
 
     // Run analytics queries with safe fallbacks so one schema mismatch
     // does not fail the whole page.

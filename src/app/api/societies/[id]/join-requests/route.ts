@@ -3,327 +3,183 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { getClient } from "@/lib/db";
-import { ensureSocietyJoinRequestsTable } from "@/lib/api-utils";
+import { ApiErrors } from "@/lib/api-utils";
 import { CONTAINERS, resolveMediaFields } from "@/lib/blob";
+import { getSocietyAccess, can } from "@/lib/rbac";
+import { notifyUsers, usersWithSocietyPrivilege } from "@/lib/notify";
 
-async function isPresidentOrSuperAdmin(
-  userId: string,
-  societyId: string,
-  client: Awaited<ReturnType<typeof getClient>>,
-  userType: string,
-): Promise<boolean> {
-  if (userType === "SUPER_ADMIN") return true;
+/**
+ * Account / access requests (FR-AUTH-01, 4.1): a signed-in SEECS user asks to
+ * join a society, optionally as a Team Lead / Executive for a portfolio of an
+ * event, or as an Officer. Reviewed by holders of APPROVE_ACCOUNTS.
+ */
+const REQUESTABLE_ROLES = ["MEMBER", "EXECUTIVE", "TEAM_LEAD", "OFFICER"] as const;
+const OPEN_STATUSES = ["PENDING", "INFO_REQUESTED", "INTERVIEW_SCHEDULED"];
 
-  const roleResult = await client.query(
-    `SELECT r.name AS role_name
-     FROM society_memberships sm
-     JOIN roles r ON sm.role_id = r.id
-     WHERE sm.user_id = $1
-       AND sm.society_id = $2
-       AND sm.is_active = TRUE
-       AND sm.suspended_at IS NULL
-     ORDER BY r.hierarchy_level DESC
-     LIMIT 1`,
-    [userId, societyId],
-  );
-
-  return roleResult.rows[0]?.role_name === "President";
-}
-
-// POST /api/societies/[id]/join-requests
-// Student submits a join request form.
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { id: string } },
-) {
+// POST /api/societies/[id]/join-requests — submit a request
+export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const client = await getClient();
   try {
     const user = await getCurrentUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    if (!user) return ApiErrors.unauthorized();
 
-    const { id: societyId } = params;
-    const body = await req.json();
+    const societyId = params.id;
+    const body = await req.json().catch(() => ({}));
+    const requestedRole = String(body.requested_role || "MEMBER").toUpperCase();
+    const portfolioId: string | null = body.preferred_portfolio_id || body.requested_portfolio_id || null;
+    const eventId: string | null = body.requested_event_id || null;
 
     const applicationData = {
-      phone: (body.phone || "").trim(),
-      department: (body.department || "").trim(),
-      year_of_study: (body.year_of_study || "").trim(),
+      phone: String(body.phone || "").trim(),
+      cms_id: String(body.cms_id || "").trim(),
+      department: String(body.department || "").trim(),
+      year_of_study: String(body.year_of_study || "").trim(),
       preferred_wing_id: body.preferred_wing_id || null,
-      preferred_portfolio_id: body.preferred_portfolio_id || null,
-      skills: Array.isArray(body.skills) ? body.skills : [],
-      availability: (body.availability || "").trim(),
-      motivation: (body.motivation || "").trim(),
-      prior_experience: (body.prior_experience || "").trim(),
-      expected_contribution: (body.expected_contribution || "").trim(),
+      preferred_portfolio_id: portfolioId,
+      skills: Array.isArray(body.skills) ? body.skills.slice(0, 20).map(String) : [],
+      availability: String(body.availability || "").trim(),
+      motivation: String(body.motivation || "").trim(),
+      prior_experience: String(body.prior_experience || "").trim(),
+      expected_contribution: String(body.expected_contribution || "").trim(),
     };
 
-    if (
-      !applicationData.phone ||
-      !applicationData.department ||
-      !applicationData.year_of_study ||
-      !applicationData.motivation
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "phone, department, year_of_study, and motivation are required",
-        },
-        { status: 400 },
-      );
+    if (!(REQUESTABLE_ROLES as readonly string[]).includes(requestedRole)) {
+      return ApiErrors.validation("Invalid requested role");
+    }
+    if (!applicationData.phone || !applicationData.department || !applicationData.year_of_study || !applicationData.motivation) {
+      return ApiErrors.validation("phone, department, year_of_study, and motivation are required");
+    }
+    if ((requestedRole === "TEAM_LEAD" || requestedRole === "EXECUTIVE") && !portfolioId) {
+      return ApiErrors.validation("Choose the portfolio you are requesting");
     }
 
     await client.query("BEGIN");
-    await ensureSocietyJoinRequestsTable(client);
 
     const societyResult = await client.query(
-      `SELECT id, name, status
-       FROM societies
-       WHERE id = $1 AND deleted_at IS NULL
-       LIMIT 1`,
+      `SELECT id, name, status FROM societies WHERE id = $1 AND deleted_at IS NULL`,
       [societyId],
     );
-
-    if (societyResult.rows.length === 0) {
-      await client.query("ROLLBACK");
-      return NextResponse.json({ error: "Society not found" }, { status: 404 });
-    }
-
     const society = societyResult.rows[0];
+    if (!society) {
+      await client.query("ROLLBACK");
+      return ApiErrors.notFound("Society");
+    }
     if (society.status !== "APPROVED") {
       await client.query("ROLLBACK");
-      return NextResponse.json(
-        { error: "Society is not currently accepting join requests" },
-        { status: 409 },
-      );
+      return ApiErrors.conflict("Society is not currently accepting requests");
     }
 
-    const societyWings = await client.query(
-      `SELECT w.id,
-              EXISTS (
-                SELECT 1
-                FROM portfolios p
-                WHERE p.wing_id = w.id
-                  AND p.deleted_at IS NULL
-              ) AS has_portfolios
-       FROM wings w
-       WHERE w.society_id = $1
-         AND w.deleted_at IS NULL`,
-      [societyId],
-    );
-
-    const wingRows = societyWings.rows as Array<{
-      id: string;
-      has_portfolios: boolean;
-    }>;
-    const hasConfiguredWings = wingRows.length > 0;
-
-    if (!hasConfiguredWings) {
-      applicationData.preferred_wing_id = null;
-      applicationData.preferred_portfolio_id = null;
-    } else if (!applicationData.preferred_wing_id) {
-      await client.query("ROLLBACK");
-      return NextResponse.json(
-        { error: "Please select a preferred wing" },
-        { status: 400 },
+    if (portfolioId) {
+      const portfolio = await client.query(
+        `SELECT wing_id FROM portfolios WHERE id = $1 AND society_id = $2 AND deleted_at IS NULL`,
+        [portfolioId, societyId],
       );
-    }
-
-    let selectedWingHasPortfolios = false;
-    if (applicationData.preferred_wing_id) {
-      const selectedWing = wingRows.find(
-        (w) => w.id === applicationData.preferred_wing_id,
-      );
-      if (!selectedWing) {
+      if (portfolio.rows.length === 0) {
         await client.query("ROLLBACK");
-        return NextResponse.json(
-          { error: "Selected wing is invalid for this society" },
-          { status: 400 },
-        );
+        return ApiErrors.validation("Selected portfolio is not part of this society");
       }
-      selectedWingHasPortfolios = selectedWing.has_portfolios;
+      applicationData.preferred_wing_id = portfolio.rows[0].wing_id;
+    } else if (applicationData.preferred_wing_id) {
+      const wing = await client.query(
+        `SELECT 1 FROM wings WHERE id = $1 AND society_id = $2 AND deleted_at IS NULL`,
+        [applicationData.preferred_wing_id, societyId],
+      );
+      if (wing.rows.length === 0) {
+        await client.query("ROLLBACK");
+        return ApiErrors.validation("Selected wing is not part of this society");
+      }
     }
 
-    if (!selectedWingHasPortfolios) {
-      applicationData.preferred_portfolio_id = null;
-    } else if (!applicationData.preferred_portfolio_id) {
-      await client.query("ROLLBACK");
-      return NextResponse.json(
-        { error: "Please select a preferred portfolio" },
-        { status: 400 },
+    if (eventId) {
+      const event = await client.query(
+        `SELECT 1 FROM events WHERE id = $1 AND society_id = $2 AND deleted_at IS NULL AND archived_at IS NULL`,
+        [eventId, societyId],
       );
-    } else {
-      const portfolioResult = await client.query(
-        `SELECT id FROM portfolios
-         WHERE id = $1
-           AND wing_id = $2
-           AND deleted_at IS NULL
-         LIMIT 1`,
-        [
-          applicationData.preferred_portfolio_id,
-          applicationData.preferred_wing_id,
-        ],
-      );
-      if (portfolioResult.rows.length === 0) {
+      if (event.rows.length === 0) {
         await client.query("ROLLBACK");
-        return NextResponse.json(
-          { error: "Selected portfolio is invalid for the selected wing" },
-          { status: 400 },
-        );
+        return ApiErrors.validation("Selected event is not open in this society");
       }
     }
 
     const memberCheck = await client.query(
-      `SELECT 1 FROM society_memberships
-       WHERE society_id = $1
-         AND user_id = $2
-         AND is_active = TRUE
-         AND suspended_at IS NULL
-       LIMIT 1`,
+      `SELECT suspended_at FROM society_memberships
+       WHERE society_id = $1 AND user_id = $2 AND (is_active OR suspended_at IS NOT NULL)
+       ORDER BY is_active DESC LIMIT 1`,
       [societyId, user.userId],
     );
-
-    if (memberCheck.rows.length > 0) {
+    if (memberCheck.rows[0]?.suspended_at) {
       await client.query("ROLLBACK");
-      return NextResponse.json(
-        { error: "You are already a member of this society" },
-        { status: 409 },
-      );
+      return ApiErrors.forbidden("You are suspended from this society");
+    }
+    if (memberCheck.rows.length > 0 && requestedRole === "MEMBER") {
+      await client.query("ROLLBACK");
+      return ApiErrors.conflict("You are already a member of this society");
     }
 
     const openRequest = await client.query(
-      `SELECT id, status
-       FROM society_join_requests
-       WHERE society_id = $1
-         AND user_id = $2
-         AND status IN ('PENDING', 'INTERVIEW_SCHEDULED')
-       ORDER BY created_at DESC
-       LIMIT 1`,
-      [societyId, user.userId],
+      `SELECT id, status FROM society_join_requests
+       WHERE society_id = $1 AND user_id = $2 AND status = ANY($3)
+       ORDER BY created_at DESC LIMIT 1`,
+      [societyId, user.userId, OPEN_STATUSES],
     );
-
     if (openRequest.rows.length > 0) {
       await client.query("ROLLBACK");
-      return NextResponse.json(
-        {
-          error: "You already have an active join request",
-          status: openRequest.rows[0].status,
-        },
-        { status: 409 },
-      );
+      return ApiErrors.conflict("You already have an open request for this society", {
+        status: openRequest.rows[0].status,
+      });
     }
 
     const insertResult = await client.query(
-      `INSERT INTO society_join_requests (society_id, user_id, status, application_data)
-       VALUES ($1, $2, 'PENDING', $3::jsonb)
+      `INSERT INTO society_join_requests
+         (society_id, user_id, status, application_data, requested_role, requested_portfolio_id, requested_event_id)
+       VALUES ($1, $2, 'PENDING', $3::jsonb, $4, $5, $6)
        RETURNING id, status, created_at`,
-      [societyId, user.userId, JSON.stringify(applicationData)],
+      [societyId, user.userId, JSON.stringify(applicationData), requestedRole, portfolioId, eventId],
     );
-
-    const requestRow = insertResult.rows[0];
-
-    const presidentResult = await client.query(
-      `SELECT sm.user_id
-       FROM society_memberships sm
-       JOIN roles r ON sm.role_id = r.id
-       WHERE sm.society_id = $1
-         AND sm.is_active = TRUE
-         AND sm.suspended_at IS NULL
-         AND r.name = 'President'
-       LIMIT 1`,
-      [societyId],
-    );
-
-    if (presidentResult.rows.length > 0) {
-      await client.query(
-        `INSERT INTO notifications (user_id, title, body, link)
-         VALUES ($1, $2, $3, $4)`,
-        [
-          presidentResult.rows[0].user_id,
-          "New Join Request",
-          `${user.fullName} submitted a request to join ${society.name}.`,
-          `/society/${societyId}/members`,
-        ],
-      );
-    }
-
     await client.query("COMMIT");
 
-    return NextResponse.json(
-      {
-        success: true,
-        request: {
-          id: requestRow.id,
-          status: requestRow.status,
-          created_at: requestRow.created_at,
-        },
-      },
-      { status: 201 },
-    );
+    const reviewers = await usersWithSocietyPrivilege(societyId, "APPROVE_ACCOUNTS");
+    const roleLabel = requestedRole.replace("_", " ").toLowerCase();
+    await notifyUsers(reviewers, {
+      title: "New account request",
+      body: `${user.fullName} requested to join ${society.name} as ${roleLabel}.`,
+      link: `/society/${societyId}/members`,
+      email: true,
+    });
+
+    return NextResponse.json({ success: true, request: insertResult.rows[0] }, { status: 201 });
   } catch (error) {
-    await client.query("ROLLBACK");
-    console.error("Submit join request error:", error);
-    const message =
-      error instanceof Error ? error.message : "Failed to submit join request";
-    return NextResponse.json({ error: message }, { status: 500 });
+    await client.query("ROLLBACK").catch(() => {});
+    return ApiErrors.serverError("Submit join request error:", error);
   } finally {
     client.release();
   }
 }
 
-// GET /api/societies/[id]/join-requests
-// President/superadmin fetches join requests.
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { id: string } },
-) {
+// GET /api/societies/[id]/join-requests?status=OPEN|PENDING|... — reviewers list requests
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const client = await getClient();
   try {
     const user = await getCurrentUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    if (!user) return ApiErrors.unauthorized();
 
-    const { id: societyId } = params;
-    const statusFilter = (
-      req.nextUrl.searchParams.get("status") || "OPEN"
-    ).toUpperCase();
+    const societyId = params.id;
+    const statusFilter = (req.nextUrl.searchParams.get("status") || "OPEN").toUpperCase();
 
-    await ensureSocietyJoinRequestsTable(client);
-
-    const authorized = await isPresidentOrSuperAdmin(
-      user.userId,
-      societyId,
-      client,
-      user.userType,
-    );
-
-    if (!authorized) {
-      return NextResponse.json(
-        { error: "Only President can review join requests" },
-        { status: 403 },
-      );
-    }
-
-    let whereStatus = "";
-    if (statusFilter === "OPEN") {
-      whereStatus = "AND jr.status IN ('PENDING', 'INTERVIEW_SCHEDULED')";
-    } else if (
-      [
-        "PENDING",
-        "INTERVIEW_SCHEDULED",
-        "APPROVED",
-        "REJECTED",
-        "WITHDRAWN",
-      ].includes(statusFilter)
-    ) {
-      whereStatus = "AND jr.status = $2";
+    const access = await getSocietyAccess(user, societyId, client);
+    if (!access) return ApiErrors.notFound("Society");
+    if (!can(access, "APPROVE_ACCOUNTS")) {
+      return ApiErrors.forbidden("You do not have permission to review account requests");
     }
 
     const paramsList: unknown[] = [societyId];
-    if (whereStatus && whereStatus.includes("$2")) {
+    let whereStatus = "";
+    if (statusFilter === "OPEN") {
+      paramsList.push(OPEN_STATUSES);
+      whereStatus = "AND jr.status = ANY($2)";
+    } else if (["PENDING", "INFO_REQUESTED", "INTERVIEW_SCHEDULED", "APPROVED", "REJECTED", "WITHDRAWN"].includes(statusFilter)) {
       paramsList.push(statusFilter);
+      whereStatus = "AND jr.status = $2";
     }
 
     const result = await client.query(
@@ -331,31 +187,26 @@ export async function GET(
               jr.reviewed_by, jr.reviewed_at,
               jr.interview_scheduled_at, jr.interview_mode,
               jr.interview_location, jr.interview_meeting_link, jr.interview_notes,
+              jr.requested_role, jr.requested_portfolio_id, jr.requested_event_id, jr.info_request_message,
+              p.name AS requested_portfolio_name, e.title AS requested_event_title,
               jr.created_at, jr.updated_at,
-              u.id AS user_id, u.full_name, u.email, u.avatar_url,
+              u.id AS user_id, u.full_name, u.email, u.avatar_url, u.cms_id,
               ru.full_name AS reviewed_by_name
        FROM society_join_requests jr
        JOIN users u ON u.id = jr.user_id
        LEFT JOIN users ru ON ru.id = jr.reviewed_by
-       WHERE jr.society_id = $1
-         ${whereStatus}
-       ORDER BY jr.created_at DESC`,
+       LEFT JOIN portfolios p ON p.id = jr.requested_portfolio_id
+       LEFT JOIN events e ON e.id = jr.requested_event_id
+       WHERE jr.society_id = $1 ${whereStatus}
+       ORDER BY jr.created_at DESC
+       LIMIT 500`,
       paramsList,
     );
 
-    const requests = result.rows.map((requestRow) =>
-      resolveMediaFields(requestRow, {
-        avatar_url: CONTAINERS.PROFILE_PICTURES,
-      }),
-    );
-
+    const requests = result.rows.map((row) => resolveMediaFields(row, { avatar_url: CONTAINERS.PROFILE_PICTURES }));
     return NextResponse.json({ requests });
   } catch (error) {
-    console.error("Get join requests error:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch join requests" },
-      { status: 500 },
-    );
+    return ApiErrors.serverError("Get join requests error:", error);
   } finally {
     client.release();
   }

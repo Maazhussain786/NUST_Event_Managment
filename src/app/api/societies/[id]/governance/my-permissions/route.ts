@@ -3,137 +3,70 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { query } from "@/lib/db";
-import { resolveEffectiveSocietyPrivilege } from "@/lib/api-utils";
+import { ApiErrors } from "@/lib/api-utils";
+import { getSocietyAccess, can, canDefineOfficerPermissions, isSocietyAdmin, TIER_LABELS } from "@/lib/rbac";
 
-// GET /api/societies/[id]/governance/my-permissions
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { id: string } },
-) {
+/**
+ * GET /api/societies/[id]/governance/my-permissions
+ * What the signed-in user may do in this society. Keeps the older can_* flags
+ * used by existing screens and adds the full privilege list, tier and event roles.
+ */
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const user = await getCurrentUser();
-    if (!user)
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!user) return ApiErrors.unauthorized();
+    const societyId = params.id;
 
-    const { id: societyId } = params;
+    const access = await getSocietyAccess(user, societyId);
+    if (!access) return ApiErrors.notFound("Society");
+    if (!access.isMember && !access.isSuperAdmin) return ApiErrors.forbidden("Not a member");
 
-    if (user.userType === "SUPER_ADMIN") {
-      return NextResponse.json({
-        can_create_event: true,
-        can_edit_event: true,
-        can_cancel_event: true,
-        can_delete_event: true,
-        can_manage_content: true,
-        can_upload_media: true,
-        can_scan_qr: true,
-        can_manage_events: true,
-      });
-    }
-
-    const roleData = await query(
-      `SELECT r.name AS role_name,
-              ss.event_creation_role,
-              ss.content_upload_role
-       FROM society_memberships sm
-       JOIN roles r ON r.id = sm.role_id
-       LEFT JOIN society_settings ss ON ss.society_id = sm.society_id
-       WHERE sm.user_id = $1
-         AND sm.society_id = $2
-         AND sm.is_active = TRUE
-         AND sm.suspended_at IS NULL
-       ORDER BY r.hierarchy_level DESC
-       LIMIT 1`,
-      [user.userId, societyId],
+    const teams = await query(
+      `SELECT etm.event_id, e.title AS event_title, etm.team_id, p.name AS portfolio_name,
+              p.function_key, etm.team_role
+       FROM event_team_members etm
+       JOIN events e ON e.id = etm.event_id AND e.deleted_at IS NULL AND e.archived_at IS NULL
+       JOIN event_teams et ON et.id = etm.team_id AND et.is_active
+       JOIN portfolios p ON p.id = et.portfolio_id
+       WHERE etm.society_id = $1 AND etm.user_id = $2 AND etm.removed_at IS NULL
+       ORDER BY e.event_start DESC`,
+      [societyId, user.userId],
+    );
+    const headed = await query(
+      `SELECT id, title FROM events
+       WHERE society_id = $1 AND event_head_id = $2 AND deleted_at IS NULL AND archived_at IS NULL`,
+      [societyId, user.userId],
     );
 
-    if (roleData.rows.length === 0) {
-      return NextResponse.json({ error: "Not a member" }, { status: 403 });
-    }
-
-    const myRole = roleData.rows[0].role_name as string;
-    const eventCreationRole =
-      (roleData.rows[0].event_creation_role as string) || "Director";
-    const contentUploadRole =
-      (roleData.rows[0].content_upload_role as string) || "Deputy Director";
-
-    const eventPriv = await resolveEffectiveSocietyPrivilege({
-      userId: user.userId,
-      societyId,
-      privilegeName: "CREATE_EVENT",
-    });
-
-    const editEventPriv = await resolveEffectiveSocietyPrivilege({
-      userId: user.userId,
-      societyId,
-      privilegeName: "EDIT_EVENT",
-    });
-
-    const cancelEventPriv = await resolveEffectiveSocietyPrivilege({
-      userId: user.userId,
-      societyId,
-      privilegeName: "CANCEL_EVENT",
-    });
-
-    const scanQrPriv = await resolveEffectiveSocietyPrivilege({
-      userId: user.userId,
-      societyId,
-      privilegeName: "SCAN_QR",
-    });
-
-    const deleteContentPriv = await resolveEffectiveSocietyPrivilege({
-      userId: user.userId,
-      societyId,
-      privilegeName: "DELETE_CONTENT",
-    });
-
-    const manageContentPriv = await resolveEffectiveSocietyPrivilege({
-      userId: user.userId,
-      societyId,
-      privilegeName: "MANAGE_CONTENT",
-    });
-
-    const uploadMediaPriv = await resolveEffectiveSocietyPrivilege({
-      userId: user.userId,
-      societyId,
-      privilegeName: "UPLOAD_MEDIA",
-    });
-
-    const uploadContentPriv = await resolveEffectiveSocietyPrivilege({
-      userId: user.userId,
-      societyId,
-      privilegeName: "UPLOAD_CONTENT",
-    });
-
-    const canCreateEvent = eventPriv.allowed;
-    const canEditEvent = editEventPriv.allowed;
-    const canCancelEvent = cancelEventPriv.allowed;
-    const canDeleteEvent = deleteContentPriv.allowed;
-    const canScanQr = scanQrPriv.allowed;
-
-    const canManageContent =
-      manageContentPriv.allowed ||
-      uploadMediaPriv.allowed ||
-      uploadContentPriv.allowed;
-
-    const canManageEvents =
-      canCreateEvent || canEditEvent || canCancelEvent || canDeleteEvent;
+    const has = (p: string) => can(access, p);
+    const canCreateEvent = has("CREATE_EVENT");
+    const canEditEvent = has("EDIT_EVENT");
+    const canCancelEvent = has("CANCEL_EVENT");
+    const canUpload = has("UPLOAD_MEDIA") || has("UPLOAD_CONTENT");
 
     return NextResponse.json({
+      // existing flags
       can_create_event: canCreateEvent,
       can_edit_event: canEditEvent,
       can_cancel_event: canCancelEvent,
-      can_delete_event: canDeleteEvent,
-      can_manage_content: canManageContent,
-      can_upload_media:
-        uploadMediaPriv.allowed || uploadContentPriv.allowed || canCreateEvent,
-      can_scan_qr: canScanQr,
-      can_manage_events: canManageEvents,
-      role_name: myRole,
-      required_event_role: eventCreationRole,
-      required_content_role: contentUploadRole,
+      can_delete_event: canCancelEvent,
+      can_manage_content: canUpload || has("DELETE_CONTENT"),
+      can_upload_media: canUpload,
+      can_scan_qr: has("SCAN_QR"),
+      can_manage_events: canCreateEvent || canEditEvent || canCancelEvent,
+      role_name: access.isSuperAdmin && !access.roleName ? "Super Admin" : access.roleName,
+      // SRS role model
+      tier: access.tier,
+      tier_label: access.tier ? TIER_LABELS[access.tier] : access.isSuperAdmin ? "Super Admin" : null,
+      level: access.level,
+      is_admin: isSocietyAdmin(access),
+      is_faculty_sponsor: access.tier === "FACULTY_SPONSOR",
+      can_define_officer_permissions: await canDefineOfficerPermissions(access),
+      privileges: Array.from(access.privileges).sort(),
+      event_teams: teams.rows,
+      event_head_of: headed.rows,
     });
   } catch (error) {
-    console.error("My permissions error:", error);
-    return NextResponse.json({ error: "Failed" }, { status: 500 });
+    return ApiErrors.serverError("My permissions error:", error);
   }
 }

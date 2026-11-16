@@ -33,12 +33,12 @@ export async function GET(
               s.id AS society_id,
               CASE
                 WHEN creator.user_type = 'SUPER_ADMIN' THEN
-                  CONCAT_WS(' | ', s.name, 'NUST Administration', NULLIF(ch.cohost_society_names, ''))
+                  CONCAT_WS(' | ', s.name, 'SEECS Administration', NULLIF(ch.cohost_society_names, ''))
                 ELSE
                   CONCAT_WS(
                     ' | ',
                     s.name,
-                    CASE WHEN ch.has_nust_admin THEN 'NUST Administration' ELSE NULL END,
+                    CASE WHEN ch.has_nust_admin THEN 'SEECS Administration' ELSE NULL END,
                     NULLIF(ch.cohost_society_names, '')
                   )
               END AS society_name,

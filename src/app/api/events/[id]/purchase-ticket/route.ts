@@ -159,7 +159,8 @@ export async function POST(
          WHERE sm.user_id = $1
            AND sm.society_id = $2
            AND sm.is_active = TRUE
-           AND r.hierarchy_level >= 8`,
+           AND sm.suspended_at IS NULL
+           AND r.tier IN ('FACULTY_SPONSOR', 'ADMIN', 'OFFICER')`,
         [user.userId, event.society_id],
       );
       if (orgCheck.rows.length > 0) {

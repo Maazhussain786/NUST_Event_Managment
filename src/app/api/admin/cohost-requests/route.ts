@@ -89,7 +89,7 @@ export async function GET(req: NextRequest) {
         cr.host_society_id,
         cr.request_type,
         cr.cohost_society_id,
-        COALESCE(cs.name, CASE WHEN cr.request_type = 'NUST_ADMIN' THEN 'NUST Administration' ELSE hs.name END) AS host_society_name,
+        COALESCE(cs.name, CASE WHEN cr.request_type = 'NUST_ADMIN' THEN 'SEECS Administration' ELSE hs.name END) AS host_society_name,
               u.full_name AS requested_by_name,
               cr.status, cr.reason, cr.admin_note,
               cr.created_at, cr.updated_at, cr.expires_at

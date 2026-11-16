@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { checkApiRateLimit } from '@/lib/api-utils';
+import { normalizeEmail, isAllowedNustEmail } from '@/lib/email-policy';
 
 // POST /api/societies/register — register a new society (PENDING_APPROVAL)
 export async function POST(req: Request) {
@@ -18,9 +19,18 @@ export async function POST(req: Request) {
     if (rateLimitResponse) return rateLimitResponse;
 
     const body = await req.json();
-    const { name, schoolId, description, contactNumber, presidentName, email,
+    const { name, description, contactNumber, presidentName, email, facultySponsorEmail,
             category, missionStatement, logoUrl, facultyAdvisorName, justification,
             bannerUrl } = body;
+
+    // Every society is overseen by a Faculty Sponsor (SRS 2.3); their SEECS email is required.
+    const sponsorEmail = normalizeEmail(facultySponsorEmail);
+    if (!sponsorEmail || !isAllowedNustEmail(sponsorEmail)) {
+      return NextResponse.json({ error: 'A valid SEECS email for the Faculty Sponsor is required' }, { status: 400 });
+    }
+    if (sponsorEmail === normalizeEmail(user.email)) {
+      return NextResponse.json({ error: 'The Faculty Sponsor must be a faculty member, not the applicant' }, { status: 400 });
+    }
 
     if (!name || !description || !presidentName || !email) {
       return NextResponse.json(
@@ -91,14 +101,12 @@ export async function POST(req: Request) {
     const result = await query(
       `INSERT INTO societies (name, description, school_id, is_nust_wide, created_by,
          contact_number, president_name, status, category, mission_statement, logo_url,
-         faculty_advisor_name, justification, banner_url, contact_email)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'PENDING', $8, $9, $10, $11, $12, $13, $14)
+         faculty_advisor_name, justification, banner_url, contact_email, faculty_sponsor_email)
+       VALUES ($1, $2, (SELECT id FROM nust_schools WHERE abbreviation = 'SEECS'), FALSE, $3, $4, $5, 'PENDING', $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING id`,
       [
         name.trim(),
         description.trim(),
-        schoolId || null,
-        !schoolId, // nust_wide if no school selected
         user.userId,
         contactNumber || null,
         presidentName.trim(),
@@ -109,6 +117,7 @@ export async function POST(req: Request) {
         justification?.trim() || null,
         bannerUrl || null,
         email.trim(),
+        sponsorEmail,
       ]
     );
 

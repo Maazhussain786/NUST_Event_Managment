@@ -1,355 +1,243 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { query, getClient } from '@/lib/db';
+import { getClient } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { ApiErrors, writeAuditLog } from '@/lib/api-utils';
+import { getSocietyAccess, can, outranks, forbidden, setChangeContext, TIER_LABELS, type SocietyTier } from '@/lib/rbac';
+import { notifyUser } from '@/lib/notify';
 
-// PATCH /api/societies/[id]/members/[membershipId] — reassign member role
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: { id: string; membershipId: string } }
-) {
+/**
+ * PATCH /api/societies/[id]/members/[membershipId] — change a member's society role.
+ * Requires MANAGE_ROLES, a reason (FR-ROLE-06), and outranking both the member
+ * and the new role. President changes go through transfer-presidency; the
+ * Faculty Sponsor is assigned by a super admin.
+ */
+export async function PATCH(req: NextRequest, { params }: { params: { id: string; membershipId: string } }) {
   const client = await getClient();
   try {
     const user = await getCurrentUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
+    if (!user) return ApiErrors.unauthorized();
     const { id: societyId, membershipId } = params;
-    const { roleId, wingId, portfolioId, reason } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const roleId = body.roleId;
+    const wingId = body.wingId || null;
+    const reason = String(body.reason || '').trim();
 
-    if (!roleId) {
-      return NextResponse.json({ error: 'roleId is required' }, { status: 400 });
-    }
+    if (!roleId) return ApiErrors.validation('roleId is required');
+    if (reason.length < 3) return ApiErrors.validation('Please give a reason for this role change.');
 
     await client.query('BEGIN');
-
-    // Get requester's role in this society
-    const myMembership = await client.query(
-      `SELECT r.hierarchy_level, r.name as role_name
-       FROM society_memberships sm
-       JOIN roles r ON sm.role_id = r.id
-       WHERE sm.user_id = $1 AND sm.society_id = $2 AND sm.is_active = TRUE
-       ORDER BY r.hierarchy_level DESC LIMIT 1`,
-      [user.userId, societyId]
-    );
-
-    const myLevel = user.userType === 'SUPER_ADMIN' ? 999 : (myMembership.rows[0]?.hierarchy_level || 0);
-    const myRoleName = myMembership.rows[0]?.role_name || null;
-
-    // Only President (or SUPER_ADMIN) can reassign society roles.
-    if (user.userType !== 'SUPER_ADMIN' && myRoleName !== 'President') {
+    const access = await getSocietyAccess(user, societyId, client);
+    if (!access) {
       await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'Only President can change member roles' }, { status: 403 });
+      return ApiErrors.notFound('Society');
+    }
+    if (!can(access, 'MANAGE_ROLES')) {
+      await client.query('ROLLBACK');
+      return forbidden('You do not have permission to change roles.');
     }
 
-    // Get target membership details
     const target = await client.query(
-      `SELECT sm.*, r.hierarchy_level, r.name as role_name, r.id as current_role_id
-       FROM society_memberships sm
-       JOIN roles r ON sm.role_id = r.id
-       WHERE sm.id = $1 AND sm.society_id = $2 AND sm.is_active = TRUE`,
-      [membershipId, societyId]
+      `SELECT sm.id, sm.user_id, sm.role_id, sm.wing_id, r.name AS role_name, r.tier, r.hierarchy_level
+       FROM society_memberships sm JOIN roles r ON r.id = sm.role_id
+       WHERE sm.id = $1 AND sm.society_id = $2 AND sm.is_active
+       FOR UPDATE OF sm`,
+      [membershipId, societyId],
     );
-
-    if (target.rows.length === 0) {
+    const member = target.rows[0];
+    if (!member) {
       await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'Active membership not found' }, { status: 404 });
+      return ApiErrors.notFound('Active membership');
+    }
+    if (member.user_id === user.userId && !access.isSuperAdmin) {
+      await client.query('ROLLBACK');
+      return forbidden('You cannot change your own role.');
+    }
+    if (!outranks(access, member.hierarchy_level, member.tier)) {
+      await client.query('ROLLBACK');
+      return forbidden('You can only change roles of members ranked below you.');
+    }
+    if (member.role_name === 'President') {
+      await client.query('ROLLBACK');
+      return forbidden('Use "Transfer presidency" to change the President.');
     }
 
-    const targetMember = target.rows[0];
-
-    // Cannot modify equal or higher ranked member
-    if (targetMember.hierarchy_level >= myLevel && user.userType !== 'SUPER_ADMIN') {
-      await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'Cannot modify equal or higher rank' }, { status: 403 });
-    }
-
-    // Special protection: cannot change President role (use transfer-presidency instead)
-    if (targetMember.role_name === 'President') {
-      await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'Use transfer-presidency endpoint to change President' }, { status: 403 });
-    }
-
-    // Get new role details
-    const newRole = await client.query(
-      `SELECT id, name, hierarchy_level FROM roles WHERE id = $1 AND society_id = $2`,
-      [roleId, societyId]
+    const roleResult = await client.query(
+      'SELECT id, name, tier, hierarchy_level, max_holders FROM roles WHERE id = $1 AND society_id = $2',
+      [roleId, societyId],
     );
-
-    if (newRole.rows.length === 0) {
+    const newRole = roleResult.rows[0];
+    if (!newRole) {
       await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'Invalid role' }, { status: 400 });
+      return ApiErrors.validation('Invalid role');
     }
-
-    const newRoleData = newRole.rows[0];
-
-    // Cannot promote above own level
-    if (newRoleData.hierarchy_level >= myLevel && user.userType !== 'SUPER_ADMIN') {
+    const newTier = newRole.tier as SocietyTier;
+    if (newRole.name === 'President') {
       await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'Cannot promote above your own rank' }, { status: 403 });
+      return forbidden('Use "Transfer presidency" to assign the President.');
     }
-
-    // Cannot assign President role via this endpoint
-    if (newRoleData.name === 'President') {
+    if (newTier === 'FACULTY_SPONSOR' && !access.isSuperAdmin) {
       await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'Use transfer-presidency endpoint to assign President' }, { status: 403 });
+      return forbidden('Only platform administrators assign the Faculty Sponsor.');
     }
-
-    // Validate wing/portfolio requirements based on role
-    const newRoleName = newRoleData.name;
-    const finalWingId = wingId || null;
-    let finalPortfolioId = portfolioId || null;
-
-    if (newRoleName === 'Member') {
-      // Member is society-wide by default; optional wing is allowed and portfolio must be cleared.
-      finalPortfolioId = null;
-    }
-
-    if (newRoleName === 'Vice President' && finalPortfolioId) {
+    if (!access.isSuperAdmin && newRole.hierarchy_level >= access.level) {
       await client.query('ROLLBACK');
-      return NextResponse.json({ error: `${newRoleName} cannot be assigned a portfolio` }, { status: 400 });
+      return forbidden('You can only assign roles ranked below your own.');
     }
 
-    if (newRoleName === 'Member' && finalPortfolioId) {
+    // Placement: only Officer roles may be tied to a wing (e.g. VP of a wing).
+    if (wingId && newTier !== 'OFFICER') {
       await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'Member cannot be directly assigned a portfolio' }, { status: 400 });
+      return ApiErrors.validation(`${TIER_LABELS[newTier]} roles are society-wide and cannot be tied to a wing.`);
     }
-
-    if (newRoleName === 'Vice President' && !finalWingId) {
-      await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'Vice President requires wing_id' }, { status: 400 });
-    }
-
-    if ((newRoleName === 'Director' || newRoleName === 'Deputy Director') && (!finalWingId || !finalPortfolioId)) {
-      await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'Director/Deputy Director requires wing_id and portfolio_id' }, { status: 400 });
-    }
-
-    // Validate wing exists and belongs to society
-    if (finalWingId) {
+    if (wingId) {
       const wing = await client.query(
-        `SELECT id FROM wings WHERE id = $1 AND society_id = $2 AND deleted_at IS NULL`,
-        [finalWingId, societyId]
+        'SELECT 1 FROM wings WHERE id = $1 AND society_id = $2 AND deleted_at IS NULL',
+        [wingId, societyId],
       );
       if (wing.rows.length === 0) {
         await client.query('ROLLBACK');
-        return NextResponse.json({ error: 'Invalid or deleted wing' }, { status: 400 });
+        return ApiErrors.validation('Invalid or deleted wing');
       }
     }
 
-    // Validate portfolio exists and belongs to wing
-    if (finalPortfolioId) {
-      const portfolio = await client.query(
-        `SELECT id FROM portfolios WHERE id = $1 AND wing_id = $2 AND deleted_at IS NULL`,
-        [finalPortfolioId, finalWingId]
+    if (newRole.max_holders) {
+      const holders = await client.query(
+        `SELECT COUNT(*)::int AS c FROM society_memberships
+         WHERE society_id = $1 AND role_id = $2 AND is_active AND id <> $3`,
+        [societyId, roleId, membershipId],
       );
-      if (portfolio.rows.length === 0) {
+      if (holders.rows[0].c >= newRole.max_holders) {
         await client.query('ROLLBACK');
-        return NextResponse.json({ error: 'Invalid portfolio or portfolio does not belong to selected wing' }, { status: 400 });
+        return ApiErrors.conflict(`${newRole.name} already has its maximum of ${newRole.max_holders} holder(s).`);
       }
     }
 
-    // Check role limits for the new scope
-    const roleLimits: Record<string, number> = {
-      'Vice President': 1,  // per wing
-      'Director': 1,        // per portfolio
-      'Deputy Director': 2, // per portfolio
-    };
-
-    const limit = roleLimits[newRoleName];
-    if (limit) {
-      let countQuery = '';
-      let countParams: (string | null)[] = [];
-
-      if (newRoleName === 'Vice President') {
-        countQuery = `SELECT COUNT(*) c FROM society_memberships sm
-          JOIN roles r ON sm.role_id = r.id
-          WHERE sm.society_id = $1 AND sm.wing_id = $2 AND r.name = 'Vice President'
-          AND sm.is_active = TRUE AND sm.id != $3`;
-        countParams = [societyId, finalWingId, membershipId];
-      } else if (newRoleName === 'Director') {
-        countQuery = `SELECT COUNT(*) c FROM society_memberships sm
-          JOIN roles r ON sm.role_id = r.id
-          WHERE sm.society_id = $1 AND sm.portfolio_id = $2 AND r.name = 'Director'
-          AND sm.is_active = TRUE AND sm.id != $3`;
-        countParams = [societyId, finalPortfolioId, membershipId];
-      } else if (newRoleName === 'Deputy Director') {
-        countQuery = `SELECT COUNT(*) c FROM society_memberships sm
-          JOIN roles r ON sm.role_id = r.id
-          WHERE sm.society_id = $1 AND sm.portfolio_id = $2 AND r.name = 'Deputy Director'
-          AND sm.is_active = TRUE AND sm.id != $3`;
-        countParams = [societyId, finalPortfolioId, membershipId];
-      }
-
-      if (countQuery) {
-        const currentCount = await client.query(countQuery, countParams);
-        if (parseInt(currentCount.rows[0].c) >= limit) {
-          await client.query('ROLLBACK');
-          return NextResponse.json({
-            error: `Role limit reached: max ${limit} ${newRoleName}(s) allowed in this scope`
-          }, { status: 409 });
-        }
-      }
-    }
-
-    // Record role history (table may not exist yet if migration hasn't run)
-    try {
-      await client.query(
-        `INSERT INTO role_history
-         (membership_id, previous_role_id, new_role_id, previous_wing_id, new_wing_id,
-          previous_portfolio_id, new_portfolio_id, changed_by, change_type, reason)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-        [
-          membershipId,
-          targetMember.current_role_id,
-          roleId,
-          targetMember.wing_id,
-          finalWingId,
-          targetMember.portfolio_id,
-          finalPortfolioId,
-          user.userId,
-          newRoleData.hierarchy_level > targetMember.hierarchy_level ? 'PROMOTION' :
-          newRoleData.hierarchy_level < targetMember.hierarchy_level ? 'DEMOTION' : 'REASSIGNMENT',
-          reason || null
-        ]
-      );
-    } catch {
-      // role_history table may not exist yet - continue without recording
-      console.warn('role_history table not found, skipping history record');
-    }
-
-    // Update the membership
+    await setChangeContext(client, { actorId: user.userId, reason, source: 'DIRECT' });
     await client.query(
       `UPDATE society_memberships
-       SET role_id = $1, wing_id = $2, portfolio_id = $3, updated_at = NOW()
+       SET role_id = $1, wing_id = $2, portfolio_id = NULL, assigned_by = $3, updated_at = NOW()
        WHERE id = $4`,
-      [roleId, finalWingId, finalPortfolioId, membershipId]
+      [roleId, wingId, user.userId, membershipId],
     );
 
-    // Record in audit log
-    await client.query(
-      `INSERT INTO audit_logs (action, performed_by, society_id, target_type, target_id, old_value, new_value, metadata)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [
-        'ROLE_UPDATED',
-        user.userId,
+    await writeAuditLog(
+      {
+        action: 'ROLE_UPDATED',
+        performedBy: user.userId,
         societyId,
-        'society_membership',
-        membershipId,
-        JSON.stringify({
-          role: targetMember.role_name,
-          wing_id: targetMember.wing_id,
-          portfolio_id: targetMember.portfolio_id,
-        }),
-        JSON.stringify({
-          role: newRoleName,
-          wing_id: finalWingId,
-          portfolio_id: finalPortfolioId,
-        }),
-        JSON.stringify({
-          member_user_id: targetMember.user_id,
-          old_role: targetMember.role_name,
-          new_role: newRoleName,
-          old_wing_id: targetMember.wing_id,
-          new_wing_id: finalWingId,
-          old_portfolio_id: targetMember.portfolio_id,
-          new_portfolio_id: finalPortfolioId,
-          reason: reason || null
-        })
-      ]
-    );
-
-    // Notify the member of their role change
-    await client.query(
-      `INSERT INTO notifications (user_id, title, body, link)
-       VALUES ($1, $2, $3, $4)`,
-      [
-        targetMember.user_id,
-        'Role Updated',
-        `Your role has been changed from ${targetMember.role_name} to ${newRoleName}.`,
-        `/society/${societyId}`
-      ]
+        targetType: 'society_membership',
+        targetId: membershipId,
+        oldValue: { role: member.role_name, wing_id: member.wing_id },
+        newValue: { role: newRole.name, wing_id: wingId },
+        metadata: { member_user_id: member.user_id, reason },
+      },
+      client,
     );
 
     await client.query('COMMIT');
 
+    await notifyUser(member.user_id, {
+      title: 'Your role was updated',
+      body: `Your role changed from ${member.role_name} to ${newRole.name}. Reason: ${reason}`,
+      link: `/society/${societyId}/dashboard`,
+      email: true,
+    });
+
     return NextResponse.json({
       success: true,
-      message: `Role changed from ${targetMember.role_name} to ${newRoleName}`,
-      previousRole: targetMember.role_name,
-      newRole: newRoleName
+      message: `Role changed from ${member.role_name} to ${newRole.name}`,
+      previousRole: member.role_name,
+      newRole: newRole.name,
     });
   } catch (err) {
-    await client.query('ROLLBACK');
-    console.error('Role reassignment error:', err);
-    return NextResponse.json({ error: 'Failed to reassign role' }, { status: 500 });
+    await client.query('ROLLBACK').catch(() => {});
+    return ApiErrors.serverError('Role reassignment error:', err);
   } finally {
     client.release();
   }
 }
 
-// DELETE /api/societies/[id]/members/[membershipId] — remove member
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: { id: string; membershipId: string } }
-) {
+/**
+ * DELETE /api/societies/[id]/members/[membershipId] — remove a member.
+ * Requires MANAGE_MEMBERS and outranking the member. Also ends their event-team places.
+ */
+export async function DELETE(req: NextRequest, { params }: { params: { id: string; membershipId: string } }) {
+  const client = await getClient();
   try {
     const user = await getCurrentUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
+    if (!user) return ApiErrors.unauthorized();
     const { id: societyId, membershipId } = params;
+    const reason = (req.nextUrl.searchParams.get('reason') || '').trim() || null;
 
-    // Get requester role
-    const myMembership = await query(
-      `SELECT r.name, r.hierarchy_level FROM society_memberships sm
-       JOIN roles r ON sm.role_id = r.id
-       WHERE sm.user_id = $1 AND sm.society_id = $2 AND sm.is_active = TRUE
-       ORDER BY r.hierarchy_level DESC LIMIT 1`,
-      [user.userId, societyId]
+    await client.query('BEGIN');
+    const access = await getSocietyAccess(user, societyId, client);
+    if (!access) {
+      await client.query('ROLLBACK');
+      return ApiErrors.notFound('Society');
+    }
+    if (!can(access, 'MANAGE_MEMBERS')) {
+      await client.query('ROLLBACK');
+      return forbidden('You do not have permission to remove members.');
+    }
+
+    const target = await client.query(
+      `SELECT sm.user_id, r.name AS role_name, r.tier, r.hierarchy_level
+       FROM society_memberships sm JOIN roles r ON r.id = sm.role_id
+       WHERE sm.id = $1 AND sm.society_id = $2 AND sm.is_active
+       FOR UPDATE OF sm`,
+      [membershipId, societyId],
     );
-    if (myMembership.rows.length === 0 && user.userType !== 'SUPER_ADMIN') {
-      return NextResponse.json({ error: 'Not a member' }, { status: 403 });
+    const member = target.rows[0];
+    if (!member) {
+      await client.query('ROLLBACK');
+      return ApiErrors.notFound('Membership');
+    }
+    if (member.user_id === user.userId) {
+      await client.query('ROLLBACK');
+      return forbidden('You cannot remove yourself.');
+    }
+    if (member.role_name === 'President' || !outranks(access, member.hierarchy_level, member.tier)) {
+      await client.query('ROLLBACK');
+      return forbidden('You can only remove members ranked below you.');
     }
 
-    const myLevel = user.userType === 'SUPER_ADMIN' ? 999 : myMembership.rows[0].hierarchy_level;
-
-    // Get target membership role
-    const target = await query(
-      `SELECT sm.user_id, r.hierarchy_level, r.name as role_name
-       FROM society_memberships sm
-       JOIN roles r ON sm.role_id = r.id
-       WHERE sm.id = $1 AND sm.society_id = $2`,
-      [membershipId, societyId]
-    );
-    if (target.rows.length === 0) {
-      return NextResponse.json({ error: 'Membership not found' }, { status: 404 });
-    }
-
-    // Can only remove lower-ranked members
-    if (target.rows[0].hierarchy_level >= myLevel) {
-      return NextResponse.json({ error: 'Cannot remove an equal or higher-ranked member' }, { status: 403 });
-    }
-
-    await query(
+    await setChangeContext(client, { actorId: user.userId, reason, source: 'DIRECT' });
+    await client.query(
       'UPDATE society_memberships SET is_active = FALSE, updated_at = NOW() WHERE id = $1',
-      [membershipId]
+      [membershipId],
     );
+    await client.query(
+      `UPDATE event_team_members SET removed_at = NOW(), removed_by = $3, removal_reason = $4
+       WHERE society_id = $1 AND user_id = $2 AND removed_at IS NULL`,
+      [societyId, member.user_id, user.userId, reason || 'Removed from society'],
+    );
+    await writeAuditLog(
+      {
+        action: 'MEMBER_REMOVED',
+        performedBy: user.userId,
+        societyId,
+        targetType: 'society_membership',
+        targetId: membershipId,
+        oldValue: { role: member.role_name },
+        metadata: { member_user_id: member.user_id, reason },
+      },
+      client,
+    );
+    await client.query('COMMIT');
 
-    // Notify removed member
-    await query(
-      `INSERT INTO notifications (user_id, title, body, link)
-       VALUES ($1, $2, $3, $4)`,
-      [
-        target.rows[0].user_id,
-        'Membership Removed',
-        `Your ${target.rows[0].role_name} role has been removed.`,
-        '/societies',
-      ]
-    );
+    await notifyUser(member.user_id, {
+      title: 'Membership removed',
+      body: `Your ${member.role_name} membership has been removed.${reason ? ` Reason: ${reason}` : ''}`,
+      link: '/societies',
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Member remove error:', error);
-    return NextResponse.json({ error: 'Failed' }, { status: 500 });
+    await client.query('ROLLBACK').catch(() => {});
+    return ApiErrors.serverError('Member remove error:', error);
+  } finally {
+    client.release();
   }
 }

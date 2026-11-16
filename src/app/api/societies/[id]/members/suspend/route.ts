@@ -3,13 +3,14 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getClient } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { getSocietyAccess, can, outranks } from '@/lib/rbac';
 
 /**
  * POST /api/societies/[id]/members/suspend
  *
  * Suspend a member from a society.
  * Auth: Requester must outrank target (fn_can_manage logic).
- *       - Cannot suspend President (unless SA)
+ *       - Only the Faculty Sponsor (or SA) can suspend the President
  *       - Cannot suspend self
  *       - Cannot suspend equal or higher rank
  * Body: { targetUserId: string, reason: string }
@@ -56,26 +57,16 @@ export async function POST(
       return NextResponse.json({ error: 'Society is not active' }, { status: 409 });
     }
 
-    // 2. Get requester's hierarchy level
-    const myMembership = await client.query(
-      `SELECT r.hierarchy_level, r.name as role_name
-       FROM society_memberships sm
-       JOIN roles r ON sm.role_id = r.id
-       WHERE sm.user_id = $1 AND sm.society_id = $2 AND sm.is_active = TRUE
-         AND sm.suspended_at IS NULL
-       ORDER BY r.hierarchy_level DESC LIMIT 1`,
-      [user.userId, societyId]
-    );
-    const myLevel = user.userType === 'SUPER_ADMIN' ? 999 : (myMembership.rows[0]?.hierarchy_level ?? 0);
-
-    if (myLevel === 0) {
-      await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'You are not an active member of this society' }, { status: 403 });
+    // 2. Requester must hold MANAGE_MEMBERS
+    const access = await getSocietyAccess(user, societyId, client);
+    if (!access || !can(access, "MANAGE_MEMBERS")) {
+      await client.query("ROLLBACK");
+      return NextResponse.json({ error: "You do not have permission to manage members" }, { status: 403 });
     }
 
     // 3. Get target's membership
     const targetMembership = await client.query(
-      `SELECT sm.id, sm.is_active, sm.suspended_at, r.hierarchy_level, r.name as role_name, u.full_name
+      `SELECT sm.id, sm.is_active, sm.suspended_at, r.hierarchy_level, r.tier, r.name as role_name, u.full_name
        FROM society_memberships sm
        JOIN roles r ON sm.role_id = r.id
        JOIN users u ON sm.user_id = u.id
@@ -97,14 +88,14 @@ export async function POST(
       return NextResponse.json({ error: 'Member is already suspended' }, { status: 409 });
     }
 
-    // Cannot suspend President unless you are SA
-    if (target.role_name === 'President' && user.userType !== 'SUPER_ADMIN') {
+    // Only the Faculty Sponsor or a SuperAdmin can suspend the President
+    if (target.role_name === 'President' && !access.isSuperAdmin && access.tier !== 'FACULTY_SPONSOR') {
       await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'Only a SuperAdmin can suspend a President' }, { status: 403 });
+      return NextResponse.json({ error: 'Only the Faculty Sponsor can suspend the President' }, { status: 403 });
     }
 
     // Cannot suspend equal or higher rank
-    if (target.hierarchy_level >= myLevel) {
+    if (!outranks(access, target.hierarchy_level, target.tier)) {
       await client.query('ROLLBACK');
       return NextResponse.json({ error: 'Cannot suspend a member of equal or higher rank' }, { status: 403 });
     }

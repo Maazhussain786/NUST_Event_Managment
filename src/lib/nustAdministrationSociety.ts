@@ -1,72 +1,52 @@
 import { query } from "@/lib/db";
 
-const NUST_ADMIN_NAME = "NUST Administration";
+/**
+ * The platform's own "society" used for university/school-wide events created by
+ * super admins. For the SEECS deployment it is "SEECS Administration"; override with
+ * PLATFORM_ADMIN_SOCIETY_NAME. An older "NUST Administration" row is renamed in place.
+ */
+const ADMIN_SOCIETY_NAME = process.env.PLATFORM_ADMIN_SOCIETY_NAME || "SEECS Administration";
+const LEGACY_NAME = "NUST Administration";
 
-type SocietyRow = {
-  id: string;
-};
+type SocietyRow = { id: string };
 
-export async function ensureNustAdministrationSociety(
-  actorUserId: string,
-): Promise<string> {
-  await query(`
-    ALTER TABLE societies
-    ADD COLUMN IF NOT EXISTS is_nust_wide BOOLEAN NOT NULL DEFAULT TRUE
-  `);
-
-  const existing = await query<SocietyRow>(
+export async function ensureNustAdministrationSociety(actorUserId: string): Promise<string> {
+  const existing = await query(
     `SELECT id
      FROM societies
      WHERE deleted_at IS NULL
-       AND LOWER(TRIM(name)) = LOWER($1)
+       AND LOWER(TRIM(name)) IN (LOWER($1), LOWER($2))
      ORDER BY
+       CASE WHEN LOWER(TRIM(name)) = LOWER($1) THEN 0 ELSE 1 END,
        CASE WHEN status = 'APPROVED' THEN 0 ELSE 1 END,
-       approved_at DESC NULLS LAST,
        created_at ASC
      LIMIT 1`,
-    [NUST_ADMIN_NAME],
+    [ADMIN_SOCIETY_NAME, LEGACY_NAME],
   );
 
   if (existing.rows.length > 0) {
-    const societyId = existing.rows[0].id;
+    const societyId = (existing.rows[0] as SocietyRow).id;
     await query(
       `UPDATE societies
-       SET status = 'APPROVED',
+       SET name = $3,
+           status = 'APPROVED',
            approved_by = COALESCE(approved_by, $2),
            approved_at = COALESCE(approved_at, NOW()),
-           is_nust_wide = TRUE,
+           is_nust_wide = FALSE,
            updated_at = NOW()
-       WHERE id = $1`,
-      [societyId, actorUserId],
+       WHERE id = $1 AND (name <> $3 OR status <> 'APPROVED' OR is_nust_wide)`,
+      [societyId, actorUserId, ADMIN_SOCIETY_NAME],
     );
     return societyId;
   }
 
-  const inserted = await query<SocietyRow>(
-    `INSERT INTO societies (
-      name,
-      description,
-      status,
-      created_by,
-      approved_by,
-      approved_at,
-      is_nust_wide
-    ) VALUES (
-      $1,
-      $2,
-      'APPROVED',
-      $3,
-      $3,
-      NOW(),
-      TRUE
-    )
-    RETURNING id`,
-    [
-      NUST_ADMIN_NAME,
-      "Official NUST administration profile managed by super admins.",
-      actorUserId,
-    ],
+  const inserted = await query(
+    `INSERT INTO societies (name, description, status, created_by, approved_by, approved_at, is_nust_wide, school_id)
+     VALUES ($1, $2, 'APPROVED', $3, $3, NOW(), FALSE, (SELECT id FROM nust_schools WHERE abbreviation = 'SEECS'))
+     RETURNING id`,
+    [ADMIN_SOCIETY_NAME, "Official administration profile managed by platform administrators.", actorUserId],
   );
-
-  return inserted.rows[0].id;
+  const societyId = (inserted.rows[0] as SocietyRow).id;
+  await query("SELECT fn_seed_society_roles($1)", [societyId]);
+  return societyId;
 }

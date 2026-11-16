@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { query, getClient } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { getEventAccess, rules } from '@/lib/rbac';
 import { CONTAINERS, resolveMediaFields } from '@/lib/blob';
 
 // GET /api/societies/[id]/governance/entry-control?eventId=xxx — get entry stats + recent scans
@@ -22,15 +23,11 @@ export async function GET(
       return NextResponse.json({ error: 'eventId is required' }, { status: 400 });
     }
 
-    // Verify membership or super admin
-    const membership = await query(
-      `SELECT r.hierarchy_level FROM society_memberships sm
-       JOIN roles r ON sm.role_id = r.id
-       WHERE sm.user_id = $1 AND sm.society_id = $2 AND sm.is_active = TRUE`,
-      [user.userId, societyId]
-    );
-    if (membership.rows.length === 0 && user.userType !== 'SUPER_ADMIN') {
-      return NextResponse.json({ error: 'Not a member' }, { status: 403 });
+    // Entry dashboard: people who check others in or may view registrations (SRS 8.1)
+    const viewerAccess = await getEventAccess(user, eventId);
+    if (!viewerAccess || viewerAccess.event.society_id !== societyId ||
+        !(rules.checkIn(viewerAccess) || rules.viewRegistrations(viewerAccess))) {
+      return NextResponse.json({ error: 'You cannot view entry control for this event' }, { status: 403 });
     }
 
     // Verify event belongs to society
@@ -113,14 +110,11 @@ export async function POST(
 
     await client.query('BEGIN');
 
-    // Verify SCAN_QR privilege
-    const privCheck = await client.query(
-      `SELECT fn_has_privilege($1, $2, 'SCAN_QR') AS allowed`,
-      [user.userId, societyId]
-    );
-    if (!privCheck.rows[0].allowed && user.userType !== 'SUPER_ADMIN') {
+    // Manual check: SCAN_QR holders, or Security / Ushers / Crowd Control of this event (SRS 4.8)
+    const scannerAccess = await getEventAccess(user, eventId, client);
+    if (!scannerAccess || scannerAccess.event.society_id !== societyId || !rules.checkIn(scannerAccess)) {
       await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      return NextResponse.json({ error: 'You are not allowed to check people in for this event' }, { status: 403 });
     }
 
     // Verify event belongs to society

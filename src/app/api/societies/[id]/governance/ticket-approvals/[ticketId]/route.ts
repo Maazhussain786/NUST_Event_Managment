@@ -1,9 +1,10 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getClient } from '@/lib/db';
+import { getClient, query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { generateQrPayload } from '@/lib/qr';
+import { sendEmail, emailTemplates } from '@/lib/email';
 
 // PATCH /api/societies/[id]/governance/ticket-approvals/[ticketId] — approve/reject a single ticket
 export async function PATCH(
@@ -162,6 +163,23 @@ export async function PATCH(
     );
 
     await client.query('COMMIT');
+
+    // Email the buyer about the decision (FR-LOGS-04 / FR-AUD-07). Best-effort.
+    const buyer = await query('SELECT email, full_name FROM users WHERE id = $1', [ticket.user_id]);
+    if (buyer.rows[0]) {
+      const approved = action === 'APPROVE';
+      await sendEmail({
+        to: buyer.rows[0].email,
+        ...emailTemplates.notification(
+          buyer.rows[0].full_name,
+          approved ? `Ticket confirmed: ${ticket.event_title}` : `Ticket update: ${ticket.event_title}`,
+          approved
+            ? `Your payment was verified and your ticket for "${ticket.event_title}" is confirmed. Your QR code is in the app under Tickets.`
+            : `There is a problem with your ticket for "${ticket.event_title}". ${reason || ''}`.trim(),
+          approved ? '/tickets' : `/events/${ticket.event_id}`,
+        ),
+      });
+    }
 
     return NextResponse.json({
       success: true,

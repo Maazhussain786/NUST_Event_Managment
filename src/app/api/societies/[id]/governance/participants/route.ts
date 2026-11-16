@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { getSocietyAccess, getEventAccess, can, rules } from '@/lib/rbac';
 import { CONTAINERS, resolveMediaFields } from '@/lib/blob';
 
 // GET /api/societies/[id]/governance/participants — list participants across society events
@@ -16,19 +17,20 @@ export async function GET(
 
     const { id: societyId } = await params;
 
-    // Verify membership or super admin
-    const membership = await query(
-      `SELECT r.hierarchy_level FROM society_memberships sm
-       JOIN roles r ON sm.role_id = r.id
-       WHERE sm.user_id = $1 AND sm.society_id = $2 AND sm.is_active = TRUE`,
-      [user.userId, societyId]
-    );
-    if (membership.rows.length === 0 && user.userType !== 'SUPER_ADMIN') {
-      return NextResponse.json({ error: 'Not a member' }, { status: 403 });
-    }
-
     const { searchParams } = new URL(req.url);
     const eventId = searchParams.get('eventId');
+
+    // Attendee names/emails: VIEW_REGISTRATIONS society-wide, or Event Head / Team Leads for one event (SRS 8.1).
+    const access = await getSocietyAccess(user, societyId);
+    if (!access) return NextResponse.json({ error: 'Society not found' }, { status: 404 });
+    let allowed = can(access, 'VIEW_REGISTRATIONS');
+    if (!allowed && eventId) {
+      const eventAccess = await getEventAccess(user, eventId);
+      allowed = Boolean(eventAccess && eventAccess.event.society_id === societyId && rules.viewRegistrations(eventAccess));
+    }
+    if (!allowed) {
+      return NextResponse.json({ error: 'You do not have permission to view participants' }, { status: 403 });
+    }
 
     // Build unified query: registrations + ticket holders
     // Keep field names aligned with src/app/society/types.ts (EventParticipant).

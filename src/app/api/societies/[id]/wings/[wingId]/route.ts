@@ -3,101 +3,74 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { ApiErrors, writeAuditLog } from '@/lib/api-utils';
+import { requireSocietyMember, requireSocietyPrivilege } from '@/lib/rbac';
 
-// DELETE /api/societies/[id]/wings/[wingId] — soft delete wing (President only)
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: { id: string; wingId: string } }
-) {
+// DELETE /api/societies/[id]/wings/[wingId] — soft delete a wing (MANAGE_WINGS).
+// Its portfolios stay and simply have no wing afterwards.
+export async function DELETE(req: NextRequest, { params }: { params: { id: string; wingId: string } }) {
   try {
     const user = await getCurrentUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
+    if (!user) return ApiErrors.unauthorized();
     const { id: societyId, wingId } = params;
+    const access = await requireSocietyPrivilege(user, societyId, 'MANAGE_WINGS');
+    if (access instanceof NextResponse) return access;
 
-    // Check president
-    const membership = await query(
-      `SELECT r.name FROM society_memberships sm
-       JOIN roles r ON sm.role_id = r.id
-       WHERE sm.user_id = $1 AND sm.society_id = $2 AND sm.is_active = TRUE`,
-      [user.userId, societyId]
+    const wing = await query(
+      'UPDATE wings SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1 AND society_id = $2 AND deleted_at IS NULL RETURNING name',
+      [wingId, societyId],
     );
-    const isPresident = membership.rows.some((r: { name: string }) => r.name === 'President');
-    if (!isPresident && user.userType !== 'SUPER_ADMIN') {
-      return NextResponse.json({ error: 'Only President can delete wings' }, { status: 403 });
-    }
+    if (wing.rows.length === 0) return ApiErrors.notFound('Wing');
 
-    // Check for active memberships in this wing
-    const activeMembers = await query(
-      `SELECT COUNT(*) c FROM society_memberships
-       WHERE wing_id = $1 AND is_active = TRUE`,
-      [wingId]
+    await query('UPDATE portfolios SET wing_id = NULL, updated_at = NOW() WHERE wing_id = $1', [wingId]);
+    const cleared = await query(
+      `UPDATE society_memberships SET wing_id = NULL, updated_at = NOW()
+       WHERE wing_id = $1 AND is_active RETURNING id`,
+      [wingId],
     );
-    const affectedCount = parseInt(activeMembers.rows[0].c);
-
-    // Soft delete the wing (trigger in migration will handle membership deactivation)
-    await query(
-      'UPDATE wings SET deleted_at = NOW() WHERE id = $1 AND society_id = $2',
-      [wingId, societyId]
-    );
+    await writeAuditLog({
+      action: 'WING_DELETED',
+      performedBy: user.userId,
+      societyId,
+      targetType: 'wing',
+      targetId: wingId,
+      oldValue: { name: wing.rows[0].name },
+    });
 
     return NextResponse.json({
       success: true,
-      affectedMemberships: affectedCount,
-      message: affectedCount > 0
-        ? `Wing deleted. ${affectedCount} membership(s) were deactivated.`
-        : 'Wing deleted successfully.'
+      affectedMemberships: cleared.rowCount,
+      message: 'Wing deleted. Its portfolios and members were kept without a wing.',
     });
   } catch (error) {
-    console.error('Wing delete error:', error);
-    return NextResponse.json({ error: 'Failed' }, { status: 500 });
+    return ApiErrors.serverError('Wing delete error:', error);
   }
 }
 
-// GET /api/societies/[id]/wings/[wingId] — get wing details with portfolios
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { id: string; wingId: string } }
-) {
+// GET /api/societies/[id]/wings/[wingId] — wing details with portfolios
+export async function GET(req: NextRequest, { params }: { params: { id: string; wingId: string } }) {
   try {
     const user = await getCurrentUser();
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
+    if (!user) return ApiErrors.unauthorized();
     const { id: societyId, wingId } = params;
-
-    // Verify requester is a member or SUPER_ADMIN
-    if (user.userType !== 'SUPER_ADMIN') {
-      const membership = await query(
-        `SELECT 1 FROM society_memberships
-         WHERE society_id = $1 AND user_id = $2 AND is_active = TRUE`,
-        [societyId, user.userId]
-      );
-      if (membership.rows.length === 0) {
-        return NextResponse.json({ error: 'Not a member of this society' }, { status: 403 });
-      }
-    }
+    const access = await requireSocietyMember(user, societyId);
+    if (access instanceof NextResponse) return access;
 
     const wing = await query(
       `SELECT w.id, w.name, w.description, w.created_at
        FROM wings w WHERE w.id = $1 AND w.society_id = $2 AND w.deleted_at IS NULL`,
-      [wingId, societyId]
+      [wingId, societyId],
     );
-    if (wing.rows.length === 0) {
-      return NextResponse.json({ error: 'Wing not found' }, { status: 404 });
-    }
+    if (wing.rows.length === 0) return ApiErrors.notFound('Wing');
 
     const portfolios = await query(
-      `SELECT p.id, p.name, p.description, p.created_at
+      `SELECT p.id, p.name, p.description, p.function_key, p.created_at
        FROM portfolios p WHERE p.wing_id = $1 AND p.deleted_at IS NULL
-       ORDER BY p.created_at`,
-      [wingId]
+       ORDER BY p.sort_order, p.created_at`,
+      [wingId],
     );
-
     return NextResponse.json({ ...wing.rows[0], portfolios: portfolios.rows });
   } catch (error) {
-    console.error('Wing detail error:', error);
-    return NextResponse.json({ error: 'Failed' }, { status: 500 });
+    return ApiErrors.serverError('Wing detail error:', error);
   }
 }

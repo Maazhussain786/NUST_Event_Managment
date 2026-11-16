@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { CONTAINERS, resolveMediaFields } from "@/lib/blob";
+import { ApiErrors, writeAuditLog } from "@/lib/api-utils";
 
 export async function GET(
   _req: NextRequest,
@@ -23,7 +24,7 @@ export async function GET(
 
     const [userResult, memberships, events, auditLogs] = await Promise.all([
       query(
-        `SELECT id, email, full_name, user_type, status, avatar_url, created_at
+        `SELECT id, email, full_name, user_type, status, avatar_url, created_at, designation, cms_id, email_verified_at, last_login_at
          FROM users WHERE id = $1`,
         [id],
       ),
@@ -92,5 +93,41 @@ export async function GET(
       { error: "Failed to fetch user detail" },
       { status: 500 },
     );
+  }
+}
+
+const DESIGNATIONS = ["STUDENT", "FACULTY", "STAFF", "PRINCIPAL"];
+
+/**
+ * PATCH /api/admin/users/[id] { designation }
+ * Super admins mark accounts as Faculty / Staff / Principal. The Principal gives
+ * final approval on forwarded minutes (FR-MIN-04).
+ */
+export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const user = await getCurrentUser();
+    if (!user || user.userType !== "SUPER_ADMIN") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+    const body = await req.json().catch(() => ({}));
+    const designation = String(body.designation || "").toUpperCase();
+    if (!DESIGNATIONS.includes(designation)) {
+      return NextResponse.json({ error: "designation must be STUDENT, FACULTY, STAFF or PRINCIPAL" }, { status: 400 });
+    }
+    const updated = await query(
+      "UPDATE users SET designation = $2, updated_at = NOW() WHERE id = $1 RETURNING id, designation",
+      [params.id, designation],
+    );
+    if (updated.rows.length === 0) return NextResponse.json({ error: "User not found" }, { status: 404 });
+    await writeAuditLog({
+      action: "USER_DESIGNATION_CHANGED",
+      performedBy: user.userId,
+      targetType: "user",
+      targetId: params.id,
+      newValue: { designation },
+    });
+    return NextResponse.json({ success: true, designation });
+  } catch (error) {
+    return ApiErrors.serverError("Set designation error:", error);
   }
 }

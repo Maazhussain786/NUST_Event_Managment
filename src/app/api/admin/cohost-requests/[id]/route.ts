@@ -95,7 +95,7 @@ export async function PATCH(
     // Get request details for audit
     const reqDetail = await query(
       `SELECT cr.event_id, e.title, rs.name AS requesting,
-              COALESCE(cs.name, CASE WHEN cr.request_type = 'NUST_ADMIN' THEN 'NUST Administration' ELSE hs.name END) AS host
+              COALESCE(cs.name, CASE WHEN cr.request_type = 'NUST_ADMIN' THEN 'SEECS Administration' ELSE hs.name END) AS host
        FROM platform_cohost_requests cr
        JOIN events e ON e.id = cr.event_id
        JOIN societies rs ON rs.id = cr.requesting_society_id

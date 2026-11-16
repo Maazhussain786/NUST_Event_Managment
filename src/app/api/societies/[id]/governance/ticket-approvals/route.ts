@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { requireSocietyPrivilege } from "@/lib/rbac";
 import { CONTAINERS, resolveMediaFields } from '@/lib/blob';
 
 // GET /api/societies/[id]/governance/ticket-approvals — list tickets with optional status filter
@@ -16,20 +17,8 @@ export async function GET(
 
     const { id: societyId } = params;
 
-    // Verify membership with hierarchy >= 3 (Deputy Director+) or super admin
-    const membership = await query(
-      `SELECT r.hierarchy_level FROM society_memberships sm
-       JOIN roles r ON sm.role_id = r.id
-       WHERE sm.user_id = $1 AND sm.society_id = $2 AND sm.is_active = TRUE`,
-      [user.userId, societyId]
-    );
-    if (membership.rows.length === 0 && user.userType !== 'SUPER_ADMIN') {
-      return NextResponse.json({ error: 'Not a member' }, { status: 403 });
-    }
-    const level = membership.rows[0]?.hierarchy_level || (user.userType === 'SUPER_ADMIN' ? 10 : 0);
-    if (level < 3) {
-      return NextResponse.json({ error: 'Insufficient privileges' }, { status: 403 });
-    }
+    const access = await requireSocietyPrivilege(user, societyId, "VERIFY_PAYMENTS");
+    if (access instanceof NextResponse) return access;
 
     const { searchParams } = new URL(req.url);
     const status = searchParams.get('status');

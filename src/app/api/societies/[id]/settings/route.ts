@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { getClient, query } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { getSocietyAccess, isSocietyAdmin } from "@/lib/rbac";
 import {
   buildLegacyPaymentFields,
   listSocietyPaymentWallets,
@@ -264,20 +265,10 @@ export async function PATCH(
 
     const { id: societyId } = params;
 
-    const membership = await client.query(
-      `SELECT r.name
-       FROM society_memberships sm
-       JOIN roles r ON sm.role_id = r.id
-       WHERE sm.user_id = $1 AND sm.society_id = $2 AND sm.is_active = TRUE`,
-      [user.userId, societyId],
-    );
-    const isPresident = membership.rows.some(
-      (entry: { name: string }) => entry.name === "President",
-    );
-
-    if (!isPresident && user.userType !== "SUPER_ADMIN") {
+    const access = await getSocietyAccess(user, societyId, client);
+    if (!isSocietyAdmin(access)) {
       return NextResponse.json(
-        { error: "Only the President can update settings" },
+        { error: "Only the Faculty Sponsor or an Admin can update settings" },
         { status: 403 },
       );
     }

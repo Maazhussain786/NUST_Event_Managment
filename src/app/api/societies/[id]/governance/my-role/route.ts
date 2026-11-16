@@ -19,8 +19,9 @@ export async function GET(
       return NextResponse.json({
         role: {
           membership_id: 'super-admin',
-          role_name: 'President',
-          hierarchy_level: 10,
+          role_name: 'Super Admin',
+          hierarchy_level: 1000,
+          tier: 'ADMIN',
           wing_id: null,
           wing_name: null,
           portfolio_id: null,
@@ -30,14 +31,14 @@ export async function GET(
     }
 
     const result = await query(
-      `SELECT sm.id AS membership_id, r.name AS role_name, r.hierarchy_level,
+      `SELECT sm.id AS membership_id, r.name AS role_name, r.hierarchy_level, r.tier,
               sm.wing_id, w.name AS wing_name,
               sm.portfolio_id, p.name AS portfolio_name
        FROM society_memberships sm
        JOIN roles r ON sm.role_id = r.id
        LEFT JOIN wings w ON sm.wing_id = w.id
        LEFT JOIN portfolios p ON sm.portfolio_id = p.id
-       WHERE sm.user_id = $1 AND sm.society_id = $2 AND sm.is_active = TRUE
+       WHERE sm.user_id = $1 AND sm.society_id = $2 AND sm.is_active = TRUE AND sm.suspended_at IS NULL
        ORDER BY r.hierarchy_level DESC
        LIMIT 1`,
       [user.userId, societyId]
@@ -53,6 +54,7 @@ export async function GET(
         membership_id: row.membership_id,
         role_name: row.role_name,
         hierarchy_level: row.hierarchy_level,
+        tier: row.tier,
         wing_id: row.wing_id,
         wing_name: row.wing_name,
         portfolio_id: row.portfolio_id,

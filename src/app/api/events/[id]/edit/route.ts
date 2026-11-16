@@ -33,8 +33,8 @@ import { createAutomaticEventUpdateBroadcast } from "@/lib/event-broadcasts";
  * Authorization:
  *   - EDIT_EVENT privilege required (via fn_has_privilege)
  *   - Cannot edit if society DEACTIVATED (fn_has_privilege blocks this)
- *   - Core fields => President/VP only (hierarchy_level >= 8)
- *   - Non-core fields => Director+ (hierarchy_level >= 5)
+ *   - Core and non-core fields both require EDIT_EVENT (FR-EVT-01: Admins by default;
+ *     the Faculty Sponsor may grant it to Officers)
  *
  * Core fields: title, event_start, event_end, is_paid, ticket_price, max_tickets
  * Non-core: description, location, venue_details, banner_url, thumbnail_url,

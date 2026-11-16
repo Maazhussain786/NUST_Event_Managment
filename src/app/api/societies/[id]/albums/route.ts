@@ -121,54 +121,8 @@ export async function POST(
       client,
     );
 
-    let meetsRoleThreshold = user.userType === "SUPER_ADMIN";
-    let isPresidentMember = false;
-    if (!meetsRoleThreshold) {
-      const roleLevelMap: Record<string, number> = {
-        President: 10,
-        "Vice President": 8,
-        Director: 5,
-        "Deputy Director": 3,
-        Member: 1,
-      };
-
-      const memberRole = await client.query(
-        `SELECT r.name AS role_name,
-                ss.content_upload_role
-         FROM society_memberships sm
-         JOIN roles r ON r.id = sm.role_id
-         LEFT JOIN society_settings ss ON ss.society_id = sm.society_id
-         WHERE sm.user_id = $1
-           AND sm.society_id = $2
-           AND sm.is_active = TRUE
-           AND sm.suspended_at IS NULL
-         ORDER BY r.hierarchy_level DESC
-         LIMIT 1`,
-        [user.userId, societyId],
-      );
-
-      const myRole = memberRole.rows[0]?.role_name as string | undefined;
-      isPresidentMember = myRole === "President";
-      const requiredRole =
-        (memberRole.rows[0]?.content_upload_role as string | undefined) ||
-        "Deputy Director";
-      meetsRoleThreshold =
-        (roleLevelMap[myRole || ""] || 0) >= (roleLevelMap[requiredRole] || 3);
-    }
-
-    const hasAnyPrivilege =
-      effectiveManageContent.allowed || effectiveUploadMedia.allowed;
-    const hasOverrideGrant =
-      (effectiveManageContent.source === "override" &&
-        effectiveManageContent.allowed) ||
-      (effectiveUploadMedia.source === "override" &&
-        effectiveUploadMedia.allowed);
-
-    const canCreate =
-      user.userType === "SUPER_ADMIN" ||
-      isPresidentMember ||
-      hasOverrideGrant ||
-      (hasAnyPrivilege && meetsRoleThreshold);
+    // fn_has_privilege already covers Faculty Sponsor / Admin tiers and per-member overrides.
+    const canCreate = effectiveUploadMedia.allowed || effectiveManageContent.allowed;
 
     if (!canCreate) {
       await client.query("ROLLBACK");

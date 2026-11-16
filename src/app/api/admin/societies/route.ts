@@ -21,7 +21,9 @@ export async function GET(req: NextRequest) {
     let q = `SELECT s.id, s.name, s.description, s.logo_url,
                     COALESCE(ns.abbreviation, CASE WHEN s.is_nust_wide THEN 'NUST-Wide' ELSE NULL END) AS category,
                     s.status, s.created_at, s.president_name, s.contact_number,
-                    s.faculty_advisor_name, s.justification, s.admin_message, s.contact_email,
+                    s.faculty_advisor_name, s.justification, s.admin_message, s.contact_email, s.faculty_sponsor_email,
+                    (SELECT fu.full_name FROM society_memberships fsm JOIN roles fr ON fr.id = fsm.role_id JOIN users fu ON fu.id = fsm.user_id
+                     WHERE fsm.society_id = s.id AND fsm.is_active AND fr.tier = 'FACULTY_SPONSOR' LIMIT 1) AS faculty_sponsor_name,
                     u.full_name AS created_by_name, u.email AS created_by_email,
                     COUNT(DISTINCT sm.user_id) as member_count,
                     COUNT(DISTINCT e.id) as event_count,

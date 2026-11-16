@@ -46,7 +46,7 @@ export async function PUT(
     }
 
     const body = await req.json();
-    const { name, schoolId, description, contactNumber, presidentName, email,
+    const { name, description, contactNumber, presidentName, email, facultySponsorEmail,
             category, missionStatement, logoUrl, facultyAdvisorName, justification,
             bannerUrl } = body;
 
@@ -81,7 +81,8 @@ export async function PUT(
     // Update society and set status back to PENDING
     await query(
       `UPDATE societies SET
-         name = $1, description = $2, school_id = $3, is_nust_wide = $4,
+         name = $1, description = $2, school_id = COALESCE($3::uuid, (SELECT id FROM nust_schools WHERE abbreviation = 'SEECS')),
+         is_nust_wide = FALSE, faculty_sponsor_email = COALESCE($4, faculty_sponsor_email),
          contact_number = $5, president_name = $6, category = $7,
          mission_statement = $8, faculty_advisor_name = $9, justification = $10,
          contact_email = $11, status = 'PENDING', admin_message = NULL,
@@ -92,8 +93,8 @@ export async function PUT(
       [
         name.trim(),
         description.trim(),
-        schoolId || null,
-        !schoolId,
+        null,
+        facultySponsorEmail ? String(facultySponsorEmail).trim().toLowerCase() : null,
         contactNumber || null,
         presidentName.trim(),
         category || null,

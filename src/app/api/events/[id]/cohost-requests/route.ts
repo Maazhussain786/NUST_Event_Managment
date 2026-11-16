@@ -224,7 +224,7 @@ export async function POST(
        WHERE user_type = 'SUPER_ADMIN'`,
       [
         "Co-Host Request Submitted",
-        `${user.fullName || "A society member"} submitted a ${requestType === "NUST_ADMIN" ? "NUST Administration" : "society"} co-host request for event \"${eventRow.title}\"`,
+        `${user.fullName || "A society member"} submitted a ${requestType === "NUST_ADMIN" ? "SEECS Administration" : "society"} co-host request for event \"${eventRow.title}\"`,
         "/platform/cohost-requests",
       ],
     );

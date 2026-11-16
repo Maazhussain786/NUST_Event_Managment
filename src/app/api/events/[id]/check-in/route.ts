@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getClient } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { getEventAccess, rules } from '@/lib/rbac';
 import { verifyQrPayload } from '@/lib/qr';
 
 /**
@@ -95,14 +96,11 @@ export async function POST(
       return NextResponse.json({ error: 'Event has ended — check-in is closed' }, { status: 409 });
     }
 
-    // ── 7. Scanner must have SCAN_QR privilege ────────────────────────
-    const privCheck = await client.query(
-      `SELECT fn_has_privilege($1, $2, 'SCAN_QR')`,
-      [user.userId, event.society_id]
-    );
-    if (!privCheck.rows[0].fn_has_privilege && user.userType !== 'SUPER_ADMIN') {
+    // ── 7. Scanner: SCAN_QR holders, or Security / Ushers / Crowd Control of this event (SRS 4.8) ──
+    const scannerAccess = await getEventAccess(user, eventId, client);
+    if (!scannerAccess || !rules.checkIn(scannerAccess)) {
       await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'You do not have SCAN_QR privilege' }, { status: 403 });
+      return NextResponse.json({ error: 'You are not allowed to check people in for this event' }, { status: 403 });
     }
 
     // ── 8. Check attendee user is active and not suspended ────────────
