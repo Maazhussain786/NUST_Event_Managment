@@ -2,88 +2,93 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
-import { hashPassword, generateToken, setAuthCookie } from '@/lib/auth';
-import { extractIpAddress, checkApiRateLimit } from '@/lib/api-utils';
-import { isNustStudentEmailForSignup, NUST_ONLY_ERROR_MESSAGE } from '@/lib/email-policy';
-import { shouldReturnAuthToken } from '@/lib/auth-response';
+import { hashPassword, issueAuthCode, secondsSinceLastCode } from '@/lib/auth';
+import { extractIpAddress, checkApiRateLimit, ApiErrors } from '@/lib/api-utils';
+import {
+  isNustStudentEmailForSignup,
+  NUST_ONLY_ERROR_MESSAGE,
+  normalizeEmail,
+  passwordProblem,
+} from '@/lib/email-policy';
+import { sendEmail, emailTemplates } from '@/lib/email';
 
+const OTP_TTL_MINUTES = 15;
+
+/**
+ * POST /api/auth/register  (FR-AUTH-01, FR-AUTH-04)
+ * Creates an unverified account and emails a 6-digit code. The account becomes
+ * usable only after /api/auth/verify-otp confirms the code.
+ */
 export async function POST(req: NextRequest) {
   try {
-    const ip = extractIpAddress(req);
-    const rateLimited = checkApiRateLimit(ip || 'unknown', 'register', 5);
-    if (rateLimited) return rateLimited;
+    const ip = extractIpAddress(req) || 'unknown';
+    const limited = checkApiRateLimit(ip, 'register', 5);
+    if (limited) return limited;
 
-    const { email, password, fullName } = await req.json();
-    const normalizedEmail = String(email || '').trim().toLowerCase();
-    const normalizedName = String(fullName || '').trim();
+    const body = await req.json().catch(() => ({}));
+    const email = normalizeEmail(body.email);
+    const fullName = String(body.fullName || '').trim();
+    const cmsId = body.cmsId ? String(body.cmsId).trim() : null;
+    const { password } = body;
 
-    if (!normalizedEmail || !password || !normalizedName) {
-      return NextResponse.json({ error: 'All fields required' }, { status: 400 });
+    if (!email || !password || !fullName) {
+      return ApiErrors.validation('Name, email and password are required.');
     }
+    if (fullName.length > 200) return ApiErrors.validation('Name is too long.');
+    if (cmsId && !/^[0-9]{4,12}$/.test(cmsId)) return ApiErrors.validation('CMS ID must be 4-12 digits.');
+    if (!isNustStudentEmailForSignup(email)) return ApiErrors.validation(NUST_ONLY_ERROR_MESSAGE);
+    const weak = passwordProblem(password);
+    if (weak) return ApiErrors.validation(weak);
 
-    // Must be NUST email
-    if (!isNustStudentEmailForSignup(normalizedEmail)) {
-      return NextResponse.json({ error: NUST_ONLY_ERROR_MESSAGE }, { status: 400 });
-    }
+    const emailLimited = checkApiRateLimit(`email:${email}`, 'register', 3);
+    if (emailLimited) return emailLimited;
 
-    // Check existing
-    const existing = await query('SELECT id FROM users WHERE LOWER(email) = LOWER($1)', [normalizedEmail]);
-    if (existing.rows.length > 0) {
-      return NextResponse.json({ error: 'Account already exists' }, { status: 409 });
-    }
-
-    // Hash password & create user (skip OTP — directly ACTIVE for testing)
     const passwordHash = await hashPassword(password);
-    const result = await query(
-      `INSERT INTO users (email, password_hash, full_name, user_type, status) 
-       VALUES ($1, $2, $3, 'STUDENT', 'ACTIVE') 
-       RETURNING id, email, full_name, user_type`,
-      [normalizedEmail, passwordHash, normalizedName]
-    );
+    const existing = await query('SELECT id, status FROM users WHERE email = $1', [email]);
+    let userId: string;
 
-    const user = result.rows[0];
-
-    // Generate JWT and set cookie so user is logged in immediately
-    const token = generateToken({
-      userId: user.id,
-      email: user.email,
-      userType: user.user_type,
-      fullName: user.full_name,
-    });
-    const includeToken = shouldReturnAuthToken(req);
-
-    const responseBody: {
-      message: string;
-      userId: string;
-      user: {
-        id: string;
-        email: string;
-        fullName: string;
-        userType: 'SUPER_ADMIN' | 'STUDENT';
-        avatarUrl: null;
-      };
-      token?: string;
-    } = {
-      message: 'Account created successfully.',
-      userId: user.id,
-      user: {
-        id: user.id,
-        email: user.email,
-        fullName: user.full_name,
-        userType: user.user_type,
-        avatarUrl: null,
-      },
-    };
-    if (includeToken) {
-      responseBody.token = token;
+    if (existing.rows.length > 0) {
+      const row = existing.rows[0];
+      if (row.status !== 'PENDING_VERIFICATION') {
+        return NextResponse.json({ error: 'An account with this email already exists. Sign in instead.' }, { status: 409 });
+      }
+      // Unverified account: let the owner restart sign-up (the code still goes to the same inbox).
+      userId = row.id;
+      const age = await secondsSinceLastCode(userId, 'EMAIL_VERIFICATION');
+      if (age !== null && age < 60) {
+        return NextResponse.json({ needsVerification: true, userId, email, message: 'A code was just sent. Check your inbox.' }, { status: 200 });
+      }
+      await query(
+        'UPDATE users SET full_name = $2, password_hash = $3, cms_id = COALESCE($4, cms_id), updated_at = NOW() WHERE id = $1',
+        [userId, fullName, passwordHash, cmsId],
+      );
+    } else {
+      if (cmsId) {
+        const cmsTaken = await query('SELECT 1 FROM users WHERE cms_id = $1', [cmsId]);
+        if (cmsTaken.rows.length > 0) return ApiErrors.conflict('This CMS ID is already registered.');
+      }
+      const inserted = await query(
+        `INSERT INTO users (email, password_hash, full_name, user_type, status, cms_id)
+         VALUES ($1, $2, $3, 'STUDENT', 'PENDING_VERIFICATION', $4)
+         RETURNING id`,
+        [email, passwordHash, fullName, cmsId],
+      );
+      userId = inserted.rows[0].id;
     }
 
-    const response = NextResponse.json(responseBody, { status: 201 });
-    setAuthCookie(response, token);
+    const code = await issueAuthCode(userId, 'EMAIL_VERIFICATION', OTP_TTL_MINUTES);
+    await sendEmail({ to: email, ...emailTemplates.verification(fullName, code) });
 
-    return response;
+    return NextResponse.json(
+      {
+        needsVerification: true,
+        userId,
+        email,
+        message: 'We sent a 6-digit code to your email. Enter it to activate your account.',
+      },
+      { status: 201 },
+    );
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Registration failed';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return ApiErrors.serverError('Registration error:', error);
   }
 }

@@ -2,112 +2,76 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
-import { generateToken, setAuthCookie } from '@/lib/auth';
-import { extractIpAddress, checkApiRateLimit } from '@/lib/api-utils';
+import { consumeOtp, generateToken, setAuthCookie, tokenPayloadFromUser } from '@/lib/auth';
+import { extractIpAddress, checkApiRateLimit, ApiErrors } from '@/lib/api-utils';
 import { CONTAINERS, resolveMediaUrl } from '@/lib/blob';
 import { shouldReturnAuthToken } from '@/lib/auth-response';
+import { onAccountActivated } from '@/lib/account-activation';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** POST /api/auth/verify-otp — confirm the emailed code and activate the account. */
 export async function POST(req: NextRequest) {
   try {
-    const ip = extractIpAddress(req);
-    const rateLimited = checkApiRateLimit(ip || 'unknown', 'verify-otp', 10);
-    if (rateLimited) return rateLimited;
+    const ip = extractIpAddress(req) || 'unknown';
+    const limited = checkApiRateLimit(ip, 'verify-otp', 10);
+    if (limited) return limited;
 
-    const { userId, otpCode } = await req.json();
-
-    if (!userId || !otpCode) {
-      return NextResponse.json({ error: 'User ID and OTP required' }, { status: 400 });
+    const { userId, otpCode } = await req.json().catch(() => ({}));
+    if (!userId || !UUID_RE.test(String(userId)) || !otpCode) {
+      return ApiErrors.validation('User ID and code are required.');
     }
 
-    // Find valid OTP
-    const otpResult = await query(
-      `SELECT id, otp_code, expires_at, is_used FROM otp_tokens 
-       WHERE user_id = $1 AND purpose = 'EMAIL_VERIFICATION' AND is_used = FALSE
-       ORDER BY created_at DESC LIMIT 1`,
-      [userId]
+    const userResult = await query('SELECT id, status FROM users WHERE id = $1', [userId]);
+    const existing = userResult.rows[0];
+    if (!existing) return ApiErrors.validation('Invalid or expired code.');
+    if (existing.status === 'ACTIVE') {
+      return ApiErrors.validation('This account is already verified. Please sign in.');
+    }
+    if (existing.status !== 'PENDING_VERIFICATION') {
+      return NextResponse.json({ error: 'Account suspended' }, { status: 403 });
+    }
+
+    const outcome = await consumeOtp(userId, 'EMAIL_VERIFICATION', String(otpCode));
+    if (outcome !== 'ok') {
+      const messages: Record<string, string> = {
+        missing: 'No active code. Request a new one.',
+        expired: 'This code has expired. Request a new one.',
+        too_many_attempts: 'Too many wrong attempts. Request a new code.',
+        invalid: 'Incorrect code.',
+      };
+      return ApiErrors.validation(messages[outcome]);
+    }
+
+    const activated = await query(
+      `UPDATE users SET status = 'ACTIVE', email_verified_at = NOW(), last_login_at = NOW(), updated_at = NOW()
+       WHERE id = $1 AND status = 'PENDING_VERIFICATION'
+       RETURNING id, email, full_name, user_type, avatar_url, token_version`,
+      [userId],
     );
+    const user = activated.rows[0];
+    if (!user) return ApiErrors.validation('This account is already verified. Please sign in.');
 
-    if (otpResult.rows.length === 0) {
-      return NextResponse.json({ error: 'No valid OTP found. Request a new one.' }, { status: 400 });
-    }
+    await onAccountActivated(user.id, user.email);
 
-    const otp = otpResult.rows[0];
-
-    // Check expiry
-    if (new Date(otp.expires_at) < new Date()) {
-      return NextResponse.json({ error: 'OTP expired. Request a new one.' }, { status: 400 });
-    }
-
-    // Check match (coerce to string in case client sends a number)
-    if (otp.otp_code !== String(otpCode)) {
-      return NextResponse.json({ error: 'Invalid OTP' }, { status: 400 });
-    }
-
-    // Mark OTP as used
-    await query('UPDATE otp_tokens SET is_used = TRUE WHERE id = $1', [otp.id]);
-
-    // Activate user
-    await query("UPDATE users SET status = 'ACTIVE' WHERE id = $1", [userId]);
-
-    // Get user data and generate token
-    const userResult = await query(
-      'SELECT id, email, full_name, user_type, avatar_url FROM users WHERE id = $1',
-      [userId]
-    );
-    const user = userResult.rows[0];
-
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
-    }
-
-    const token = generateToken({
-      userId: user.id,
-      email: user.email,
-      userType: user.user_type,
-      fullName: user.full_name,
-    });
-    const includeToken = shouldReturnAuthToken(req);
+    const token = generateToken(tokenPayloadFromUser(user));
     let avatarUrl: string | null = null;
     if (user.avatar_url) {
       try {
-        avatarUrl = resolveMediaUrl(user.avatar_url, {
-          container: CONTAINERS.PROFILE_PICTURES,
-          expiresInMinutes: 60 * 24,
-        });
+        avatarUrl = resolveMediaUrl(user.avatar_url, { container: CONTAINERS.PROFILE_PICTURES, expiresInMinutes: 60 * 24 });
       } catch {
         avatarUrl = null;
       }
     }
 
-    const responseBody: {
-      message: string;
-      user: {
-        id: string;
-        email: string;
-        fullName: string;
-        userType: 'SUPER_ADMIN' | 'STUDENT';
-        avatarUrl: string | null;
-      };
-      token?: string;
-    } = {
+    const response = NextResponse.json({
       message: 'Email verified successfully',
-      user: {
-        id: user.id,
-        email: user.email,
-        fullName: user.full_name,
-        userType: user.user_type,
-        avatarUrl,
-      },
-    };
-    if (includeToken) {
-      responseBody.token = token;
-    }
-    const response = NextResponse.json(responseBody);
+      user: { id: user.id, email: user.email, fullName: user.full_name, userType: user.user_type, avatarUrl },
+      ...(shouldReturnAuthToken(req) ? { token } : {}),
+    });
     setAuthCookie(response, token);
-
     return response;
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Verification failed';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return ApiErrors.serverError('Verify OTP error:', error);
   }
 }

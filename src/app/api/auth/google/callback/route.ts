@@ -4,7 +4,8 @@ import crypto from 'crypto';
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
-import { generateToken, hashPassword, setAuthCookie } from '@/lib/auth';
+import { generateToken, hashPassword, setAuthCookie, tokenPayloadFromUser } from '@/lib/auth';
+import { onAccountActivated } from '@/lib/account-activation';
 import { isAllowedNustEmail, normalizeEmail, NUST_ONLY_ERROR_MESSAGE } from '@/lib/email-policy';
 import { getAppBaseUrl, getGoogleOAuthConfig } from '@/lib/google-oauth-config';
 import { logServerError } from '@/lib/server-logger';
@@ -129,24 +130,26 @@ export async function GET(req: NextRequest) {
 
     const fullName = String(tokenInfo.name || email.split('@')[0] || 'NUST Student').trim();
     const existing = await query(
-      `SELECT id, email, full_name, user_type, status
+      `SELECT id, email, full_name, user_type, status, token_version
        FROM users
-       WHERE LOWER(email) = LOWER($1)
+       WHERE email = $1
        LIMIT 1`,
       [email]
     );
 
     let user = existing.rows[0];
+    let activatedNow = false;
     if (!user) {
       const randomPassword = crypto.randomBytes(32).toString('hex');
       const randomHash = await hashPassword(randomPassword);
       const created = await query(
-        `INSERT INTO users (email, password_hash, full_name, user_type, status)
-         VALUES ($1, $2, $3, 'STUDENT', 'ACTIVE')
-         RETURNING id, email, full_name, user_type, status`,
+        `INSERT INTO users (email, password_hash, full_name, user_type, status, email_verified_at, last_login_at)
+         VALUES ($1, $2, $3, 'STUDENT', 'ACTIVE', NOW(), NOW())
+         RETURNING id, email, full_name, user_type, status, token_version`,
         [email, randomHash, fullName]
       );
       user = created.rows[0];
+      activatedNow = true;
     } else {
       if (user.status === 'SUSPENDED') {
         const res = NextResponse.redirect(toLoginRedirect(req, 'Account suspended'));
@@ -154,23 +157,29 @@ export async function GET(req: NextRequest) {
         return res;
       }
       if (user.status === 'PENDING_VERIFICATION') {
+        // The unverified password may have been set by someone who doesn't own this
+        // inbox; Google just proved ownership, so replace it. The owner can set a
+        // password later through "Forgot password".
+        const randomHash = await hashPassword(crypto.randomBytes(32).toString('hex'));
         const activated = await query(
           `UPDATE users
-           SET status = 'ACTIVE', full_name = COALESCE(NULLIF($2, ''), full_name)
+           SET status = 'ACTIVE', full_name = COALESCE(NULLIF($2, ''), full_name),
+               password_hash = $3, email_verified_at = NOW(), last_login_at = NOW(),
+               token_version = token_version + 1, updated_at = NOW()
            WHERE id = $1
-           RETURNING id, email, full_name, user_type, status`,
-          [user.id, fullName]
+           RETURNING id, email, full_name, user_type, status, token_version`,
+          [user.id, fullName, randomHash]
         );
         user = activated.rows[0];
+        activatedNow = true;
+      } else {
+        await query('UPDATE users SET last_login_at = NOW() WHERE id = $1', [user.id]);
       }
     }
 
-    const token = generateToken({
-      userId: user.id,
-      email: user.email,
-      userType: user.user_type,
-      fullName: user.full_name,
-    });
+    if (activatedNow) await onAccountActivated(user.id, user.email);
+
+    const token = generateToken(tokenPayloadFromUser(user));
 
     const res = NextResponse.redirect(new URL(nextPath, baseUrl));
     setAuthCookie(res, token);

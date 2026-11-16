@@ -7,6 +7,10 @@ import { query } from '@/lib/db';
 import { CONTAINERS, resolveMediaUrl } from '@/lib/blob';
 import { shouldReturnAuthToken } from '@/lib/auth-response';
 
+/**
+ * GET /api/auth/session — validate the session and slide its expiry.
+ * getCurrentUser() already rejects suspended users and revoked tokens.
+ */
 export async function GET(req: NextRequest) {
   try {
     const authUser = await getCurrentUser();
@@ -17,37 +21,18 @@ export async function GET(req: NextRequest) {
     }
 
     const userResult = await query(
-      'SELECT id, email, full_name, user_type, status, avatar_url FROM users WHERE id = $1 LIMIT 1',
-      [authUser.userId]
+      `UPDATE users SET updated_at = NOW()
+       WHERE id = $1 AND (updated_at IS NULL OR updated_at < NOW() - INTERVAL '5 minutes')
+       RETURNING id`,
+      [authUser.userId],
     );
+    void userResult; // activity heartbeat for the admin "last active" column
 
-    if (userResult.rows.length === 0) {
-      const res = NextResponse.json({ authenticated: false }, { status: 401 });
-      res.cookies.delete('auth_token');
-      return res;
-    }
-
-    const user = userResult.rows[0];
-    if (user.status === 'SUSPENDED') {
-      const res = NextResponse.json({ error: 'Account suspended' }, { status: 403 });
-      res.cookies.delete('auth_token');
-      return res;
-    }
-
-    // Activity heartbeat used by admin dashboard "Last Active".
-    // Throttle writes to avoid updating on every request burst.
-    await query(
-      `UPDATE users
-       SET updated_at = NOW()
-       WHERE id = $1
-         AND (updated_at IS NULL OR updated_at < NOW() - INTERVAL '5 minutes')`,
-      [user.id]
-    );
-
+    const profile = await query('SELECT avatar_url FROM users WHERE id = $1', [authUser.userId]);
     let avatarUrl: string | null = null;
-    if (user.avatar_url) {
+    if (profile.rows[0]?.avatar_url) {
       try {
-        avatarUrl = resolveMediaUrl(user.avatar_url, {
+        avatarUrl = resolveMediaUrl(profile.rows[0].avatar_url, {
           container: CONTAINERS.PROFILE_PICTURES,
           expiresInMinutes: 60 * 24,
         });
@@ -56,40 +41,18 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Sliding session refresh: re-issue JWT on successful validation.
-    const token = generateToken({
-      userId: user.id,
-      email: user.email,
-      userType: user.user_type,
-      fullName: user.full_name,
-    });
-
-    const includeToken = shouldReturnAuthToken(req);
-    const responseBody: {
-      authenticated: true;
-      user: {
-        id: string;
-        email: string;
-        fullName: string;
-        userType: 'SUPER_ADMIN' | 'STUDENT';
-        avatarUrl: string | null;
-      };
-      token?: string;
-    } = {
+    const token = generateToken(authUser);
+    const res = NextResponse.json({
       authenticated: true,
       user: {
-        id: user.id,
-        email: user.email,
-        fullName: user.full_name,
-        userType: user.user_type,
+        id: authUser.userId,
+        email: authUser.email,
+        fullName: authUser.fullName,
+        userType: authUser.userType,
         avatarUrl,
       },
-    };
-    if (includeToken) {
-      responseBody.token = token;
-    }
-
-    const res = NextResponse.json(responseBody);
+      ...(shouldReturnAuthToken(req) ? { token } : {}),
+    });
     setAuthCookie(res, token);
     return res;
   } catch (error) {

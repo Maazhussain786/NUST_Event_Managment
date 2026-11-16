@@ -50,7 +50,7 @@ export async function logSuperAdminAudit(
       performedBy: actor.userId,
       societyId: input.societyId || null,
       targetType: input.targetType,
-      targetId: input.targetId || null,
+      targetId: input.targetId || undefined,
       oldValue: input.oldValue || null,
       newValue: input.newValue || null,
       metadata,

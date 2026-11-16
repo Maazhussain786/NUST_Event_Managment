@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { GoogleSignInButton } from '@/components/GoogleSignInButton';
-import { clearLocalAuth, setLocalUser, syncUserFromSession } from '@/lib/client-auth';
+import { clearLocalAuth, syncUserFromSession } from '@/lib/client-auth';
 
 const ease = [0.25, 0.1, 0.25, 1] as const;
 
@@ -37,7 +37,7 @@ export default function RegisterPage() {
     setLoading(true);
     setError('');
     if (password !== confirmPassword) { setError('Passwords do not match'); setLoading(false); return; }
-    if (password.length < 8) { setError('Password must be at least 8 characters'); setLoading(false); return; }
+    if (password.length < 8 || !/[A-Za-z]/.test(password) || !/d/.test(password)) { setError('Password must be at least 8 characters with a letter and a number'); setLoading(false); return; }
 
     try {
       const res = await fetch('/api/auth/register', {
@@ -47,10 +47,8 @@ export default function RegisterPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      if (data.user) {
-        setLocalUser(data.user);
-      }
-      window.location.href = '/home';
+      // Accounts start unverified: confirm the emailed code first (FR-AUTH-04).
+      window.location.href = `/verify-otp?userId=${encodeURIComponent(data.userId)}&email=${encodeURIComponent(data.email || email)}`;
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Registration failed');
     } finally {

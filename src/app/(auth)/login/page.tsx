@@ -125,13 +125,9 @@ function LoginPageContent() {
                 }
               />
               <div className="px-2">
-                <button
-                  type="button"
-                  onClick={() => {}} 
-                  className="text-[13px] font-medium text-[#00AEEF] hover:underline"
-                >
-                  Forgot Password ?
-                </button>
+                <a href="/forgot-password" className="text-[13px] font-medium text-[#00AEEF] hover:underline">
+                  Forgot password?
+                </a>
               </div>
             </div>
           </div>
@@ -199,35 +195,6 @@ function LoginPageContent() {
           </button>
         </div>
 
-        {/* Dev credentials (restored full list) */}
-        {process.env.NODE_ENV === 'development' && (
-          <div className="mt-10 pt-6 border-t border-dashed border-border">
-            <details className="cursor-pointer group">
-              <summary className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest list-none text-center hover:text-brand-500 transition-colors">
-                Dev Logins
-              </summary>
-              <div className="mt-4 grid grid-cols-1 gap-2">
-                {[
-                  { label: 'Super Admin 1', email: 'maazhussain972@gmail.com', pw: 'maaz@123' },
-                  { label: 'Super Admin 2', email: 'abduldaym786@gmail.com', pw: 'daym@123' },
-                  { label: 'Super Admin 3', email: 'bilalatif23@gmail.com', pw: 'bilal@123' },
-                  { label: 'Student', email: 'student1@seecs.edu.pk', pw: 'test1234' },
-                  { label: 'President', email: 'president.devs@seecs.edu.pk', pw: 'president123' },
-                ].map((cred) => (
-                  <button
-                    key={cred.email}
-                    type="button"
-                    onClick={() => { setEmail(cred.email); setPassword(cred.pw); }}
-                    className="text-left p-3 rounded-2xl bg-[#F8FAFC] hover:bg-slate-100 transition-colors"
-                  >
-                    <p className="text-[11px] font-bold text-[#00AEEF]">{cred.label}</p>
-                    <p className="text-[10px] text-muted-foreground">{cred.email}</p>
-                  </button>
-                ))}
-              </div>
-            </details>
-          </div>
-        )}
       </motion.div>
     </div>
   );

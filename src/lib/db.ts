@@ -1,4 +1,9 @@
-import { Pool, PoolConfig } from 'pg';
+import { Pool, PoolConfig, types } from 'pg';
+
+// Return DATE columns as plain 'YYYY-MM-DD' strings. The default converts them to
+// a JS Date at local midnight, which shifts to the previous day when serialised
+// as UTC (Pakistan is UTC+5).
+types.setTypeParser(1082, (value: string) => value);
 
 /**
  * Database connection pool.
@@ -46,12 +51,24 @@ const localConfig: PoolConfig = {
   query_timeout: 30000,
 };
 
-const pool = new Pool(isAzure ? azureConfig : localConfig);
+// One pool per process. Next.js can evaluate this module several times (separately
+// compiled route bundles, hot reloads); without the global cache every copy opened
+// its own 20 connections and Postgres ran out ("too many clients").
+declare global {
+  // eslint-disable-next-line no-var
+  var _pgPool: Pool | undefined;
+}
 
-// Log pool errors (connection issues, etc.)
-pool.on('error', (err) => {
-  console.error('Unexpected database pool error:', err);
-});
+function createPool(): Pool {
+  const created = new Pool(isAzure ? azureConfig : localConfig);
+  created.on('error', (err) => {
+    console.error('Unexpected database pool error:', err);
+  });
+  return created;
+}
+
+const pool: Pool = globalThis._pgPool ?? createPool();
+globalThis._pgPool = pool;
 
 export async function query(text: string, params?: unknown[]) {
   const start = Date.now();

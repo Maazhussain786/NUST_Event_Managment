@@ -2,10 +2,10 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 // Routes that REQUIRE login (no guest access)
-const authRequiredRoutes = ['/admin', '/platform', '/society'];
+const authRequiredRoutes = ['/admin', '/platform', '/society', '/my-work', '/recruitment', '/principal'];
 
 // Routes that are public / auth-flow — never redirect away from these
-const publicRoutes = ['/login', '/register', '/verify-otp'];
+const publicRoutes = ['/login', '/register', '/verify-otp', '/forgot-password', '/reset-password'];
 
 /**
  * Decode JWT payload without verifying signature.
