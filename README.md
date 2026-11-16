@@ -1,299 +1,167 @@
-# NUST Event Management System
+# SEECS Events Management System (NEMS)
 
-A comprehensive Progressive Web App (PWA) for managing university societies, events, and student engagement at NUST.
+A web app / PWA for running events at SEECS (School of Electrical Engineering & Computer
+Science, NUST). Each SEECS society works as an organising body under a Faculty Sponsor;
+each event (DFTW, AICON, Convocation, Welcome, …) is its own workspace with teams,
+a plan, duties, recruitment, finance, sponsors, inventory and minutes.
 
-## 🚀 Features
+It implements the **NEMS Software Requirements Specification v1.0** — see
+[docs/SRS_TRACEABILITY.md](docs/SRS_TRACEABILITY.md) for where each requirement lives.
 
-- **Society Management**: Register and manage societies with role-based hierarchy
-- **Event System**: Create, manage, and register for society events
-- **Role Hierarchy**: President → VP → Director → Deputy Director → Member
-- **Ticket System**: Event registration with QR codes and transfers
-- **Admin Panel**: Super admin dashboard for approvals and monitoring
-- **Real-time Notifications**: Stay updated on events and activities
-- **Progressive Web App**: Install on mobile and desktop
-- **Dark/Light Mode**: Customizable theme support
+## Roles
 
-## 🛠️ Tech Stack
+| Level | Role | What they do |
+|---|---|---|
+| Platform | **Super Admin** | Approves societies, assigns each society's Faculty Sponsor, platform settings |
+| Platform | **Principal** | Final approval of minutes forwarded by a society Admin |
+| Society | **Faculty Sponsor** | Highest authority; approves minutes; defines Officer roles and their permissions |
+| Society | **Admin** (President, designated Admins) | Full access: accounts, events, roles, every module |
+| Society | **Officer** (Vice President, General Secretary, Finance Secretary, or any role the Faculty Sponsor creates) | Exactly the permissions the Faculty Sponsor grants |
+| Society | **Member** | Basic access; joins event teams |
+| Event | **Event Head** (optional) | Leads one event: edits the plan, assigns duties, writes minutes |
+| Team | **Team Lead** | Runs a portfolio team for an event: recruitment, duties, expenses, item requests, minutes |
+| Team | **Executive** | Team member: sees team duties and schedule, updates own duty status |
+| — | **Audience** | Registers for events and gets QR tickets |
 
-- **Frontend**: Next.js 14 (App Router), React 18, TypeScript
-- **Styling**: Tailwind CSS, Framer Motion
-- **Backend**: Next.js API Routes (serverless)
-- **Database**: Azure PostgreSQL 14 (primary), MongoDB Atlas (optional read models)
-- **Authentication**: JWT with httpOnly cookies
-- **PWA**: next-pwa with offline support
+Portfolio teams carry module powers inside their event: **Finance** verifies expenses
+and sponsorship money, **Logistics** approves and issues items, **Outreach/Sponsors**
+manages sponsors, **Security / Ushers / Crowd Control** check people in.
 
-## 📋 Prerequisites
+All permission checks go through `src/lib/rbac.ts`, which asks the database function
+`fn_has_privilege()` — the same rules apply in SQL and in the API.
+Every role change is written to an append-only `role_change_log` with who, when and why.
 
-- Node.js 18+ and npm
-- PostgreSQL 14+ (local or Azure)
-- MongoDB Atlas (optional for read models)
-- Git
+## Tech stack
 
-## 🏁 Quick Start
+- Next.js 14 (App Router), React 18, TypeScript, Tailwind CSS
+- PostgreSQL (Azure in production, local for development) — source of truth
+- Azure Blob Storage (media, receipts), optional Redis cache and MongoDB read model
+- JWT in an httpOnly cookie, bcrypt passwords, email OTP verification
+- Email over SMTP (nodemailer)
 
-### 1. Clone Repository
+## Getting started (local)
 
-```bash
-git clone https://github.com/Maazhussain786/NUST_Event_Managment.git
-cd NUST_Event_Managment
-```
-
-### 2. Install Dependencies
+Requirements: Node.js 18+, PostgreSQL 14+.
 
 ```bash
 npm install
 ```
 
-### 3. Database Setup
-
-**Option A: Use Existing Azure Database (Team Members)**
-
-Contact the admin for credentials, then create `.env.local`:
+Create `.env.local` (never commit it):
 
 ```env
-AZURE_DB_HOST=eventmgmt-pg-server.postgres.database.azure.com
-AZURE_DB_PORT=5432
-AZURE_DB_NAME=event_management
-AZURE_DB_USER=pgadmin
-AZURE_DB_PASSWORD=[Get from admin]
-JWT_SECRET=nust-event-mgmt-secret-2026
+# Database — local development
+ACTIVE_DB=local
+LOCAL_DB_HOST=localhost
+LOCAL_DB_PORT=5432
+LOCAL_DB_NAME=nems_seecs
+LOCAL_DB_USER=postgres
+LOCAL_DB_PASSWORD=...
+
+# Auth — use a long random value (e.g. `openssl rand -base64 48`)
+JWT_SECRET=...
 APP_BASE_URL=http://localhost:4000
 NEXT_PUBLIC_APP_URL=http://localhost:4000
-GOOGLE_CLIENT_ID=[Google OAuth Web Client ID]
-GOOGLE_CLIENT_SECRET=[Google OAuth Web Client Secret]
-GOOGLE_REDIRECT_URI=http://localhost:4000/api/auth/google/callback
-CRON_SECRET=[Generate a long random secret]
-FCM_SERVER_KEY=[Optional: only needed for native FCM tokens]
-MONGODB_URI=[MongoDB connection string]
-MONGODB_DB=event_management
-NODE_ENV=development
+
+# Who may sign up (comma-separated domains). Default: seecs.edu.pk
+ALLOWED_EMAIL_DOMAINS=seecs.edu.pk
+
+# Email (verification codes, password reset, notifications).
+# Without SMTP, development prints emails to the server console instead.
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=...
+SMTP_PASS=...
+EMAIL_FROM="SEECS Events <events@seecs.edu.pk>"
+
+# Media storage
+AZURE_BLOB_CONNECTION_STRING=...
 ```
 
-**Test your connection:**
-```bash
-node test-connection.js
-```
-
-**Option B: Set Up Your Own Database**
-
-See [DATABASE_SETUP.md](./DATABASE_SETUP.md) for complete instructions.
-
-Quick setup:
-```bash
-# Create database
-createdb event_management
-
-# Run schema
-psql -d event_management -f schema.sql
-psql -d event_management -f schema-nust-additions.sql
-
-# Run migrations
-node scripts/migrate-roles.js
-node scripts/add-event-status.js
-
-# Seed data
-node scripts/seed.js
-```
-
-### 4. Start Development Server
+Create the database, apply every migration, and load demo data:
 
 ```bash
-npm run dev
+node scripts/migrate.js --create-db    # creates nems_seecs and applies db/migrations/*
+node scripts/seed.js                   # demo society, event DFTW 2026, all roles
+npm run dev                            # http://localhost:4000
 ```
 
-Open [http://localhost:4000](http://localhost:4000)
+The seed prints the demo accounts (one shared demo password, local only).
 
-## 🧭 Hybrid MongoDB Read Model (Optional)
+## Database migrations
 
-This project supports a hybrid read model for the public society profile endpoint to reduce
-round trips and speed up fetches. Postgres remains the source of truth.
+`db/migrations/` is the only place the schema changes:
 
-1) Set Mongo env vars in `.env.local`:
-```env
-MONGODB_URI=[MongoDB connection string]
-MONGODB_DB=event_management
-```
-
-2) Backfill existing data into Mongo:
-```bash
-npm run mongo:backfill:society-public
-```
-
-## 🔑 Default Login Credentials
-
-### Super Admin Accounts
-- **Maaz Hussain**: `maazhussain972@gmail.com` / `maaz@123`
-- **Muhammad Abdul Daym**: `abduldaym786@gmail.com` / `daym@123`
-- **Muhammad Bilal Atif**: `bilalatif23@gmail.com` / `bilal@123`
-
-### Student Account
-- **Email**: `student1@seecs.edu.pk`
-- **Password**: `test1234`
-
-## 📁 Project Structure
-
-```
-NUST_Event_Managment/
-├── src/
-│   ├── app/
-│   │   ├── (auth)/          # Auth pages (login, register)
-│   │   ├── (main)/          # Main app pages
-│   │   │   ├── home/
-│   │   │   ├── societies/
-│   │   │   ├── events/
-│   │   │   ├── admin/
-│   │   │   ├── profile/
-│   │   │   └── ...
-│   │   └── api/             # API routes
-│   │       ├── auth/
-│   │       ├── societies/
-│   │       ├── events/
-│   │       ├── admin/
-│   │       └── ...
-│   ├── components/          # Reusable components
-│   ├── lib/                 # Utilities (db, auth)
-│   └── styles/              # Global styles
-├── scripts/                 # Database scripts
-│   ├── seed.js
-│   ├── migrate-roles.js
-│   └── ...
-├── schema.sql               # Database schema
-├── public/                  # Static assets
-├── DATABASE_SETUP.md        # Database setup guide
-└── package.json
-```
-
-## 🗄️ Database Schema
-
-30+ tables including:
-- `users` - User accounts
-- `societies` - Society profiles
-- `events` - Event listings
-- `society_memberships` - User roles
-- `roles` - Role definitions (President, VP, etc.)
-- `wings` - Society subdivisions
-- `portfolios` - Specific role assignments
-- `tickets` - Event registrations
-- `notifications` - User notifications
-- `audit_logs` - Activity tracking
-
-See [DATABASE_SETUP.md](./DATABASE_SETUP.md) for complete schema details.
-
-## 🎨 Key Features Explained
-
-### Society Registration Flow
-1. Student registers a society (PENDING status)
-2. Admin reviews and approves/rejects
-3. Upon approval, founder becomes President with full privileges
-4. President can create wings, assign directors, invite members
-
-### Role Hierarchy System
-- **President (Level 10)**: Full control, can manage all roles
-- **Vice President (Level 8)**: Deputy with most privileges
-- **Director (Level 5)**: Manages specific wings
-- **Deputy Director (Level 3)**: Assists directors
-- **Member (Level 1)**: Basic access
-
-### Event Management
-- Societies create events (paid/free)
-- Students register and get QR code tickets
-- Ticket transfers between users
-- Admin approval for events
-- Real-time capacity tracking
-
-## 🔧 Available Scripts
+| File | What it does |
+|---|---|
+| `000_baseline.sql` | Exact schema of the live database (Nov 2026) |
+| `001` | SEECS scope, OTP/reset codes, session revocation, immutable audit log |
+| `002` | SRS role tiers, privilege catalog, role templates, `fn_has_privilege`, role history |
+| `003` | Portfolio catalog, event teams, Event Head, event plan + change history |
+| `004`–`008` | Recruitment, duties, finance & sponsors, inventory, minutes |
+| `009` | Officer templates seeded once; chats without wings |
+| `010` | Society registration columns (fixes registration, broken since April 2026) |
 
 ```bash
-npm run dev          # Start development server
-npm run build        # Build for production
-npm start            # Start production server
-npm run lint         # Run ESLint
-npm run test:auth:smoke # Smoke-test login/session/logout
-npm run db:test       # Test PostgreSQL connection
-npm run db:benchmark  # Benchmark read-heavy SQL queries
-npm run mongo:backfill:society-public # Backfill Mongo read model
-node scripts/seed.js # Seed database
+npm run db:migrate:status          # what has run
+npm run db:migrate                 # apply pending (local DB only)
 ```
 
-## 📱 PWA Features
+`migrate.js` refuses to touch a non-local database unless you pass `--allow-remote`.
+For the existing Azure database, record the baseline once, then migrate:
 
-- Offline capability
-- Install on home screen
-- Push notifications for event reminders
-- App-like experience
-- Automatic updates
-
-### Push Reminder Scheduler
-
-Run this endpoint every 10-15 minutes from your scheduler:
-
-`POST /api/cron/push-event-reminders`
-
-Headers:
-- `x-cron-secret: <CRON_SECRET>`
-
-This dispatches:
-- Event starts in about 1 hour
-- Registration closes in about 1 hour
-- Limited seats left
-
-## 🎯 Admin Panel
-
-Super admins can:
-- Approve/reject society registrations
-- Approve/reject events
-- Manage users
-- View system statistics
-- Monitor activity logs
-
-Access: Login as admin → Profile → Admin Panel
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit changes (`git commit -m 'Add AmazingFeature'`)
-4. Push to branch (`git push origin feature/AmazingFeature`)
-5. Open Pull Request
-
-## 🐛 Common Issues
-
-### Database Connection Error
-- Check `.env.local` credentials
-- Verify Azure firewall rules
-- Ensure SSL is enabled
-
-### Missing Tables/Columns
 ```bash
-node scripts/migrate-roles.js
-node scripts/add-event-status.js
+ACTIVE_DB=azure node scripts/migrate.js --mark-baseline --allow-remote
 ```
 
-### Build Errors
+**Back up the Azure database before migrating it.** The migrations were tested on a full
+copy of the live data. The old `schema*.sql` files and `migrations/` folder are kept
+only for reference.
+
+## Tests
+
+End-to-end tests drive the real API against a local test database (sign-up/OTP/reset,
+society approval, account requests, teams, plan, recruitment, duties, finance,
+sponsors, inventory, minutes, officer permissions, chat modes, suspension):
+
 ```bash
-rm -rf .next node_modules
-npm install
-npm run build
+# terminal 1 — server against the local DB
+npm run dev   # with ACTIVE_DB=local in .env.local; use -p 4100 or set TEST_BASE_URL
+# terminal 2
+TEST_BASE_URL=http://localhost:4000 TEST_DB_NAME=nems_seecs npm run test:e2e
 ```
 
-See [DATABASE_SETUP.md](./DATABASE_SETUP.md) for more troubleshooting.
+Also: `npm run typecheck`, `npm run lint`, `npm run build`.
 
-## 📄 License
+## Super admins
 
-This project is private and proprietary to NUST.
+```bash
+SUPER_ADMINS="Name <email>, Name <email>" node scripts/sync-super-admins.js
+```
 
-## 👥 Team
+Promotes existing accounts and creates missing ones with a random password (set your
+own with **Forgot password**). It never resets an existing password.
 
-- **Maaz Hussain** - Project Lead & Full Stack Developer
-- Contact: maazhussain972@gmail.com
+## Project structure
 
-## 🔗 Links
+```
+src/
+  app/
+    (auth)/            sign in, sign up, OTP, forgot/reset password
+    (main)/            student app: events, tickets, societies, my-work, recruitment, principal
+    society/[id]/      society management: members, roles, events + event workspace,
+                       minutes, inventory, sponsors, finance, chat, settings
+    platform/          super admin console
+    api/               REST API
+  lib/
+    rbac.ts            all permission rules (society, event, team)
+    auth.ts            sessions, OTP / reset codes
+    email.ts notify.ts email + in-app + push notifications
+db/migrations/         schema history (run with scripts/migrate.js)
+tests/                 end-to-end tests
+scripts/               migrate, seed, super admin sync, maintenance
+```
 
-- **Repository**: https://github.com/Maazhussain786/NUST_Event_Managment
-- **Database Guide**: [DATABASE_SETUP.md](./DATABASE_SETUP.md)
-- **Live Demo**: [Coming Soon]
+## Team
 
----
-
-**Built with ❤️ for NUST Community**
-
+Maaz Hussain · Muhammad Abdul Daym · Muhammad Bilal Atif — SEECS, NUST

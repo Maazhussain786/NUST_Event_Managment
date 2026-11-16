@@ -1,256 +1,235 @@
+#!/usr/bin/env node
 /**
- * Seed Script - Populates Azure PostgreSQL with sample NUST data.
- * Run: node scripts/seed.js
+ * SEECS demo data for a LOCAL database (refuses to run against anything else).
+ *
+ *   ACTIVE_DB=local LOCAL_DB_NAME=nems_seecs node scripts/migrate.js --create-db
+ *   ACTIVE_DB=local LOCAL_DB_NAME=nems_seecs node scripts/seed.js
+ *
+ * Creates one approved society with the full SRS structure (Faculty Sponsor, Admins,
+ * Officers, an event with teams, Team Leads, Executives, Event Head) and sample
+ * plan, duties, recruitment, finance, sponsors, inventory and minutes.
+ * Every demo account uses the password in SEED_PASSWORD (default printed at the end).
+ * Running it twice is safe: existing demo rows are left alone.
  */
-
-const { Pool } = require('pg');
+const path = require('path');
+const { Client } = require('pg');
 const bcrypt = require('bcryptjs');
-require('dotenv').config({ path: '.env.local' });
+require('dotenv').config({ path: path.join(__dirname, '..', '.env.local'), quiet: true });
+require('dotenv').config({ path: path.join(__dirname, '..', '.env'), quiet: true });
 
-const pool = new Pool({
-  host: process.env.AZURE_DB_HOST,
-  port: parseInt(process.env.AZURE_DB_PORT || '5432'),
-  database: process.env.AZURE_DB_NAME,
-  user: process.env.AZURE_DB_USER,
-  password: process.env.AZURE_DB_PASSWORD,
-  ssl: { rejectUnauthorized: false },
-});
+if (process.env.ACTIVE_DB !== 'local') {
+  console.error('seed.js only runs against the local database. Set ACTIVE_DB=local.');
+  process.exit(1);
+}
 
-async function seed() {
-  const client = await pool.connect();
-  
+const PASSWORD = process.env.SEED_PASSWORD || 'SeecsDemo2026';
+const SOCIETY_NAME = 'SEECS Events Society (Demo)';
+const PEOPLE = {
+  admin: { name: 'Platform Admin', email: 'admin@seecs-demo.local', userType: 'SUPER_ADMIN' },
+  principal: { name: 'Principal SEECS', email: 'principal.demo@seecs.edu.pk', designation: 'PRINCIPAL' },
+  sponsor: { name: 'Dr. Faculty Sponsor', email: 'sponsor.demo@seecs.edu.pk', designation: 'FACULTY' },
+  president: { name: 'Ayesha President', email: 'president.demo@seecs.edu.pk' },
+  gensec: { name: 'Bilal General Secretary', email: 'gensec.demo@seecs.edu.pk' },
+  finsec: { name: 'Sara Finance Secretary', email: 'finsec.demo@seecs.edu.pk' },
+  head: { name: 'Hamza Event Head', email: 'eventhead.demo@seecs.edu.pk' },
+  financeTl: { name: 'Zainab Finance TL', email: 'finance.tl.demo@seecs.edu.pk' },
+  logisticsTl: { name: 'Usman Logistics TL', email: 'logistics.tl.demo@seecs.edu.pk' },
+  outreachTl: { name: 'Hira Outreach TL', email: 'outreach.tl.demo@seecs.edu.pk' },
+  mediaTl: { name: 'Ali Media TL', email: 'media.tl.demo@seecs.edu.pk' },
+  securityTl: { name: 'Omar Security TL', email: 'security.tl.demo@seecs.edu.pk' },
+  exec1: { name: 'Fatima Executive', email: 'exec1.demo@seecs.edu.pk' },
+  exec2: { name: 'Ahmed Executive', email: 'exec2.demo@seecs.edu.pk' },
+  student: { name: 'Student Applicant', email: 'student.demo@seecs.edu.pk' },
+};
+
+async function main() {
+  const client = new Client({
+    host: process.env.LOCAL_DB_HOST || 'localhost',
+    port: parseInt(process.env.LOCAL_DB_PORT || '5432', 10),
+    database: process.env.LOCAL_DB_NAME || 'event_management',
+    user: process.env.LOCAL_DB_USER || 'postgres',
+    password: process.env.LOCAL_DB_PASSWORD,
+  });
+  await client.connect();
+  const q = (text, params) => client.query(text, params);
+
   try {
-    console.log('🌱 Starting seed...\n');
-    await client.query('BEGIN');
+    const existing = await q('SELECT id FROM societies WHERE name = $1', [SOCIETY_NAME]);
+    if (existing.rows.length > 0) {
+      console.log(`"${SOCIETY_NAME}" already exists — nothing to do.`);
+      return;
+    }
+    await q('BEGIN');
 
-    // 1. Create super admins
-    console.log('👤 Creating super admins...');
-    const superAdmins = [
-      { name: 'Maaz Hussain', email: 'maazhussain972@gmail.com', password: 'maaz@123' },
-      { name: 'Muhammad Abdul Daym', email: 'abduldaym786@gmail.com', password: 'daym@123' },
-      { name: 'Muhammad Bilal Atif', email: 'bilalatif23@gmail.com', password: 'bilal@123' },
-    ];
-    const superAdminIds = [];
-    for (const admin of superAdmins) {
-      const adminHash = await bcrypt.hash(admin.password, 12);
-      const adminResult = await client.query(
-        `INSERT INTO users (email, password_hash, full_name, user_type, status)
-         VALUES ($1, $2, $3, 'SUPER_ADMIN', 'ACTIVE')
-         ON CONFLICT (email) DO UPDATE
-           SET password_hash = EXCLUDED.password_hash,
-               full_name = EXCLUDED.full_name,
-               user_type = 'SUPER_ADMIN',
-               status = 'ACTIVE'
+    // ── People ─────────────────────────────────────────────────────────────
+    const hash = await bcrypt.hash(PASSWORD, 12);
+    const id = {};
+    for (const [key, p] of Object.entries(PEOPLE)) {
+      const r = await q(
+        `INSERT INTO users (email, password_hash, full_name, user_type, status, designation, email_verified_at)
+         VALUES ($1, $2, $3, $4, 'ACTIVE', $5, NOW())
+         ON CONFLICT (email) DO UPDATE SET full_name = EXCLUDED.full_name
          RETURNING id`,
-        [admin.email.toLowerCase(), adminHash, admin.name]
+        [p.email, hash, p.name, p.userType || 'STUDENT', p.designation || 'STUDENT'],
       );
-      superAdminIds.push(adminResult.rows[0].id);
-      console.log(`  ✓ Super Admin: ${admin.email.toLowerCase()}`);
+      id[key] = r.rows[0].id;
     }
-    const adminId = superAdminIds[0];
+    await q(`SELECT set_config('app.actor_id', $1, true), set_config('app.change_reason', 'Demo seed', true), set_config('app.change_source', 'SYSTEM', true)`, [id.admin]);
 
-    // 2. Create sample students
-    console.log('\n👥 Creating sample students...');
-    const studentHash = await bcrypt.hash('test1234', 12);
-    const students = [
-      { email: 'student1@seecs.edu.pk', name: 'Ali Ahmed' },
-      { email: 'student2@smme.edu.pk', name: 'Sara Khan' },
-      { email: 'student3@nice.edu.pk', name: 'Hassan Raza' },
-    ];
-    const studentIds = [];
-    for (const s of students) {
-      const res = await client.query(
-        `INSERT INTO users (email, password_hash, full_name, user_type, status)
-         VALUES ($1, $2, $3, 'STUDENT', 'ACTIVE')
-         ON CONFLICT (email) DO UPDATE SET status = 'ACTIVE'
-         RETURNING id`,
-        [s.email, studentHash, s.name]
-      );
-      studentIds.push(res.rows[0].id);
-      console.log(`  ✓ ${s.name} (${s.email})`);
-    }
-
-    // 3. Get school IDs
-    const schoolsResult = await client.query('SELECT id, abbreviation FROM nust_schools');
-    const schools = {};
-    schoolsResult.rows.forEach(s => { schools[s.abbreviation] = s.id; });
-    console.log(`\n🏫 Found ${Object.keys(schools).length} schools`);
-
-    // 4. Create societies
-    console.log('\n🏛️ Creating societies...');
-    const societies = [
-      { name: 'NUST Developers Society', desc: 'A community of passionate developers building the future. Hackathons, bootcamps, and tech talks.', school: null, nustWide: true },
-      { name: 'SEECS Robotics Society', desc: 'Building robots and autonomous systems. Line followers to drones.', school: 'SEECS', nustWide: false },
-      { name: 'Literary Society NUST', desc: 'Poetry nights, debates, creative writing workshops, and the annual NUST Literary Festival.', school: null, nustWide: true },
-      { name: 'NUST Sports Society', desc: 'Cricket, football, basketball, and indoor games tournaments across all campuses.', school: null, nustWide: true },
-      { name: 'SMME Photography Club', desc: 'Photography walks, editing workshops, and exhibitions.', school: 'SMME', nustWide: false },
-      { name: 'NUST Music Society', desc: 'Battle of Bands, open mic nights, and jam sessions for musicians across NUST.', school: null, nustWide: true },
-      { name: 'ACM SEECS Chapter', desc: 'Competitive programming, algorithmic challenges, and ICPC preparation.', school: 'SEECS', nustWide: false },
-      { name: 'NUST Entrepreneurship Club', desc: 'Pitch competitions, mentorship programs, and startup weekends.', school: null, nustWide: true },
-    ];
-    const societyIds = [];
-    for (const soc of societies) {
-      const schoolId = soc.school ? schools[soc.school] : null;
-      const res = await client.query(
-        `INSERT INTO societies (name, description, status, school_id, is_nust_wide, created_by)
-         VALUES ($1, $2, 'APPROVED', $3, $4, $5)
-         ON CONFLICT DO NOTHING RETURNING id`,
-        [soc.name, soc.desc, schoolId, soc.nustWide, adminId]
-      );
-      if (res.rows.length > 0) {
-        societyIds.push(res.rows[0].id);
-        console.log(`  ✓ ${soc.name}`);
-      }
-    }
-
-    // 5. Get category IDs
-    const catResult = await client.query('SELECT id, name FROM event_categories');
-    const categories = {};
-    catResult.rows.forEach(c => { categories[c.name.toLowerCase()] = c.id; });
-
-    // 6. Create events
-    console.log('\n📅 Creating events...');
-    const now = new Date();
-    const events = [
-      { title: 'HackNUST 2025', desc: '48-hr hackathon. Teams of 3-5. Prizes worth Rs. 500K.', location: 'SEECS Auditorium, H-12', price: 500, max: 200, category: 'technology', si: 0, days: 7, h: 10, dur: 48 },
-      { title: 'Poetry Night: Ghazal Edition', desc: 'Urdu poetry evening. Renowned poets + students. Chai included.', location: 'NICE Library Hall', price: 0, max: 100, category: 'arts', si: 2, days: 3, h: 18, dur: 3 },
-      { title: 'AI/ML Workshop Series', desc: 'ML with Python. NumPy, Pandas, scikit-learn. Bring laptops!', location: 'SEECS Lab 4, H-12', price: 200, max: 50, category: 'workshop', si: 0, days: 5, h: 14, dur: 3 },
-      { title: 'NUST Premier League S4', desc: 'Inter-school cricket tournament. 11 schools. Round of 16!', location: 'NUST Cricket Ground', price: 0, max: 500, category: 'sports', si: 3, days: 2, h: 9, dur: 8 },
-      { title: 'Startup Pitch Competition', desc: 'Pitch to investors. Win seed funding up to Rs. 200K.', location: 'NBS Seminar Hall', price: 300, max: 80, category: 'competition', si: 7, days: 10, h: 13, dur: 5 },
-      { title: 'Battle of Bands 2025', desc: 'Annual music showdown. All schools. Crowd voting + celebrity judges.', location: 'NUST Amphitheatre', price: 400, max: 1000, category: 'music', si: 5, days: 14, h: 17, dur: 5 },
-      { title: 'RoboWars Championship', desc: 'Combat robots in the arena! Multiple weight categories.', location: 'SEECS Ground Floor', price: 1000, max: 30, category: 'competition', si: 1, days: 12, h: 10, dur: 8 },
-      { title: 'NUST Through the Lens', desc: 'Photo exhibition. 100+ photos by students. Open to all.', location: 'SMME Art Gallery', price: 0, max: 200, category: 'cultural', si: 4, days: 1, h: 11, dur: 6 },
-      { title: 'ICPC Practice Contest', desc: 'Online CP contest. 5 hours, 10 problems.', location: 'Online (Codeforces)', price: 0, max: 500, category: 'academic', si: 6, days: 4, h: 10, dur: 5 },
-      { title: 'Cultural Night', desc: 'Colours of Pakistan. Traditional dances, music, food.', location: 'Convention Center', price: 200, max: 800, category: 'cultural', si: 5, days: 20, h: 16, dur: 5 },
-    ];
-    for (const evt of events) {
-      const socId = societyIds[evt.si];
-      if (!socId) continue;
-      const start = new Date(now); start.setDate(start.getDate() + evt.days); start.setHours(evt.h, 0, 0, 0);
-      const end = new Date(start); end.setHours(end.getHours() + evt.dur);
-      const regEnd = new Date(start); regEnd.setDate(regEnd.getDate() - 1);
-      const catId = categories[evt.category] || null;
-      await client.query(
-        `INSERT INTO events (title, description, society_id, location, is_paid, ticket_price, max_tickets,
-         event_start, event_end, registration_end, category_id, is_cancelled, created_by, banner_url)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, FALSE, $12, NULL)
-         ON CONFLICT DO NOTHING`,
-        [evt.title, evt.desc, socId, evt.location, evt.price > 0, evt.price, evt.max, start, end, regEnd, catId, adminId]
-      );
-      console.log(`  ✓ ${evt.title}`);
-    }
-
-    // 7. Create roles for each society, then memberships
-    console.log('\n🔑 Creating society roles...');
-    const roleIds = {};
-    const presidentRoleIds = {};
-    for (const socId of societyIds) {
-      // Member role
-      const roleRes = await client.query(
-        `INSERT INTO roles (society_id, name, description, hierarchy_level, is_system_role)
-         VALUES ($1, 'Member', 'General member', 1, TRUE)
-         ON CONFLICT DO NOTHING
-         RETURNING id`,
-        [socId]
-      );
-      if (roleRes.rows.length > 0) {
-        roleIds[socId] = roleRes.rows[0].id;
-      } else {
-        const existing = await client.query(`SELECT id FROM roles WHERE society_id = $1 AND name = 'Member' LIMIT 1`, [socId]);
-        if (existing.rows.length > 0) roleIds[socId] = existing.rows[0].id;
-      }
-
-      // President role
-      const presRes = await client.query(
-        `INSERT INTO roles (society_id, name, description, hierarchy_level, is_system_role)
-         VALUES ($1, 'President', 'Society President — full control', 10, TRUE)
-         ON CONFLICT DO NOTHING
-         RETURNING id`,
-        [socId]
-      );
-      if (presRes.rows.length > 0) {
-        presidentRoleIds[socId] = presRes.rows[0].id;
-      } else {
-        const existing = await client.query(`SELECT id FROM roles WHERE society_id = $1 AND name = 'President' LIMIT 1`, [socId]);
-        if (existing.rows.length > 0) presidentRoleIds[socId] = existing.rows[0].id;
-      }
-
-      // VP role
-      await client.query(
-        `INSERT INTO roles (society_id, name, description, hierarchy_level, is_system_role)
-         VALUES ($1, 'Vice President', 'Society Vice President', 8, TRUE)
-         ON CONFLICT DO NOTHING`,
-        [socId]
-      );
-    }
-    console.log(`  ✓ Created roles for ${Object.keys(roleIds).length} societies (Member + President + VP)`);
-
-    // Assign privileges to President role
-    console.log('\n🛡️ Assigning privileges to President roles...');
-    const privResult = await client.query('SELECT id FROM privileges');
-    for (const socId of societyIds) {
-      const presRoleId = presidentRoleIds[socId];
-      if (presRoleId) {
-        for (const priv of privResult.rows) {
-          await client.query(
-            `INSERT INTO role_privileges (role_id, privilege_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-            [presRoleId, priv.id]
-          );
-        }
-      }
-    }
-    console.log('  ✓ All privileges assigned to President roles');
-
-    // Create president user
-    console.log('\n👑 Creating president user...');
-    const presHash = await bcrypt.hash('president123', 12);
-    const presResult = await client.query(
-      `INSERT INTO users (email, password_hash, full_name, user_type, status)
-       VALUES ($1, $2, $3, 'STUDENT', 'ACTIVE')
-       ON CONFLICT (email) DO UPDATE SET password_hash = $2, status = 'ACTIVE'
+    // ── Society with SRS roles and portfolio catalog ───────────────────────
+    const society = (await q(
+      `INSERT INTO societies (name, description, status, created_by, approved_by, approved_at, is_nust_wide, school_id,
+                              president_name, contact_email, faculty_advisor_name, faculty_sponsor_email, category)
+       VALUES ($1, 'Organising committee for SEECS flagship events (demo data).', 'APPROVED', $2, $3, NOW(), FALSE,
+               (SELECT id FROM nust_schools WHERE abbreviation = 'SEECS'), $4, $5, $6, $7, 'Technology')
        RETURNING id`,
-      ['president.devs@seecs.edu.pk', presHash, 'Bilal Ahmad']
+      [SOCIETY_NAME, id.president, id.admin, PEOPLE.president.name, PEOPLE.president.email, PEOPLE.sponsor.name, PEOPLE.sponsor.email],
+    )).rows[0].id;
+    await q('SELECT fn_seed_society_roles($1)', [society]);
+    await q('SELECT fn_seed_society_portfolios($1, $2)', [society, id.president]);
+    await q('INSERT INTO society_settings (society_id) VALUES ($1) ON CONFLICT DO NOTHING', [society]);
+
+    const role = async (name) => (await q('SELECT id FROM roles WHERE society_id = $1 AND name = $2', [society, name])).rows[0].id;
+    const member = (userKey, roleName) =>
+      role(roleName).then((roleId) => q(
+        `INSERT INTO society_memberships (user_id, society_id, role_id, is_active, assigned_by) VALUES ($1, $2, $3, TRUE, $4)`,
+        [id[userKey], society, roleId, id.admin],
+      ));
+    await member('sponsor', 'Faculty Sponsor');
+    await member('president', 'President');
+    await member('gensec', 'General Secretary');
+    await member('finsec', 'Finance Secretary');
+    for (const k of ['head', 'financeTl', 'logisticsTl', 'outreachTl', 'mediaTl', 'securityTl', 'exec1', 'exec2']) await member(k, 'Member');
+
+    // ── Event workspace: DFTW ──────────────────────────────────────────────
+    const start = new Date(Date.now() + 21 * 86400_000);
+    start.setUTCHours(4, 0, 0, 0); // 09:00 PKT
+    const end = new Date(start.getTime() + 2 * 86400_000 + 9 * 3600_000);
+    const event = (await q(
+      `INSERT INTO events (society_id, title, description, location, event_start, event_end, registration_end,
+                           max_participants, created_by, thumbnail_url, event_head_id, budget_total, registration_link)
+       VALUES ($1, 'DFTW 2026', 'Developers Festival & Tech Week — flagship SEECS event (demo).', 'SEECS Main Hall',
+               $2, $3, $4, 500, $5, 'https://images.unsplash.com/photo-1540575467063-178a50c2df87', $6, 400000,
+               'evt-demo-dftw-2026')
+       RETURNING id`,
+      [society, start.toISOString(), end.toISOString(), new Date(start.getTime() - 86400_000).toISOString(), id.president, id.head],
+    )).rows[0].id;
+
+    const portfolio = async (fn) => (await q('SELECT id FROM portfolios WHERE society_id = $1 AND function_key = $2', [society, fn])).rows[0].id;
+    const team = {};
+    for (const fn of ['FINANCE', 'LOGISTICS', 'OUTREACH', 'MEDIA', 'SECURITY', 'EVENT_MANAGEMENT']) {
+      team[fn] = (await q(
+        `INSERT INTO event_teams (society_id, event_id, portfolio_id, created_by) VALUES ($1, $2, $3, $4) RETURNING id`,
+        [society, event, await portfolio(fn), id.president],
+      )).rows[0].id;
+    }
+    const place = (fn, userKey, teamRole) => q(
+      `INSERT INTO event_team_members (team_id, event_id, society_id, user_id, team_role, assigned_by) VALUES ($1, $2, $3, $4, $5, $6)`,
+      [team[fn], event, society, id[userKey], teamRole, id.president],
     );
-    const presidentId = presResult.rows[0].id;
-    console.log('  ✓ president.devs@seecs.edu.pk');
+    await place('FINANCE', 'financeTl', 'TEAM_LEAD');
+    await place('LOGISTICS', 'logisticsTl', 'TEAM_LEAD');
+    await place('OUTREACH', 'outreachTl', 'TEAM_LEAD');
+    await place('MEDIA', 'mediaTl', 'TEAM_LEAD');
+    await place('SECURITY', 'securityTl', 'TEAM_LEAD');
+    await place('MEDIA', 'exec1', 'EXECUTIVE');
+    await place('SECURITY', 'exec2', 'EXECUTIVE');
 
-    console.log('\n🤝 Creating memberships...');
-    for (let i = 0; i < Math.min(studentIds.length, societyIds.length); i++) {
-      const socId = societyIds[i];
-      if (roleIds[socId]) {
-        await client.query(`INSERT INTO society_memberships (user_id, society_id, role_id, is_active) VALUES ($1, $2, $3, TRUE) ON CONFLICT DO NOTHING`, [studentIds[i], socId, roleIds[socId]]);
-      }
-    }
-    // President membership in first society (NUST Developers)
-    if (societyIds[0] && presidentRoleIds[societyIds[0]]) {
-      await client.query(
-        `INSERT INTO society_memberships (user_id, society_id, role_id, is_active) VALUES ($1, $2, $3, TRUE) ON CONFLICT DO NOTHING`,
-        [presidentId, societyIds[0], presidentRoleIds[societyIds[0]]]
+    // ── Plan, duties ───────────────────────────────────────────────────────
+    const day1 = new Date(start.getTime() + 5 * 3600_000).toISOString().slice(0, 10);
+    for (const [s, e, title, venue, fn] of [
+      ['09:00', '10:00', 'Opening ceremony', 'Main Hall', 'EVENT_MANAGEMENT'],
+      ['10:30', '13:00', 'Hackathon kickoff', 'Lab 1-4', 'EVENT_MANAGEMENT'],
+      ['14:00', '16:00', 'Industry panel', 'Auditorium', 'OUTREACH'],
+    ]) {
+      await q(
+        `INSERT INTO event_plan_items (event_id, society_id, day_date, start_time, end_time, title, venue, team_id, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [event, society, day1, s, e, title, venue, team[fn], id.head],
       );
-      console.log('  ✓ Bilal Ahmad → President of NUST Developers Society');
     }
-    for (const socId of societyIds) {
-      if (roleIds[socId]) {
-        await client.query(`INSERT INTO society_memberships (user_id, society_id, role_id, is_active) VALUES ($1, $2, $3, TRUE) ON CONFLICT DO NOTHING`, [adminId, socId, roleIds[socId]]);
-      }
-    }
-    console.log('  ✓ Done');
+    await q(
+      `INSERT INTO duties (society_id, event_id, team_id, title, location, starts_at, assignee_id, assigned_by)
+       VALUES ($1, $2, $3, 'Photograph the opening ceremony', 'Main Hall', $4, $5, $6),
+              ($1, $2, $7, 'Gate check-in, shift 1', 'Main gate', $4, $8, $9)`,
+      [society, event, team.MEDIA, start.toISOString(), id.exec1, id.mediaTl, team.SECURITY, id.exec2, id.securityTl],
+    );
 
-    await client.query('COMMIT');
-    console.log('\n✅ Seed completed!\n');
-    console.log('📧 Super Admin: maazhussain972@gmail.com / maaz@123');
-    console.log('📧 Super Admin: abduldaym786@gmail.com / daym@123');
-    console.log('📧 Super Admin: bilalatif23@gmail.com / bilal@123');
-    console.log('📧 Student: student1@seecs.edu.pk / test1234');
-    console.log('📧 President: president.devs@seecs.edu.pk / president123');
+    // ── Recruitment (open), finance, sponsors, inventory, minutes ─────────
+    await q(
+      `INSERT INTO recruitment_forms (society_id, event_id, team_id, target_role, title, description, questions, status, created_by)
+       VALUES ($1, $2, $3, 'EXECUTIVE', 'Media team — photographers & designers', 'Help us cover DFTW 2026.',
+               $4::jsonb, 'OPEN', $5)`,
+      [society, event, team.MEDIA, JSON.stringify([
+        { id: 'skill', label: 'What do you do best?', type: 'single_choice', required: true, options: ['Photography', 'Video', 'Design'] },
+        { id: 'portfolio', label: 'Link to your work', type: 'url', required: false },
+        { id: 'why', label: 'Why do you want to join?', type: 'long_text', required: true },
+      ]), id.mediaTl],
+    );
+    await q(
+      `INSERT INTO fund_allocations (society_id, event_id, team_id, amount, note, allocated_by)
+       VALUES ($1, $2, NULL, 400000, 'Event budget', $3), ($1, $2, $4, 60000, 'Media budget', $3), ($1, $2, $5, 80000, 'Logistics budget', $3)`,
+      [society, event, id.president, team.MEDIA, team.LOGISTICS],
+    );
+    await q(
+      `INSERT INTO expenses (society_id, event_id, team_id, amount, category, spent_on, description, submitted_by)
+       VALUES ($1, $2, $3, 18500, 'PRINTING', CURRENT_DATE, 'Standees and banners', $4)`,
+      [society, event, team.MEDIA, id.mediaTl],
+    );
+    const sponsor = (await q(
+      `INSERT INTO sponsors (society_id, name, industry, contact_name, contact_email, created_by)
+       VALUES ($1, 'Acme Tech (demo)', 'Software', 'Partnerships Team', 'partners@acme.example', $2) RETURNING id`,
+      [society, id.outreachTl],
+    )).rows[0].id;
+    await q(
+      `INSERT INTO sponsor_interactions (society_id, sponsor_id, event_id, interaction_type, summary, logged_by)
+       VALUES ($1, $2, $3, 'MEETING', 'Pitched the gold tier; they want logo on banners and a booth.', $4)`,
+      [society, sponsor, event, id.outreachTl],
+    );
+    await q(
+      `INSERT INTO sponsorships (society_id, sponsor_id, event_id, amount, status, deliverables, logged_by)
+       VALUES ($1, $2, $3, 150000, 'CONFIRMED', 'Logo on banners, booth space', $4)`,
+      [society, sponsor, event, id.outreachTl],
+    );
+    for (const [name, qty, cat] of [['Walkie-talkie', 20, 'Communication'], ['Folding table', 40, 'Furniture'], ['Extension cord', 25, 'Electrical']]) {
+      const item = (await q(
+        `INSERT INTO inventory_items (society_id, name, category, quantity_total, quantity_available, low_stock_threshold, location, created_by)
+         VALUES ($1, $2, $3, $4, $4, 3, 'SEECS store room', $5) RETURNING id`,
+        [society, name, cat, qty, id.logisticsTl],
+      )).rows[0].id;
+      await q(
+        `INSERT INTO inventory_transactions (society_id, item_id, txn_type, quantity, note, performed_by) VALUES ($1, $2, 'ADD', $3, 'Initial stock', $4)`,
+        [society, item, qty, id.logisticsTl],
+      );
+    }
+    await q(
+      `INSERT INTO inventory_requests (society_id, event_id, team_id, item_id, quantity, purpose, requested_by)
+       SELECT $1, $2, $3, id, 6, 'Security team radios', $4 FROM inventory_items WHERE society_id = $1 AND name = 'Walkie-talkie'`,
+      [society, event, team.SECURITY, id.securityTl],
+    );
+    const minutes = (await q(
+      `INSERT INTO minutes_sheets (society_id, event_id, team_id, title, meeting_date, venue, attendees, agenda, decisions, action_items, status, created_by, submitted_at)
+       VALUES ($1, $2, $3, 'Media team kickoff', CURRENT_DATE, 'Room 101', '["Ali", "Fatima"]'::jsonb,
+               'Coverage plan for DFTW', 'Two photographers per day; reels posted nightly',
+               '[{"task":"Book cameras","owner":"Ali","due":null}]'::jsonb, 'SUBMITTED', $4, NOW())
+       RETURNING id`,
+      [society, event, team.MEDIA, id.mediaTl],
+    )).rows[0].id;
+    await q(`INSERT INTO minutes_approval_steps (minutes_id, stage, action, actor_id) VALUES ($1, 'AUTHOR', 'SUBMITTED', $2)`, [minutes, id.mediaTl]);
+
+    await q('COMMIT');
+    console.log(`Seeded "${SOCIETY_NAME}" with event DFTW 2026.\n`);
+    console.log(`Every demo account's password: ${PASSWORD}\n`);
+    for (const [key, p] of Object.entries(PEOPLE)) console.log(`  ${key.padEnd(12)} ${p.email}`);
   } catch (error) {
-    await client.query('ROLLBACK');
-    console.error('❌ Seed failed:', error.message);
+    await q('ROLLBACK').catch(() => {});
     throw error;
   } finally {
-    client.release();
-    await pool.end();
+    await client.end();
   }
 }
 
-seed();
+main().catch((error) => {
+  console.error('Seed failed:', error.message);
+  process.exit(1);
+});
