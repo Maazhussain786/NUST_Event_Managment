@@ -519,7 +519,7 @@ export default function UniversityEventsPage() {
                     })
                   }
                 />
-                Add NUST Administration as co-host
+                Add SEECS Administration as co-host
               </label>
 
               <div className="grid grid-cols-2 gap-3">

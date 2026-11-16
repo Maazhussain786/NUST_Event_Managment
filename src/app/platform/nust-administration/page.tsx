@@ -147,7 +147,7 @@ export default function NustAdministrationPage() {
       setProfile(profileData);
       setAlbums(albumData);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load NUST Administration");
+      setError(err instanceof Error ? err.message : "Failed to load SEECS Administration");
     } finally {
       setLoading(false);
     }
@@ -190,7 +190,7 @@ export default function NustAdministrationPage() {
         primary_color: profile.primary_color,
         accent_color: profile.accent_color,
       });
-      setToast("NUST Administration profile updated");
+      setToast("SEECS Administration profile updated");
     } catch (err) {
       setToast(err instanceof Error ? err.message : "Failed to save profile");
     } finally {
@@ -299,7 +299,7 @@ export default function NustAdministrationPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>
-          NUST Administration
+          SEECS Administration
         </h1>
         <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>
           Manage official profile, branding, visibility, and society albums from one place.
@@ -310,7 +310,7 @@ export default function NustAdministrationPage() {
         <div className="flex items-start gap-4 flex-wrap">
           <div className="w-20 h-20 rounded-2xl overflow-hidden bg-surface-100 dark:bg-surface-800 flex items-center justify-center">
             {society.logo_url ? (
-              <SmartImage src={society.logo_url} alt="NUST Administration logo" className="w-full h-full object-cover" />
+              <SmartImage src={society.logo_url} alt="SEECS Administration logo" className="w-full h-full object-cover" />
             ) : (
               <Building2 className="w-8 h-8" style={{ color: "var(--text-muted)" }} />
             )}
@@ -365,7 +365,7 @@ export default function NustAdministrationPage() {
 
         <div className="mt-4 rounded-xl overflow-hidden border border-themed bg-surface-50 dark:bg-surface-900/40">
           {profile.cover_url ? (
-            <SmartImage src={profile.cover_url} alt="NUST Administration cover" className="w-full h-44 object-cover" />
+            <SmartImage src={profile.cover_url} alt="SEECS Administration cover" className="w-full h-44 object-cover" />
           ) : (
             <div className="h-44 flex items-center justify-center text-sm" style={{ color: "var(--text-muted)" }}>
               No cover image uploaded
@@ -445,7 +445,7 @@ export default function NustAdministrationPage() {
             <div>
               <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Public Profile Visibility</p>
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                Control whether NUST Administration profile is publicly visible.
+                Control whether SEECS Administration profile is publicly visible.
               </p>
             </div>
           </div>

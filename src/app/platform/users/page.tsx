@@ -16,7 +16,7 @@ import {
   FileText,
 } from 'lucide-react';
 import { PageLoader, ErrorState, EmptyState, StatusBadge } from '../_components/Shared';
-import { fetchUsers, fetchUserDetail, suspendUser, reactivateUser } from '../api';
+import { fetchUsers, fetchUserDetail, suspendUser, reactivateUser, setUserDesignation } from '../api';
 import type { AdminUser, UserDetail } from '../types';
 import { SmartImage } from '@/components/SmartImage';
 
@@ -242,6 +242,33 @@ export default function UsersPage() {
 
                 {/* Actions */}
                 <div className="col-span-2 flex items-center justify-end gap-1.5">
+                  {user.user_type === 'STUDENT' && (
+                    <select
+                      aria-label="Designation"
+                      title="Designation (the Principal approves forwarded minutes)"
+                      value={user.designation ?? 'STUDENT'}
+                      disabled={actionLoading === user.id}
+                      onChange={async (e) => {
+                        const value = e.target.value;
+                        if (value === 'PRINCIPAL' && !window.confirm(`Make ${user.full_name} the Principal? They will approve forwarded minutes.`)) return;
+                        setActionLoading(user.id);
+                        try {
+                          await setUserDesignation(user.id, value);
+                          setUsers((prev) => prev.map((x) => (x.id === user.id ? { ...x, designation: value as typeof x.designation } : x)));
+                        } catch (err) {
+                          window.alert((err as Error).message);
+                        } finally {
+                          setActionLoading(null);
+                        }
+                      }}
+                      className="rounded-lg border border-border bg-transparent px-1.5 py-1 text-xs"
+                    >
+                      <option value="STUDENT">Student</option>
+                      <option value="FACULTY">Faculty</option>
+                      <option value="STAFF">Staff</option>
+                      <option value="PRINCIPAL">Principal</option>
+                    </select>
+                  )}
                   <button
                     onClick={() => openDetail(user.id)}
                     className="p-1.5 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors"

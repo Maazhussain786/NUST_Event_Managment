@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, CalendarDays, Users, Ticket, User, Settings, LogOut, type LucideIcon } from 'lucide-react';
+import { Home, CalendarDays, Users, Ticket, User, Settings, LogOut, ClipboardList, UserPlus, type LucideIcon } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import {
@@ -24,6 +24,8 @@ const navItems: NavItem[] = [
   { href: '/events', icon: CalendarDays, label: 'Events' },
   { href: '/societies', icon: Users, label: 'Societies' },
   { href: '/tickets', icon: Ticket, label: 'Tickets' },
+  { href: '/my-work', icon: ClipboardList, label: 'My Work' },
+  { href: '/recruitment', icon: UserPlus, label: 'Recruitment' },
   { href: '/profile', icon: User, label: 'Profile' },
 ];
 

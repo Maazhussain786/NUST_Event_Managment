@@ -25,6 +25,10 @@ import {
   Globe,
   FileText,
   Camera,
+  KeyRound,
+  Boxes,
+  Handshake,
+  NotebookPen,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SmartImage } from '@/components/SmartImage';
@@ -35,7 +39,17 @@ interface SocietyShellProps {
   societyLogo: string | null;
   roleName: string;
   hierarchyLevel: number;
+  /** What the viewer may do (from src/lib/rbac): drives which sections appear. */
+  access: ShellAccess;
   children: React.ReactNode;
+}
+
+export interface ShellAccess {
+  privileges: string[];
+  isAdmin: boolean;
+  onTeam: boolean;
+  isEventHead: boolean;
+  teamFunctions: string[];
 }
 
 interface NavItem {
@@ -43,7 +57,7 @@ interface NavItem {
   href: string;
   icon: React.ReactNode;
   section: string;
-  minLevel?: number;
+  show?: boolean;
   badge?: number;
 }
 
@@ -52,9 +66,11 @@ export default function SocietyShell({
   societyName,
   societyLogo,
   roleName,
-  hierarchyLevel,
+  access,
   children,
 }: SocietyShellProps) {
+  const has = (p: string) => access.isAdmin || access.privileges.includes(p);
+  const fn = (f: string) => access.teamFunctions.includes(f);
   const pathname = usePathname();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -64,24 +80,32 @@ export default function SocietyShell({
 
   const navItems: NavItem[] = [
     { label: 'Dashboard', href: `${base}/dashboard`, icon: <LayoutDashboard size={18} />, section: 'Core' },
-    { label: 'Posts', href: `${base}/posts`, icon: <FileText size={18} />, section: 'Core' },
     { label: 'Events', href: `${base}/events`, icon: <Calendar size={18} />, section: 'Core' },
+    { label: 'Posts', href: `${base}/posts`, icon: <FileText size={18} />, section: 'Core' },
     { label: 'Photos', href: `${base}/photos`, icon: <Camera size={18} />, section: 'Core' },
     { label: 'Members', href: `${base}/members`, icon: <Users size={18} />, section: 'Core' },
-    { label: 'Approvals', href: `${base}/approvals`, icon: <Ticket size={18} />, section: 'Operations', minLevel: 3 },
-    { label: 'Entry Control', href: `${base}/entry`, icon: <ScanLine size={18} />, section: 'Operations', minLevel: 3 },
-    { label: 'Participants', href: `${base}/participants`, icon: <UserCheck size={18} />, section: 'Operations' },
-    { label: 'Wings & Portfolios', href: `${base}/wings`, icon: <Network size={18} />, section: 'Structure', minLevel: 5 },
-    { label: 'Chat', href: `${base}/chat`, icon: <MessageSquare size={18} />, section: 'Structure' },
-    { label: 'Finance', href: `${base}/finance`, icon: <Wallet size={18} />, section: 'Intelligence', minLevel: 8 },
-    { label: 'Analytics', href: `${base}/analytics`, icon: <BarChart3 size={18} />, section: 'Intelligence', minLevel: 8 },
-    { label: 'Storage', href: `${base}/storage`, icon: <HardDrive size={18} />, section: 'System', minLevel: 5 },
+    { label: 'Minutes', href: `${base}/minutes`, icon: <NotebookPen size={18} />, section: 'Organisation' },
+    { label: 'Inventory', href: `${base}/inventory`, icon: <Boxes size={18} />, section: 'Organisation',
+      show: has('VIEW_INVENTORY') || has('MANAGE_INVENTORY') || access.onTeam || access.isEventHead },
+    { label: 'Sponsors', href: `${base}/sponsors`, icon: <Handshake size={18} />, section: 'Organisation',
+      show: has('VIEW_SPONSORS') || has('MANAGE_SPONSORS') || fn('OUTREACH') || fn('FINANCE') || access.isEventHead },
+    { label: 'Roles & Permissions', href: `${base}/roles`, icon: <KeyRound size={18} />, section: 'Organisation' },
+    { label: 'Wings & Portfolios', href: `${base}/wings`, icon: <Network size={18} />, section: 'Organisation',
+      show: has('MANAGE_WINGS') || has('MANAGE_PORTFOLIOS') },
+    { label: 'Chat', href: `${base}/chat`, icon: <MessageSquare size={18} />, section: 'Organisation', show: has('VIEW_CHAT') || has('MANAGE_CHAT') },
+    { label: 'Approvals', href: `${base}/approvals`, icon: <Ticket size={18} />, section: 'Ticketing', show: has('VERIFY_PAYMENTS') },
+    { label: 'Entry Control', href: `${base}/entry`, icon: <ScanLine size={18} />, section: 'Ticketing',
+      show: has('SCAN_QR') || fn('SECURITY') || fn('USHERS') || fn('CROWD_CONTROL') },
+    { label: 'Participants', href: `${base}/participants`, icon: <UserCheck size={18} />, section: 'Ticketing', show: has('VIEW_REGISTRATIONS') },
+    { label: 'Finance', href: `${base}/finance`, icon: <Wallet size={18} />, section: 'Oversight', show: has('VIEW_FINANCE') },
+    { label: 'Analytics', href: `${base}/analytics`, icon: <BarChart3 size={18} />, section: 'Oversight', show: has('VIEW_ANALYTICS') },
+    { label: 'Activity Log', href: `${base}/audit-logs`, icon: <ScrollText size={18} />, section: 'Oversight', show: has('VIEW_AUDIT_LOGS') },
+    { label: 'Storage', href: `${base}/storage`, icon: <HardDrive size={18} />, section: 'System', show: access.isAdmin },
     { label: 'Notifications', href: `${base}/notifications`, icon: <Bell size={18} />, section: 'System' },
-    { label: 'Audit Logs', href: `${base}/audit-logs`, icon: <ScrollText size={18} />, section: 'System', minLevel: 8 },
-    { label: 'Settings', href: `${base}/settings`, icon: <Settings size={18} />, section: 'System', minLevel: 10 },
+    { label: 'Settings', href: `${base}/settings`, icon: <Settings size={18} />, section: 'System', show: access.isAdmin },
   ];
 
-  const visibleItems = navItems.filter(item => !item.minLevel || hierarchyLevel >= item.minLevel);
+  const visibleItems = navItems.filter((item) => item.show !== false);
 
   const sections = visibleItems.reduce<Record<string, NavItem[]>>((acc, item) => {
     if (!acc[item.section]) acc[item.section] = [];
@@ -232,7 +256,7 @@ export default function SocietyShell({
           <div className="flex-1 min-w-0">
             <h1 className="text-h3 text-foreground truncate">{getPageTitle(pathname, base)}</h1>
           </div>
-          {hierarchyLevel >= 10 && (
+          {access.isAdmin && (
             <button
               onClick={() => router.push(`${base}/settings`)}
               className="flex items-center justify-center h-9 w-9 rounded-xl hover:bg-accent text-muted-foreground transition-colors"
@@ -251,6 +275,11 @@ export default function SocietyShell({
 function getPageTitle(pathname: string, base: string): string {
   const sub = pathname.replace(base, '') || '';
 
+  if (sub.startsWith('/events/') && sub.includes('/workspace')) return 'Event Workspace';
+  if (sub.startsWith('/minutes')) return 'Minutes';
+  if (sub.startsWith('/inventory')) return 'Inventory';
+  if (sub.startsWith('/sponsors')) return 'Sponsors';
+  if (sub.startsWith('/roles')) return 'Roles & Permissions';
   if (sub.startsWith('/events/') && sub.includes('/entry/scan')) return 'QR Scanner';
   if (sub.startsWith('/events/') && sub.includes('/entry')) return 'Entry Control';
 

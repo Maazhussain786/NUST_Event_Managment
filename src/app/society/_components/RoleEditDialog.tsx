@@ -53,15 +53,17 @@ export function RoleEditDialog({
 
   // Get details about selected role
   const selectedRole = roles.find(r => r.id === selectedRoleId);
-  const needsWing = selectedRole && ['Vice President', 'Director', 'Deputy Director'].includes(selectedRole.name);
-  const needsPortfolio = selectedRole && ['Director', 'Deputy Director'].includes(selectedRole.name);
+  // Officer roles may optionally be tied to a wing (e.g. VP of a wing). Team Lead / Executive
+  // places are per event and are assigned from the event workspace, not here.
+  const needsWing = selectedRole?.tier === 'OFFICER';
+  const needsPortfolio = false;
 
   // Filter roles user can assign (lower than their level, excluding President)
   // and keep assignment limited to governance/member workflow roles.
   const assignableRoles = roles.filter(r =>
     r.hierarchy_level < myLevel &&
     r.name !== 'President' &&
-    ['Vice President', 'Director', 'Deputy Director', 'Member'].includes(r.name)
+    r.tier !== 'FACULTY_SPONSOR'
   );
 
   // Filter portfolios by selected wing
@@ -144,12 +146,8 @@ export function RoleEditDialog({
     if (!member || !selectedRoleId) return;
 
     // Validate inputs
-    if (needsWing && !selectedWingId) {
-      setError('Please select a wing');
-      return;
-    }
-    if (needsPortfolio && !selectedPortfolioId) {
-      setError('Please select a portfolio');
+    if (reason.trim().length < 3) {
+      setError('Please give a reason; it is recorded in the role history');
       return;
     }
 
@@ -159,9 +157,8 @@ export function RoleEditDialog({
     try {
       await updateMemberRole(societyId, member.membership_id, {
         roleId: selectedRoleId,
-        wingId: needsWing ? selectedWingId : undefined,
-        portfolioId: needsPortfolio ? selectedPortfolioId : undefined,
-        reason: reason || undefined,
+        wingId: needsWing && selectedWingId ? selectedWingId : undefined,
+        reason: reason.trim(),
       });
 
       onSuccess();
@@ -231,7 +228,7 @@ export function RoleEditDialog({
                     setSelectedRoleId(e.target.value);
                     // Reset wing/portfolio when role changes
                     const newRole = roles.find(r => r.id === e.target.value);
-                    if (!newRole || !['Vice President', 'Director', 'Deputy Director'].includes(newRole.name)) {
+                    if (!newRole || newRole.tier !== 'OFFICER') {
                       setSelectedWingId('');
                       setSelectedPortfolioId('');
                     }
@@ -241,7 +238,7 @@ export function RoleEditDialog({
                   <option value="">Select role...</option>
                   {assignableRoles.map(role => (
                     <option key={role.id} value={role.id}>
-                      {role.name} (Level {role.hierarchy_level})
+                      {role.name}{role.tier_label ? ` — ${role.tier_label}` : ''}
                     </option>
                   ))}
                 </select>
@@ -265,7 +262,7 @@ export function RoleEditDialog({
                     }}
                     className="input-field w-full appearance-none pr-10"
                   >
-                    <option value="">Select wing...</option>
+                    <option value="">No wing (society-wide)</option>
                     {wings.map(wing => (
                       <option key={wing.id} value={wing.id}>
                         {wing.name}
@@ -305,7 +302,7 @@ export function RoleEditDialog({
             {/* Reason (Optional) */}
             <div>
               <label className="block text-sm font-medium text-primary mb-1.5">
-                Reason <span className="text-muted font-normal">(optional)</span>
+                Reason <span className="text-muted font-normal">(required — kept in the role history)</span>
               </label>
               <textarea
                 value={reason}

@@ -7,12 +7,6 @@ import { useRouter } from 'next/navigation';
 import { syncUserFromSession } from '@/lib/client-auth';
 import { SmartImage } from '@/components/SmartImage';
 
-interface School {
-  id: string;
-  name: string;
-  abbreviation: string;
-}
-
 const CATEGORIES = [
   'Technology & Engineering',
   'Arts & Culture',
@@ -28,7 +22,6 @@ const CATEGORIES = [
 
 export default function RegisterSocietyPage() {
   const router = useRouter();
-  const [schools, setSchools] = useState<School[]>([]);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
@@ -36,7 +29,7 @@ export default function RegisterSocietyPage() {
 
   // Form fields
   const [name, setName] = useState('');
-  const [schoolId, setSchoolId] = useState('');
+  const [facultySponsorEmail, setFacultySponsorEmail] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
   const [missionStatement, setMissionStatement] = useState('');
@@ -51,7 +44,6 @@ export default function RegisterSocietyPage() {
   const [bannerPreview, setBannerPreview] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/schools').then(r => r.json()).then(d => setSchools(d.schools || []));
     // Check for INFO_REQUESTED society
     fetch('/api/societies/my-pending').then(r => r.ok ? r.json() : null).then(d => {
       if (d?.society) {
@@ -68,7 +60,7 @@ export default function RegisterSocietyPage() {
           setFacultyAdvisorName(s.faculty_advisor_name || '');
           setJustification(s.justification || '');
           setEmail(s.contact_email || '');
-          if (s.school_id) setSchoolId(s.school_id);
+          setFacultySponsorEmail(s.faculty_sponsor_email || '');
         }
       }
     }).catch((err) => console.error('Failed to fetch pending society:', err));
@@ -185,7 +177,6 @@ export default function RegisterSocietyPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name,
-          schoolId: schoolId || undefined,
           description,
           category,
           missionStatement: missionStatement || undefined,
@@ -193,6 +184,7 @@ export default function RegisterSocietyPage() {
           presidentName,
           email,
           facultyAdvisorName: facultyAdvisorName || undefined,
+          facultySponsorEmail,
           justification: justification || undefined,
           logoUrl,
           bannerUrl,
@@ -355,22 +347,6 @@ export default function RegisterSocietyPage() {
           </select>
         </div>
 
-        {/* School */}
-        <div>
-          <label className="block text-sm font-medium text-primary mb-1.5">School</label>
-          <select
-            value={schoolId}
-            onChange={(e) => setSchoolId(e.target.value)}
-            className="input-field w-full py-3 px-4 text-sm appearance-none"
-          >
-            <option value="">NUST-Wide (no specific school)</option>
-            {schools.map(s => (
-              <option key={s.id} value={s.id}>{s.abbreviation} — {s.name}</option>
-            ))}
-          </select>
-          <p className="text-muted text-xs mt-1">Leave empty if the society is open to all schools</p>
-        </div>
-
         {/* Description */}
         <div>
           <label className="block text-sm font-medium text-primary mb-1.5">Description *</label>
@@ -440,7 +416,7 @@ export default function RegisterSocietyPage() {
 
         {/* Faculty Advisor */}
         <div>
-          <label className="block text-sm font-medium text-primary mb-1.5">Faculty Advisor Name</label>
+          <label className="block text-sm font-medium text-primary mb-1.5">Faculty Sponsor Name</label>
           <input
             type="text"
             value={facultyAdvisorName}
@@ -449,7 +425,21 @@ export default function RegisterSocietyPage() {
             className="input-field w-full py-3 px-4 text-sm"
             maxLength={200}
           />
-          <p className="text-muted text-xs mt-1">Name of a faculty member who will advise this society</p>
+          <p className="text-muted text-xs mt-1">The faculty member who oversees this society</p>
+        </div>
+
+        {/* Faculty Sponsor email */}
+        <div>
+          <label className="block text-sm font-medium text-primary mb-1.5">Faculty Sponsor Email *</label>
+          <input
+            type="email"
+            required
+            value={facultySponsorEmail}
+            onChange={(e) => setFacultySponsorEmail(e.target.value)}
+            placeholder="name@seecs.edu.pk"
+            className="input-field w-full py-3 px-4 text-sm"
+          />
+          <p className="text-muted text-xs mt-1">They become the society&apos;s Faculty Sponsor once approved: they approve minutes and set officer permissions.</p>
         </div>
 
         {/* Justification */}

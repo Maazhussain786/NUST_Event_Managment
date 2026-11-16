@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getCurrentUser } from '@/lib/auth';
 import { query } from '@/lib/db';
+import { getSocietyAccess, isSocietyAdmin, TIER_LABELS } from '@/lib/rbac';
 import SocietyShell from '../../_components/SocietyShell';
 
 export const dynamic = 'force-dynamic';
@@ -14,55 +15,54 @@ export default async function SocietyLayout({
 }) {
   const { societyId } = await params;
 
-  // ── Auth check ──────────────────────────────────────────────────────────
   const user = await getCurrentUser();
   if (!user) redirect('/login');
 
-  // ── Society exists + status check ─────────────────────────────────────
-  const societyResult = await query(
-    `SELECT id, name, description, logo_url, status FROM societies WHERE id = $1`,
-    [societyId]
-  );
+  const access = await getSocietyAccess(user, societyId);
+  if (!access) redirect('/home');
 
-  if (societyResult.rows.length === 0) redirect('/home');
+  // Suspended / deactivated societies — only platform admins may look inside.
+  if (['SUSPENDED', 'DEACTIVATED', 'REJECTED'].includes(access.societyStatus) && !access.isSuperAdmin) redirect('/home');
+  // Active (non-suspended) members only, plus platform admins.
+  if (!access.isMember && !access.isSuperAdmin) redirect(`/societies/${societyId}`);
 
-  const society = societyResult.rows[0];
+  const [society, standing] = await Promise.all([
+    query(`SELECT name, logo_url FROM societies WHERE id = $1`, [societyId]),
+    query(
+      `SELECT
+         COALESCE(ARRAY(
+           SELECT DISTINCT p.function_key
+           FROM event_team_members etm
+           JOIN event_teams et ON et.id = etm.team_id AND et.is_active
+           JOIN events e ON e.id = et.event_id AND e.deleted_at IS NULL AND e.archived_at IS NULL
+           JOIN portfolios p ON p.id = et.portfolio_id
+           WHERE etm.society_id = $1 AND etm.user_id = $2 AND etm.removed_at IS NULL), '{}') AS functions,
+         EXISTS (SELECT 1 FROM event_team_members etm
+                 JOIN events e ON e.id = etm.event_id AND e.deleted_at IS NULL AND e.archived_at IS NULL
+                 WHERE etm.society_id = $1 AND etm.user_id = $2 AND etm.removed_at IS NULL) AS on_team,
+         EXISTS (SELECT 1 FROM events WHERE society_id = $1 AND event_head_id = $2
+                 AND deleted_at IS NULL AND archived_at IS NULL) AS event_head`,
+      [societyId, user.userId],
+    ),
+  ]);
 
-  // Suspended / deactivated societies — block non-admins
-  if (['SUSPENDED', 'DEACTIVATED', 'REJECTED'].includes(society.status)) {
-    if (user.userType !== 'SUPER_ADMIN') redirect('/home');
-  }
-
-  // ── Membership + role check ───────────────────────────────────────────
-  const memberResult = await query(
-    `SELECT sm.id AS membership_id, r.name AS role_name, r.hierarchy_level,
-            sm.wing_id, sm.portfolio_id
-     FROM society_memberships sm
-     JOIN roles r ON sm.role_id = r.id
-     WHERE sm.society_id = $1 AND sm.user_id = $2 AND sm.is_active = TRUE`,
-    [societyId, user.userId]
-  );
-
-  // Must be an active member (or SUPER_ADMIN bypass)
-  if (memberResult.rows.length === 0 && user.userType !== 'SUPER_ADMIN') {
-    redirect('/home');
-  }
-
-  const membership = memberResult.rows[0] || {
-    membership_id: 'admin',
-    role_name: 'President',
-    hierarchy_level: 10,
-    wing_id: null,
-    portfolio_id: null,
-  };
+  const roleName = access.roleName ?? (access.isSuperAdmin ? 'Platform admin' : 'Member');
+  const tierLabel = access.tier ? TIER_LABELS[access.tier] : null;
 
   return (
     <SocietyShell
       societyId={societyId}
-      societyName={society.name}
-      societyLogo={society.logo_url}
-      roleName={membership.role_name}
-      hierarchyLevel={Number(membership.hierarchy_level)}
+      societyName={society.rows[0]?.name ?? 'Society'}
+      societyLogo={society.rows[0]?.logo_url ?? null}
+      roleName={tierLabel && tierLabel !== roleName ? `${roleName} · ${tierLabel}` : roleName}
+      hierarchyLevel={access.level}
+      access={{
+        privileges: Array.from(access.privileges),
+        isAdmin: isSocietyAdmin(access),
+        onTeam: Boolean(standing.rows[0]?.on_team),
+        isEventHead: Boolean(standing.rows[0]?.event_head),
+        teamFunctions: standing.rows[0]?.functions ?? [],
+      }}
     >
       {children}
     </SocietyShell>

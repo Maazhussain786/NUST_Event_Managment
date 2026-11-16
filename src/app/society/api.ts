@@ -301,6 +301,7 @@ export interface SocietyJoinRequest {
   id: string;
   status:
     | "PENDING"
+    | "INFO_REQUESTED"
     | "INTERVIEW_SCHEDULED"
     | "APPROVED"
     | "REJECTED"
@@ -321,6 +322,12 @@ export interface SocietyJoinRequest {
   full_name?: string;
   email?: string;
   avatar_url?: string | null;
+  requested_role?: "MEMBER" | "EXECUTIVE" | "TEAM_LEAD" | "OFFICER";
+  requested_portfolio_name?: string | null;
+  requested_event_title?: string | null;
+  requested_event_id?: string | null;
+  info_request_message?: string | null;
+  cms_id?: string | null;
 }
 
 export interface JoinRequestApplicationData {
@@ -434,8 +441,9 @@ export function reviewJoinRequest(
   societyId: string,
   requestId: string,
   data:
-    | { action: "APPROVE"; review_notes?: string }
+    | { action: "APPROVE"; review_notes?: string; place_on_team?: boolean }
     | { action: "REJECT"; review_notes?: string }
+    | { action: "REQUEST_INFO"; info_request_message: string }
     | {
         action: "SCHEDULE_INTERVIEW";
         interview_scheduled_at: string;
@@ -486,6 +494,10 @@ export interface Role {
   hierarchy_level: number;
   is_system_role: boolean;
   created_at: string;
+  tier?: 'FACULTY_SPONSOR' | 'ADMIN' | 'OFFICER' | 'MEMBER';
+  tier_label?: string;
+  max_holders?: number | null;
+  holder_count?: number;
 }
 
 export function fetchRoles(societyId: string): Promise<Role[]> {

@@ -27,6 +27,7 @@ import {
   forceTransferPresidency,
   searchSocietyMembersForTransfer,
   updateStorageLimit,
+  assignFacultySponsor,
 } from "../../api";
 import type { AdminSociety, SocietyTransferMember } from "../../types";
 import { SmartImage } from '@/components/SmartImage';
@@ -404,6 +405,16 @@ export default function SocietyDetailPage() {
                 value={society.faculty_advisor_name}
               />
             )}
+            <InfoRow
+              label="Faculty Sponsor"
+              value={
+                society.faculty_sponsor_name
+                  ? `${society.faculty_sponsor_name}${society.faculty_sponsor_email ? ` (${society.faculty_sponsor_email})` : ""}`
+                  : society.faculty_sponsor_email
+                    ? `${society.faculty_sponsor_email} — assigned when they sign up`
+                    : "Not assigned"
+              }
+            />
             {society.justification && (
               <InfoRow label="Justification" value={society.justification} />
             )}
@@ -411,6 +422,11 @@ export default function SocietyDetailPage() {
               <InfoRow label="Contact Email" value={society.contact_email} />
             )}
           </div>
+          <FacultySponsorForm
+            societyId={society.id}
+            current={society.faculty_sponsor_email ?? ""}
+            onSaved={load}
+          />
           {society.status === "INFO_REQUESTED" && society.admin_message && (
             <div className="p-3 rounded-xl bg-sky-500/10 border border-sky-500/20">
               <p className="text-xs font-semibold text-sky-600 dark:text-sky-400 mb-1">
@@ -804,6 +820,58 @@ function Modal({
         </h3>
         {children}
       </div>
+    </div>
+  );
+}
+
+/** Super admin assigns or replaces the society's Faculty Sponsor (SRS 2.3 / 4.1). */
+function FacultySponsorForm({
+  societyId,
+  current,
+  onSaved,
+}: {
+  societyId: string;
+  current: string;
+  onSaved: () => void;
+}) {
+  const [email, setEmail] = useState(current);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const save = async () => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const res = await assignFacultySponsor(societyId, email.trim());
+      setMessage(res.message);
+      onSaved();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-wrap items-end gap-2 rounded-xl border border-border p-3">
+      <label className="min-w-[240px] flex-1 text-xs font-semibold text-muted-foreground">
+        Faculty Sponsor email
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="name@seecs.edu.pk"
+          className="mt-1 w-full rounded-lg border border-border bg-transparent px-3 py-2 text-sm font-normal text-foreground"
+        />
+      </label>
+      <button
+        onClick={save}
+        disabled={busy || !email.trim()}
+        className="rounded-lg bg-brand-500 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+      >
+        {busy ? "Saving…" : current ? "Replace sponsor" : "Assign sponsor"}
+      </button>
+      {message && <p className="w-full text-xs text-muted-foreground">{message}</p>}
     </div>
   );
 }

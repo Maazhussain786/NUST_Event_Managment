@@ -235,7 +235,7 @@ export async function fetchNustAdministrationSociety(): Promise<AdminSociety> {
   );
 
   if (!record) {
-    throw new Error("NUST Administration society is not available.");
+    throw new Error("SEECS Administration society is not available.");
   }
 
   return record;
@@ -773,4 +773,18 @@ export function exportAuditLogsCsv(params: {
   return fetch(`/api/admin/audit-logs?${sp.toString()}`, {
     credentials: "include",
   }).then((r) => r.text());
+}
+
+export function setUserDesignation(id: string, designation: string): Promise<{ success: boolean }> {
+  return fetch(`/api/admin/users/${id}`, {
+    method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ designation }),
+  }).then(async (res) => { const d = await res.json(); if (!res.ok) throw new Error(d.error || 'Failed'); return d; });
+}
+
+export function assignFacultySponsor(societyId: string, email: string, reason?: string): Promise<{ success: boolean; assigned: boolean; message: string }> {
+  return fetch(`/api/admin/societies/${societyId}/faculty-sponsor`, {
+    method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, reason }),
+  }).then(async (res) => { const d = await res.json(); if (!res.ok) throw new Error(d.error || 'Failed'); return d; });
 }

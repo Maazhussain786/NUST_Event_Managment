@@ -220,9 +220,18 @@ export default function MembersPage() {
 
   const handleApproveJoinRequest = async (request: SocietyJoinRequest) => {
     try {
+      const wantsTeam =
+        (request.requested_role === "TEAM_LEAD" || request.requested_role === "EXECUTIVE") &&
+        Boolean(request.requested_event_id && request.requested_portfolio_name);
+      const placeOnTeam = wantsTeam
+        ? window.confirm(
+            `Also add ${request.full_name || "them"} as ${request.requested_role === "TEAM_LEAD" ? "Team Lead" : "Executive"} of ${request.requested_portfolio_name} for ${request.requested_event_title}?`,
+          )
+        : false;
       setReviewingRequestId(request.id);
       await reviewJoinRequest(societyId, request.id, {
         action: "APPROVE",
+        place_on_team: placeOnTeam,
       });
       setToast(
         `${request.full_name || "Applicant"} approved and added as member`,
@@ -236,6 +245,22 @@ export default function MembersPage() {
           ? err.message
           : "Failed to approve join request",
       );
+    } finally {
+      setReviewingRequestId(null);
+    }
+  };
+
+  const handleRequestInfo = async (request: SocietyJoinRequest) => {
+    const message = window.prompt("What information do you need from the applicant?", "");
+    if (!message) return;
+    try {
+      setReviewingRequestId(request.id);
+      await reviewJoinRequest(societyId, request.id, { action: "REQUEST_INFO", info_request_message: message });
+      setToast(`Asked ${request.full_name || "the applicant"} for more information`);
+      const latest = await fetchJoinRequests(societyId, "OPEN");
+      setJoinRequests(latest.requests || []);
+    } catch (err) {
+      setToast(err instanceof SocietyApiError ? err.message : "Failed to request information");
     } finally {
       setReviewingRequestId(null);
     }
@@ -497,6 +522,20 @@ export default function MembersPage() {
                       <StatusBadge status={request.status} />
                     </div>
 
+                    {request.requested_role && (
+                      <p className="mt-2 text-xs text-primary">
+                        Requests: <span className="font-semibold">{request.requested_role.replace("_", " ").toLowerCase()}</span>
+                        {request.requested_portfolio_name ? ` · ${request.requested_portfolio_name}` : ""}
+                        {request.requested_event_title ? ` · ${request.requested_event_title}` : ""}
+                        {request.cms_id ? ` · CMS ${request.cms_id}` : ""}
+                      </p>
+                    )}
+                    {request.status === "INFO_REQUESTED" && request.info_request_message && (
+                      <p className="mt-1 text-xs text-amber-600">Waiting for: {request.info_request_message}</p>
+                    )}
+                    {(data as { info_response?: string }).info_response && (
+                      <p className="mt-1 text-xs text-secondary"><span className="font-medium text-primary">Applicant&apos;s answer:</span> {(data as { info_response?: string }).info_response}</p>
+                    )}
                     {data.motivation && (
                       <p className="mt-2 text-xs text-secondary">
                         <span className="font-medium text-primary">
@@ -525,6 +564,13 @@ export default function MembersPage() {
                         className="btn-ghost px-3 py-1.5 text-xs"
                       >
                         Schedule Interview
+                      </button>
+                      <button
+                        onClick={() => handleRequestInfo(request)}
+                        disabled={reviewingRequestId === request.id}
+                        className="btn-ghost px-3 py-1.5 text-xs"
+                      >
+                        Request info
                       </button>
                       <button
                         onClick={() => handleRejectJoinRequest(request)}

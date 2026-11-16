@@ -19,6 +19,7 @@ import {
   X,
   Upload,
   ScanLine,
+  LayoutGrid,
 } from "lucide-react";
 import {
   fetchSocietyEvents,
@@ -470,6 +471,15 @@ export default function SocietyEventsPage() {
                     )}
                   </div>
                 </div>
+                <button
+                  onClick={() =>
+                    router.push(`/society/${societyId}/events/${event.id}/workspace`)
+                  }
+                  className="btn-ghost text-xs px-2 py-1 flex items-center gap-1 text-brand-500"
+                  title="Teams, plan, duties, finance, inventory and minutes for this event"
+                >
+                  <LayoutGrid size={14} /> Workspace
+                </button>
                 {canScanQr &&
                   (event.status === "ONGOING" ||
                     event.status === "UPCOMING") && (

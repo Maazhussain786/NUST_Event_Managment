@@ -30,6 +30,7 @@ export interface AdminUser {
   email: string;
   full_name: string;
   user_type: "SUPER_ADMIN" | "STUDENT";
+  designation?: "STUDENT" | "FACULTY" | "STAFF" | "PRINCIPAL";
   status: "ACTIVE" | "PENDING_VERIFICATION" | "SUSPENDED";
   created_at: string;
   society_count: string;
@@ -105,6 +106,8 @@ export interface AdminSociety {
   storage_used_bytes: number | null;
   storage_quota_bytes: number | null;
   faculty_advisor_name: string | null;
+  faculty_sponsor_email?: string | null;
+  faculty_sponsor_name?: string | null;
   justification: string | null;
   admin_message: string | null;
   contact_email: string | null;
@@ -626,7 +629,7 @@ export interface EmergencyFlag {
   severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 }
 
-// ─── NUST Administration Management ────────────────────────────────────────
+// ─── SEECS Administration Management ────────────────────────────────────────
 
 export interface SocietyProfileAdmin {
   society_id: string;

@@ -50,7 +50,7 @@ const NAV_SECTIONS = [
     label: 'Operations',
     items: [
       { href: '/platform/societies', label: 'Societies', icon: Building2 },
-      { href: '/platform/nust-administration', label: 'NUST Administration', icon: Building2 },
+      { href: '/platform/nust-administration', label: 'SEECS Administration', icon: Building2 },
       { href: '/platform/events', label: 'Events', icon: Calendar },
       { href: '/platform/university-events', label: 'University Events', icon: GraduationCap },
       { href: '/platform/cohost-requests', label: 'Co-Host Requests', icon: Handshake },
