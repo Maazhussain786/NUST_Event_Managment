@@ -1,3 +1,6 @@
+-- LEGACY: superseded by db/migrations (000_baseline.sql is the real schema).
+-- Kept for reference only; do not run on a database set up with scripts/migrate.js.
+
 -- ============================================================================
 -- MEDIA & IMAGE HANDLING SCHEMA EXTENSION
 -- Run AFTER schema.sql, schema-nust-additions.sql, schema-fixes.sql

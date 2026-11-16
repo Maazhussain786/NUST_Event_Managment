@@ -1,3 +1,6 @@
+-- LEGACY: superseded by db/migrations (000_baseline.sql is the real schema).
+-- Kept for reference only; do not run on a database set up with scripts/migrate.js.
+
 -- ============================================================================
 -- SOCIETY PROFILES — Public-facing branding & personalization
 -- ============================================================================

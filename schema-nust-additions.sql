@@ -1,3 +1,6 @@
+-- LEGACY: superseded by db/migrations (000_baseline.sql is the real schema).
+-- Kept for reference only; do not run on a database set up with scripts/migrate.js.
+
 -- ============================================================================
 -- NUST-SPECIFIC SCHEMA ADDITIONS
 -- Run AFTER the main schema.sql
@@ -82,32 +85,10 @@ ON CONFLICT (name) DO NOTHING;
 -- No additional table needed.
 
 -- ============================================================================
--- 6. SEED SUPER ADMIN USERS
+-- 6. SUPER ADMINS
 -- ============================================================================
-
-INSERT INTO users (email, password_hash, full_name, user_type, status) VALUES
-    ('maazhussain972@gmail.com',
-     -- bcrypt hash of "maaz@123"
-     '$2a$12$xEHh4ib42sY1QMCgwi.yCefrlGGqa3fQH/pxmQjP3.CQhWd7Hxfz2',
-     'Maaz Hussain',
-     'SUPER_ADMIN',
-     'ACTIVE'),
-    ('abduldaym786@gmail.com',
-     -- bcrypt hash of "daym@123"
-     '$2a$12$TdNJHRJlXArS0cIq8DYNSu3ri2NcohaypIz0PAEF0AfrWOBpVjFtu',
-     'Muhammad Abdul Daym',
-     'SUPER_ADMIN',
-     'ACTIVE'),
-    ('bilalatif23@gmail.com',
-     -- bcrypt hash of "bilal@123"
-     '$2a$12$xZcw66AowAuK8HyBfnqWKO8YxEQL1H0CNCQieUgti3A9H.gaah6HS',
-     'Muhammad Bilal Atif',
-     'SUPER_ADMIN',
-     'ACTIVE')
-ON CONFLICT (email) DO UPDATE SET
-    password_hash = EXCLUDED.password_hash,
-    user_type = 'SUPER_ADMIN',
-    status = 'ACTIVE',
-    full_name = EXCLUDED.full_name;
+-- Super admins are no longer seeded here with fixed passwords (those passwords
+-- were published in the repository). Use:  node scripts/sync-super-admins.js
+-- which never sets or resets a password.
 
 COMMIT;
